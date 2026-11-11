@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /*
- * Ventas (/admin/ventas): facturas con filtros, totales por mes, artículos más vendidos y tallas y colores más vendidos
+ * Ventas (/admin/ventas = facturas) e Informes (/admin/informes/<pestaña>): facturas con filtros, totales por mes, artículos más vendidos y tallas y colores más vendidos
  * (por artículo o por familia). Solo roles erp/admin con la doble verificación exigida (erp_guard()).
  * Todas las consultas son agrupadas; la familia se suma en PHP con erp_family_map() (products.ref no tiene índice y
  * SQL Server limita a 2.100 los parámetros de una lista IN). Las devoluciones (importe o unidades negativas) restan y se
@@ -10,6 +10,8 @@ declare(strict_types=1);
  */
 
 const ERP_SALES_TABS = ['facturas' => 'Facturas', 'meses' => 'Totales por mes', 'articulos' => 'Artículos más vendidos', 'tallas' => 'Tallas y colores'];
+/** Informes: las tres pestañas que no son la lista de facturas (/admin/informes/<pestaña>). */
+const ERP_REPORT_TABS = ['meses' => 'Totales por mes', 'articulos' => 'Artículos más vendidos', 'tallas' => 'Tallas y colores'];
 const ERP_INV_SORTS = ['fecha' => 'i.inv_day', 'numero' => 'i.inv_number', 'total' => 'i.total_cents', 'cliente' => 'c.name'];
 
 /** Filtros comunes (lista cerrada). */
@@ -37,7 +39,7 @@ function erp_sales_filters(array $src): array
 function erp_sales_url(string $tab, array $f, array $change = []): string
 {
     $q = array_filter(array_merge($f, $change), fn($v) => $v !== '' && $v !== null && $v !== 0);
-    return '/admin/ventas' . ($tab !== 'facturas' ? '/' . $tab : '') . ($q ? '?' . http_build_query($q) : '');
+    return ($tab !== 'facturas' ? '/admin/informes/' . $tab : '/admin/ventas') . ($q ? '?' . http_build_query($q) : '');
 }
 
 /** Condiciones por año, mes y ámbito sobre la tabla erp_invoices con alias i. */
@@ -77,7 +79,7 @@ function admin_sales(string $tab): void
     }
     $tab = isset(ERP_SALES_TABS[$tab]) ? $tab : 'facturas';
     $f = erp_sales_filters($_GET);
-    $v = ['tab' => $tab, 'f' => $f, 'years' => erp_sales_years(), 'retail' => erp_retail_code(), 'totals' => erp_totals(), 'title' => 'Ventas'];
+    $v = ['tab' => $tab, 'f' => $f, 'years' => erp_sales_years(), 'retail' => erp_retail_code(), 'totals' => erp_totals(), 'title' => $tab === 'facturas' ? 'Facturas' : 'Informes'];
     [$cond, $args] = erp_sales_cond($f);
     $db = db();
 

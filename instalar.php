@@ -347,12 +347,12 @@ if ($step === 5) {
     foreach (timezone_identifiers_list() as $tz) {
         $tzs .= '<option' . ($tz === $d['timezone'] ? ' selected' : '') . '>' . e($tz) . '</option>';
     }
-    $h = '<h1>Opciones de la web</h1><p>Elige qué partes quieres usar. Se pueden cambiar cuando quieras en <em>Web → Configuración</em>.</p>'
+    $h = '<h1>Opciones de la web</h1><p>Elige qué partes quieres usar. Se pueden cambiar cuando quieras en <em>Configuración → General</em>.</p>'
         . '<form method="post" class="form">' . csrf_field()
         . '<fieldset><legend>Módulos</legend>' . $mods . '</fieldset>'
         . '<div class="two"><label>Prefijo telefónico del país <input name="phone_prefix" value="' . e($d['phone_prefix']) . '" inputmode="numeric" maxlength="4"><small>Se añade a los teléfonos para llamar desde el móvil. Vacío = sin prefijo.</small></label>'
         . '<label>Zona horaria <select name="timezone">' . $tzs . '</select></label></div>'
-        . '<fieldset><legend>Campos del catálogo</legend><small>Además de nombre, referencia, medidas, descripción y fotos. Los «internos» no se ven en la web. Se pueden cambiar después en <em>Web → Campos</em>.</small><div class="fchips">' . $fieldsHtml . '</div>'
+        . '<fieldset><legend>Campos del catálogo</legend><small>Además de nombre, referencia, medidas, descripción y fotos. Los «internos» no se ven en la web. Se pueden cambiar después en <em>Catálogo → Características</em>.</small><div class="fchips">' . $fieldsHtml . '</div>'
         . '<label>Otros campos (uno por línea) <textarea name="fields_extra" rows="3" placeholder="Composición&#10;País de origen&#10;Unidades por caja">' . e($d['fields_extra']) . '</textarea><small>Se crean como texto visible en la web; el tipo se cambia luego en Web → Campos.</small></label></fieldset>'
         . '<label class="check"><input type="checkbox" name="noindex" value="1"' . ($d['noindex'] === '1' ? ' checked' : '') . '> <span><b>Ocultar a Google por ahora</b> — recomendable mientras la pruebas en un subdominio. Desactívalo al publicarla.</span></label>'
         . '<p class="buttons"><a href="?paso=4">← Atrás</a> <button class="btn" type="submit">Continuar</button></p></form>';

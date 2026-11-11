@@ -46,6 +46,20 @@ function admin_dispatch(array $segs): void
     }
     require_login();
     $role = current_role();
+    // Direcciones antiguas (el menú se reorganizó como ERP): redirección temporal conservando la cadena de búsqueda
+    $legacy = null;
+    if ($page === 'campos') {
+        $legacy = '/admin/caracteristicas';
+    } elseif ($page === 'configuracion') {
+        $legacy = '/admin/general';
+    } elseif ($page === 'ventas' && in_array($segs[2] ?? '', ['meses', 'articulos', 'tallas'], true)) {
+        $legacy = '/admin/informes/' . $segs[2];
+    }
+    if ($legacy !== null) {
+        $qs = (string)($_SERVER['QUERY_STRING'] ?? '');
+        header('Location: ' . url($legacy) . ($qs !== '' ? '?' . $qs : ''), true, 302);
+        exit;
+    }
     if ($role === 'erp') { // el rol ERP solo ve Clientes, Ventas, Sincronizar y su cuenta
         if ($page === '' || !in_array($page, [...ERP_PAGES, 'clave'], true)) {
             redirect('/admin/clientes');
@@ -54,7 +68,7 @@ function admin_dispatch(array $segs): void
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
-    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'menu', 'configuracion', 'correo', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
+    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'menu', 'general', 'correo', 'caracteristicas', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
@@ -99,13 +113,13 @@ function admin_dispatch(array $segs): void
         case 'pagina-catalogo':
             admin_catalog_page();
             break;
-        case 'configuracion':
+        case 'general':
             admin_config();
             break;
         case 'correo':
             admin_mail();
             break;
-        case 'campos':
+        case 'caracteristicas':
             admin_fields();
             break;
         case 'importar':
@@ -128,11 +142,15 @@ function admin_dispatch(array $segs): void
             break;
         case 'ventas':
             $sub = (string)($segs[2] ?? '');
-            if ($sub === '' || isset(ERP_SALES_TABS[$sub])) {
-                admin_sales($sub);
+            if ($sub === '' || $sub === 'facturas') {
+                admin_sales('facturas');
             } else {
                 admin_invoice($sub, (string)($segs[3] ?? ''));
             }
+            break;
+        case 'informes':
+            $tab = (string)($segs[2] ?? 'meses');
+            admin_sales(isset(ERP_REPORT_TABS[$tab]) ? $tab : 'meses');
             break;
         case 'erp':
             admin_erp_sync();
@@ -181,6 +199,8 @@ function admin_icon(string $name): string
         'download' => '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
         'alert' => '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5"/><path d="M12 17.5v.01"/>',
         'info' => '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/>',
+        'sales' => '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/>',
+        'settings' => '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
         'chevron' => '<path d="M9 6l6 6-6 6"/>',
     ];
     return '<svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
@@ -188,50 +208,61 @@ function admin_icon(string $name): string
 }
 
 /**
- * Menú del panel: secciones con sus páginas. Cada página: [etiqueta, ruta, segmentos que la marcan, solo admin].
- * Respeta roles (solo admin) y módulos desactivados (slider, representantes).
+ * Menú del panel, organizado como un ERP: secciones con sus páginas. Cada página: [etiqueta, ruta, segmentos que la marcan,
+ * quién la ve]. Quién: 'all' (cualquier usuario), 'catalog' (gestión de catálogo y admin), 'erp' (rol ERP y admin) o
+ * 'admin'. Respeta además los módulos desactivados (slider, representantes).
  */
+function admin_menu_allows(string $who, string $role): bool
+{
+    return match ($who) {
+        'all' => true,
+        'catalog' => in_array($role, ['admin', 'catalogo'], true),
+        'erp' => in_array($role, ['admin', 'erp'], true),
+        default => $role === 'admin',
+    };
+}
+
 function admin_menu(): array
 {
-    $adm = is_admin();
     $menu = [
-        'home' => ['Inicio', 'home', [['Inicio', '/admin', [''], false]]],
-        'catalog' => ['Catálogo', 'catalog', [
-            ['Artículos', '/admin/articulos', ['articulos', 'articulo'], false],
-            [term('families'), '/admin/categorias', ['categorias', 'portada'], false],
-            ['Fotos', '/admin/fotos', ['fotos'], false],
+        'home' => ['Inicio', 'home', [['Inicio', '/admin', [''], 'catalog']]],
+        'sales' => ['Ventas', 'sales', [
+            ['Facturas', '/admin/ventas', ['ventas'], 'erp'],
+            ['Informes', '/admin/informes', ['informes'], 'erp'],
         ]],
-        'import' => ['Importar', 'import', [
-            ['Importar artículos', '/admin/importar', ['importar'], false],
-            ['Fotos por carpeta', '/admin/importar/carpetas', ['importar/carpetas'], false],
-            ['Fotos por FTP', '/admin/ftp', ['ftp'], false],
+        'clients' => ['Clientes', 'users', [['Clientes', '/admin/clientes', ['clientes'], 'erp']]],
+        'catalog' => ['Catálogo', 'catalog', [
+            ['Artículos', '/admin/articulos', ['articulos', 'articulo'], 'catalog'],
+            [term('families'), '/admin/categorias', ['categorias', 'portada'], 'catalog'],
+            ['Características', '/admin/caracteristicas', ['caracteristicas'], 'admin'],
+            ['Fotos', '/admin/fotos', ['fotos'], 'catalog'],
+        ]],
+        'data' => ['Datos', 'import', [
+            ['Importar artículos', '/admin/importar', ['importar'], 'catalog'],
+            ['Fotos por carpeta', '/admin/importar/carpetas', ['importar/carpetas'], 'catalog'],
+            ['Fotos por FTP', '/admin/ftp', ['ftp'], 'catalog'],
+            ['Sincronización', '/admin/erp', ['erp'], 'erp'],
         ]],
         'web' => ['Web', 'web', [
-            ['Empresa', '/admin/empresa', ['empresa'], true],
-            ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio', 'slider'], true],
-            ['Página del catálogo', '/admin/pagina-catalogo', ['pagina-catalogo'], true],
-            ['Páginas', '/admin/paginas', ['paginas'], true],
-            ['Menú', '/admin/menu', ['menu'], true],
-            ['Configuración', '/admin/configuracion', ['configuracion'], true],
-            ['Correo', '/admin/correo', ['correo'], true],
-            ['Campos', '/admin/campos', ['campos'], true],
-            ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
+            ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio'], 'admin'],
+            ['Página del catálogo', '/admin/pagina-catalogo', ['pagina-catalogo'], 'admin'],
+            ['Páginas', '/admin/paginas', ['paginas'], 'admin'],
+            ['Menú', '/admin/menu', ['menu'], 'admin'],
+            ...(feature('slider') ? [['Slider', '/admin/slider', ['slider'], 'admin']] : []),
+            ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], 'admin']] : []),
         ]],
-        'erp' => ['Clientes y Ventas', 'users', [
-            ['Clientes', '/admin/clientes', ['clientes'], false],
-            ['Ventas', '/admin/ventas', ['ventas'], false],
-            ['Sincronizar con NCS', '/admin/erp', ['erp'], false],
+        'settings' => ['Configuración', 'settings', [
+            ['Empresa', '/admin/empresa', ['empresa'], 'admin'],
+            ['General', '/admin/general', ['general'], 'admin'],
+            ['Correo', '/admin/correo', ['correo'], 'admin'],
+            ['Diseño de documentos', '/admin/erp#documentos', [], 'admin'], // hasta que tenga su pantalla, lleva a los ajustes de Sincronización
+            ['Usuarios y seguridad', '/admin/usuarios', ['usuarios'], 'admin'],
+            ['Copias de seguridad', '/admin/copia', ['copia', 'reiniciar'], 'admin'],
         ]],
-        'users' => ['Usuarios', 'users', [['Usuarios', '/admin/usuarios', ['usuarios'], true]]],
     ];
     $role = current_role();
-    if ($role === 'erp') {
-        $menu = ['erp' => $menu['erp']];
-    } elseif ($role !== 'admin') {
-        unset($menu['erp']);
-    }
     foreach ($menu as $k => &$sec) {
-        $sec[2] = array_values(array_filter($sec[2], fn($p) => !$p[3] || $adm));
+        $sec[2] = array_values(array_filter($sec[2], fn($p) => admin_menu_allows($p[3], $role)));
         if (!$sec[2]) {
             unset($menu[$k]);
         }
@@ -403,19 +434,19 @@ function admin_home(): void
         $alerts[] = ['err', 'El archivo instalar.php sigue en la web: bórralo por FTP. Cualquiera podría volver a instalarla.', null, null];
     }
     if (setting('noindex') === '1') {
-        $alerts[] = ['warn', 'La web está oculta a Google (noindex). Quítalo cuando la publiques.', is_admin() ? '/admin/configuracion' : null, 'Configuración'];
+        $alerts[] = ['warn', 'La web está oculta a Google (noindex). Quítalo cuando la publiques.', is_admin() ? '/admin/general' : null, 'General'];
     }
     if (is_admin()) {
         $last = setting('last_backup_at');
         $days = $last !== '' ? (int)floor((time() - (int)strtotime($last)) / 86400) : null;
         if ($days === null) {
-            $alerts[] = ['warn', 'Todavía no has descargado ninguna copia de seguridad.', '/admin/empresa#copia', 'Descargar copia'];
+            $alerts[] = ['warn', 'Todavía no has descargado ninguna copia de seguridad.', '/admin/copia', 'Descargar copia'];
         } elseif ($days > 30) {
-            $alerts[] = ['warn', 'Hace ' . $days . ' días que no descargas una copia de seguridad.', '/admin/empresa#copia', 'Descargar copia'];
+            $alerts[] = ['warn', 'Hace ' . $days . ' días que no descargas una copia de seguridad.', '/admin/copia', 'Descargar copia'];
         }
     }
     if (is_admin() && !erp_2fa_required()) {
-        $alerts[] = ['warn', 'La doble verificación para Clientes y Ventas está desactivada', '/admin/configuracion#erp', 'Configuración'];
+        $alerts[] = ['warn', 'La doble verificación para Clientes y Ventas está desactivada', '/admin/usuarios#erp', 'Usuarios y seguridad'];
     }
     if (is_admin() && ($mailErr = mail_last_error())) {
         $alerts[] = ['err', 'No se pudo enviar un correo el ' . date('d/m/Y H:i', $mailErr['at']) . ': ' . $mailErr['error'], '/admin/correo', 'Revisar el correo'];
@@ -1375,7 +1406,7 @@ function admin_set_panel_path(): void
     }
     if ($err) {
         flash($err, 'err');
-        redirect('/admin/configuracion');
+        redirect('/admin/general');
     }
     admin_path(true); // a partir de aquí, url('/admin/…') ya da la dirección nueva
     render('admin/panel_path_done', ['newPath' => $new, 'oldPath' => $cur, 'title' => 'Dirección del panel · ' . site_name()], 'admin/layout_bare');
@@ -1406,25 +1437,8 @@ function admin_config(): void
             save_setting('term_' . $k, mb_substr(trim(strip_tags((string)($_POST['term_' . $k] ?? ''))), 0, 40));
         }
         save_setting('term_gender', ($_POST['term_gender'] ?? '') === 'm' ? 'm' : 'f');
-        // Doble verificación exigida para Clientes y Ventas: activarla es libre; desactivarla pide la contraseña del admin y avisa por correo
-        $wantErp = !empty($_POST['erp_2fa']);
-        if ($wantErp && !erp_2fa_required()) {
-            save_setting('erp_require_2fa', '1');
-        } elseif (!$wantErp && erp_2fa_required()) {
-            $st = db()->prepare('SELECT username, pass_hash FROM users WHERE id = ?');
-            $st->execute([(int)$_SESSION['uid']]);
-            $me = $st->fetch();
-            if (!$me || !password_verify((string)($_POST['erp_pass'] ?? ''), (string)$me['pass_hash'])) {
-                auth_register_failure((int)$_SESSION['uid']);
-                flash('No se ha desactivado la doble verificación de Clientes y Ventas: la contraseña no es correcta.', 'err');
-            } else {
-                save_setting('erp_require_2fa', '0');
-                erp_notify_2fa_off((string)$me['username']);
-                flash('Doble verificación de Clientes y Ventas desactivada. Se ha avisado por correo a los administradores.', 'err');
-            }
-        }
         flash('Configuración guardada.');
-        redirect('/admin/configuracion');
+        redirect('/admin/general');
     }
     $v = [];
     foreach (CONFIG_TEXTS as $k => $_) {
@@ -1440,8 +1454,7 @@ function admin_config(): void
         'prefix' => setting('phone_prefix', '34'),
         'tz' => date_default_timezone_get(),
         'noindex' => setting('noindex') === '1',
-        'erp2fa' => erp_2fa_required(),
-        'title' => 'Configuración',
+        'title' => 'General',
     ]);
 }
 
@@ -1725,7 +1738,7 @@ function admin_fields(): void
         } catch (RuntimeException $e) {
             flash($e->getMessage(), 'err');
         }
-        redirect('/admin/campos');
+        redirect('/admin/caracteristicas');
     }
     $counts = [];
     foreach ($db->query('SELECT field_id, COUNT(*) AS n FROM product_fields GROUP BY field_id')->fetchAll() as $r) {
@@ -1972,7 +1985,7 @@ function admin_totp_post(array $me, array &$errors): void
 const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'Gestión de catálogo', 'erp' => 'ERP (clientes y ventas)'];
 
 /** Secciones del ERP (clientes y ventas de NCS): solo rol «erp» y administradores. */
-const ERP_PAGES = ['clientes', 'ventas', 'erp'];
+const ERP_PAGES = ['clientes', 'ventas', 'informes', 'erp'];
 
 function admin_users(): void
 {
@@ -1983,6 +1996,26 @@ function admin_users(): void
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $act = (string)($_POST['action'] ?? '');
+        if ($act === 'erp_2fa') { // doble verificación exigida para Clientes y Ventas: activarla es libre; desactivarla pide la contraseña del admin y avisa por correo
+            $wantErp = !empty($_POST['erp_2fa']);
+            if ($wantErp && !erp_2fa_required()) {
+                save_setting('erp_require_2fa', '1');
+                flash('Doble verificación de Clientes y Ventas activada.');
+            } elseif (!$wantErp && erp_2fa_required()) {
+                $st = $db->prepare('SELECT username, pass_hash FROM users WHERE id = ?');
+                $st->execute([$me]);
+                $mine = $st->fetch();
+                if (!$mine || !password_verify((string)($_POST['erp_pass'] ?? ''), (string)$mine['pass_hash'])) {
+                    auth_register_failure($me);
+                    flash('No se ha desactivado la doble verificación de Clientes y Ventas: la contraseña no es correcta.', 'err');
+                } else {
+                    save_setting('erp_require_2fa', '0');
+                    erp_notify_2fa_off((string)$mine['username']);
+                    flash('Doble verificación de Clientes y Ventas desactivada. Se ha avisado por correo a los destinatarios de avisos del sistema.', 'err');
+                }
+            }
+            redirect('/admin/usuarios#erp');
+        }
         $admins = (int)$db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
         $id = (int)($_POST['id'] ?? 0);
         $tg = $db->prepare('SELECT * FROM users WHERE id = ?');
@@ -2075,7 +2108,7 @@ function admin_users(): void
     }
     admin_render('users', [
         'users' => $db->query('SELECT id, username, role, email, locked_until, last_login_at, totp_enabled FROM users ORDER BY username COLLATE NOCASE')->fetchAll(),
-        'errors' => $errors, 'form' => $form, 'me' => $me, 'title' => 'Usuarios',
+        'errors' => $errors, 'form' => $form, 'me' => $me, 'erp2fa' => erp_2fa_required(), 'title' => 'Usuarios y seguridad',
     ]);
 }
 
@@ -2203,17 +2236,32 @@ function backup_make(string $dest, bool $withErp = false): bool
     return $ok;
 }
 
+/** Copias de seguridad (Configuración): GET = pantalla con el historial de descargas; POST = descargar la copia (y anotarla). */
 function admin_backup(): void
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        redirect('/admin/empresa');
+        $log = db()->query('SELECT created_at, username, with_erp, size_bytes FROM backup_log ORDER BY id DESC LIMIT 50')->fetchAll();
+        admin_render('backup', ['log' => $log, 'lastBackup' => setting('last_backup_at'), 'title' => 'Copias de seguridad']);
+        return;
     }
     csrf_check();
     @set_time_limit(300);
     $tmp = tempnam(sys_get_temp_dir(), 'bak');
-    if (!$tmp || !backup_make($tmp, !empty($_POST['with_erp']))) { // clientes y ventas solo si se marca la casilla
+    $withErp = !empty($_POST['with_erp']);
+    if (!$tmp || !backup_make($tmp, $withErp)) { // clientes y ventas solo si se marca la casilla
         flash('No se pudo crear la copia de seguridad en este servidor.', 'err');
-        redirect('/admin/empresa');
+        redirect('/admin/copia');
+    }
+    // Historial de descargas (quién, cuándo, si llevaba clientes y ventas, tamaño). Fuera de las copias: restaurar no lo reescribe.
+    try {
+        db()->prepare('INSERT INTO backup_log (created_at, username, with_erp, size_bytes) VALUES (?, ?, ?, ?)')
+            ->execute([time(), mb_substr((string)current_user()['username'], 0, 100), $withErp ? 1 : 0, (int)filesize($tmp)]);
+        $ids = db()->query('SELECT id FROM backup_log ORDER BY id DESC LIMIT 100')->fetchAll(PDO::FETCH_COLUMN);
+        if (count($ids) > 50) {
+            db()->prepare('DELETE FROM backup_log WHERE id < ?')->execute([(int)$ids[49]]);
+        }
+    } catch (Throwable $e) {
+        error_log('Historial de copias: ' . get_class($e)); // nunca impide descargar
     }
     $name = 'copia-' . preg_replace('/[^a-z0-9]+/', '-', strtolower(site_name())) . '-' . date('Y-m-d-His') . '.zip';
     save_setting('last_backup_at', date('Y-m-d H:i:s')); // para el aviso de Inicio (más de 30 días sin copia)
@@ -2229,7 +2277,7 @@ function admin_reset_catalog(): void
 {
     if (!ALLOW_RESET || $_SERVER['REQUEST_METHOD'] !== 'POST') {
         flash('«Empezar de cero» está desactivado en esta instalación.', 'err');
-        redirect('/admin/empresa');
+        redirect('/admin/copia');
     }
     csrf_check();
     $db = db();
@@ -2238,7 +2286,7 @@ function admin_reset_catalog(): void
     $hash = (string)$me->fetchColumn();
     if (trim((string)($_POST['confirm'] ?? '')) !== site_name() || !password_verify((string)($_POST['password'] ?? ''), $hash)) {
         flash('No coincide el nombre escrito o la contraseña. No se ha borrado nada.', 'err');
-        redirect('/admin/empresa');
+        redirect('/admin/copia');
     }
     @set_time_limit(300);
     $dir = DATA_DIR . '/backups';
@@ -2248,7 +2296,7 @@ function admin_reset_catalog(): void
     $bak = $dir . '/antes-de-vaciar-' . date('Y-m-d-His') . '.zip';
     if (!backup_make($bak)) {
         flash('No se pudo hacer la copia previa, así que no se ha borrado nada.', 'err');
-        redirect('/admin/empresa');
+        redirect('/admin/copia');
     }
     // Fotos: se conservan solo los archivos de marca (logotipo, banner, icono, fondo de portada)
     $keep = array_filter(array_map('setting', ['logo', 'footer_banner', 'favicon', 'hero_image']));
@@ -2273,5 +2321,5 @@ function admin_reset_catalog(): void
     }
     $db->exec("DELETE FROM settings WHERE key IN ('ftp_auto','ftp_done','ftp_fail')");
     flash('Catálogo vaciado. Copia previa guardada en data/backups/' . basename($bak) . '.');
-    redirect('/admin/empresa');
+    redirect('/admin/copia');
 }

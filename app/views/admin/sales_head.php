@@ -5,15 +5,15 @@ $mesesLargos = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 
 $keep = array_diff_key($f, ['anio' => 1, 'mes' => 1, 'ambito' => 1, 'pag' => 1]); // lo que se conserva al filtrar
 $tabKeep = fn(string $t) => array_intersect_key($f, ['anio' => 1, 'mes' => 1, 'ambito' => 1]);
 ?>
-<div class="head"><h1>Ventas</h1><a class="btn ghost" href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a></div>
+<div class="head"><h1><?= $tab === 'facturas' ? 'Facturas' : 'Informes de ventas' ?></h1><a class="btn ghost" href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a></div>
 <?php if (!erp_2fa_required()): ?><p class="alert warn"><?= admin_icon('alert') ?><span>La doble verificación para Clientes y Ventas está desactivada</span></p><?php endif; ?>
-<nav class="cf-tabs" aria-label="Secciones de Ventas">
-  <?php foreach (ERP_SALES_TABS as $k => $label): ?><a href="<?= e(url(erp_sales_url($k, $tabKeep($k)))) ?>"<?= $tab === $k ? ' aria-current="page"' : '' ?>><?= e($label) ?></a><?php endforeach; ?>
-</nav>
+<?php if ($tab !== 'facturas'): ?><nav class="cf-tabs" aria-label="Informes">
+  <?php foreach (ERP_REPORT_TABS as $k => $label): ?><a href="<?= e(url(erp_sales_url($k, $tabKeep($k)))) ?>"<?= $tab === $k ? ' aria-current="page"' : '' ?>><?= e($label) ?></a><?php endforeach; ?>
+</nav><?php endif; ?>
 <?php if ($totals['invoices'] === 0): ?>
   <p class="empty">Todavía no hay facturas. Ve a <a href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a> para traerlas.</p>
 <?php return; endif; ?>
-<form class="filters lf" method="get" action="<?= e(url('/admin/ventas' . ($tab !== 'facturas' ? '/' . $tab : ''))) ?>">
+<form class="filters lf" method="get" action="<?= e(url(erp_sales_url($tab, []))) ?>">
   <label><span class="sr-only">Año</span><select name="anio"><option value="">Todos los años</option><?php foreach ($years as $y): ?><option value="<?= (int)$y ?>"<?= (int)($f['anio'] ?? 0) === $y ? ' selected' : '' ?>><?= (int)$y ?></option><?php endforeach; ?></select></label>
   <label><span class="sr-only">Mes</span><select name="mes"><option value="">Todos los meses</option><?php foreach ($mesesLargos as $i => $m): ?><option value="<?= $i + 1 ?>"<?= (int)($f['mes'] ?? 0) === $i + 1 ? ' selected' : '' ?>><?= e($m) ?></option><?php endforeach; ?></select></label>
   <?php if ($retail !== ''): ?>

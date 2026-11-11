@@ -32,7 +32,7 @@ if ($seg !== '') {
     $crumbs[] = ['Inicio', '/admin'];
     if ($curSec !== null) {
         [$sl, , $pages] = $menu[$curSec];
-        if (count($pages) > 1) {
+        if (!(count($pages) === 1 && $pages[0][0] === $sl)) { // «Inicio» y «Clientes» son enlaces sueltos; el resto, grupos
             $crumbs[] = [$sl, $pages[0][1]];
         }
         $pg = $pages[$curPage];
@@ -84,17 +84,17 @@ $logo = brand_logo();
 <div class="shell">
   <nav class="side" aria-label="Menú del panel">
     <?php foreach ($menu as $sk => [$sl, $icon, $pages]): ?>
-      <?php if (count($pages) === 1): $pg = $pages[0]; ?>
+      <?php if (count($pages) === 1 && $pages[0][0] === $sl): $pg = $pages[0]; ?>
         <a class="side-top" href="<?= e(url($pg[1])) ?>"<?= $curSec === $sk ? ' aria-current="page"' : '' ?>><?= admin_icon($icon) ?><span><?= e($sl) ?></span></a>
       <?php else: ?>
-        <div class="side-group<?= $curSec === $sk ? ' on' : '' ?>">
-          <p class="side-h"><?= admin_icon($icon) ?><span><?= e($sl) ?></span></p>
+        <details class="side-group<?= $curSec === $sk ? ' on' : '' ?>"<?= $curSec === $sk ? ' open' : '' ?>>
+          <summary class="side-h"><?= admin_icon($icon) ?><span><?= e($sl) ?></span><?= admin_icon('chevron') ?></summary>
           <ul>
             <?php foreach ($pages as $pi => $pg): ?>
               <li><a href="<?= e(url($pg[1])) ?>"<?= $curSec === $sk && $curPage === $pi ? ' aria-current="page"' : '' ?>><?= e($pg[0]) ?></a></li>
             <?php endforeach; ?>
           </ul>
-        </div>
+        </details>
       <?php endif; ?>
     <?php endforeach; ?>
   </nav>
@@ -106,7 +106,7 @@ $logo = brand_logo();
         <?php endforeach; ?>
       </ol></nav>
     <?php endif; ?>
-    <?php if (is_file(ROOT . '/instalar.php')): ?>
+    <?php if (is_file(ROOT . '/instalar.php') && !is_local_request()): ?>
       <p class="flash err" role="alert">⚠️ Borra el archivo <code>instalar.php</code> de la carpeta de la web (por FTP). Ya no hace falta.</p>
     <?php endif; ?>
     <?php foreach ($flashes as [$type, $msg]): ?>

@@ -65,9 +65,9 @@ $nPhotos = count($gallery);
       <div class="two cfields">
         <?php foreach ($cfs as $cf): ?><?= field_input($cf, $cvals[$cf['id']] ?? '') ?><?php endforeach; ?>
       </div>
-      <?php if (is_admin()): ?><small class="muted">Los campos se crean y cambian en <a href="<?= e(url('/admin/campos')) ?>">Web → Campos</a>. Los marcados «interno» no se ven en la web.</small><?php endif; ?>
+      <?php if (is_admin()): ?><small class="muted">Los campos se crean y cambian en <a href="<?= e(url('/admin/caracteristicas')) ?>">Catálogo → Características</a>. Los marcados «interno» no se ven en la web.</small><?php endif; ?>
     <?php elseif (is_admin()): ?>
-      <p class="muted">Todavía no hay campos. ¿Necesitas precio, tallas, color…? Créalos en <a href="<?= e(url('/admin/campos')) ?>">Web → Campos</a>.</p>
+      <p class="muted">Todavía no hay campos. ¿Necesitas precio, tallas, color…? Créalos en <a href="<?= e(url('/admin/caracteristicas')) ?>">Catálogo → Características</a>.</p>
     <?php else: ?>
       <p class="muted">Todavía no hay campos.</p>
     <?php endif; ?>

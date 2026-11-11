@@ -13,7 +13,7 @@ $full = site_origin() . url('/admin');
   <?php else: ?>
     <p>La dirección personalizada anterior (<code>/<?= e($oldPath) ?></code>) ya no funciona.</p>
   <?php endif; ?>
-  <p><a class="btn" href="<?= e(url('/admin/configuracion')) ?>">Abrir el panel en la nueva dirección</a></p>
+  <p><a class="btn" href="<?= e(url('/admin/general')) ?>">Abrir el panel en la nueva dirección</a></p>
   <?php if (!$reset): ?>
     <h2>Si te quedas fuera</h2>
     <p>Entra por FTP en la carpeta <code>data/</code> de la web y <strong>borra el archivo <code>panel.txt</code></strong>. El panel vuelve a <code>/admin</code> en la siguiente visita. Ese archivo solo contiene la dirección (<code><?= e($newPath) ?></code>).</p>

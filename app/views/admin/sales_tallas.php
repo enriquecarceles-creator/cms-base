@@ -10,7 +10,7 @@ $totColors = array_sum($colors);
 $maxS = max(1, ...array_values(array_map('abs', $sizes ?: [0])));
 $maxC = max(1, ...array_values(array_map('abs', $colors ?: [0])));
 ?>
-<form class="filters lf" method="get" action="<?= e(url('/admin/ventas/tallas')) ?>">
+<form class="filters lf" method="get" action="<?= e(url('/admin/informes/tallas')) ?>">
   <?php foreach ($keepP as $k => $val): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e((string)$val) ?>"><?php endforeach; ?>
   <label><span class="sr-only"><?= e(term('family')) ?></span><select name="fam"><option value="">Todas las <?= e(term('families')) ?></option>
     <?php foreach ($fams as $fa): ?><option value="<?= (int)$fa['id'] ?>"<?= $fam === (int)$fa['id'] ? ' selected' : '' ?>><?= e($fa['name']) ?></option><?php endforeach; ?></select></label>

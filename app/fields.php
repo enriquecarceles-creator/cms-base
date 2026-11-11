@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /*
  * Campos libres del catálogo: cada empresa define los suyos (Precio, Tallas, Color, Material…)
- * en el instalador o en Web → Campos. Los valores de cada artículo van en la tabla product_fields.
+ * en el instalador o en Catálogo → Características. Los valores de cada artículo van en la tabla product_fields.
  */
 
 /** Tipos de campo: clave => [nombre, explicación]. */
@@ -273,7 +273,7 @@ function field_input(array $f, string $v): string
             foreach ($choices as $c) {
                 $h .= '<label class="check"><input type="checkbox" name="' . $name . '[]" value="' . e($c) . '"' . (in_array($c, $sel, true) ? ' checked' : '') . '> ' . e($c) . '</label>';
             }
-            return $h . ($choices ? '' : '<small>Escribe las opciones en Web → Campos.</small>') . '</fieldset>';
+            return $h . ($choices ? '' : '<small>Escribe las opciones en Catálogo → Características.</small>') . '</fieldset>';
         default:
             return '<label><span class="lbl">' . $label . '</span> <input name="' . $name . '" value="' . e($v) . '" maxlength="5000"></label>';
     }
@@ -316,7 +316,7 @@ const CATALOG_FILTER_MAX = 4;
 /** Tipos de campo que se pueden usar como filtro (texto largo, enlace y número libre no). */
 const CATALOG_FILTER_KINDS = ['text', 'select', 'multi', 'bool', 'price'];
 
-/** Campos que se pueden ofrecer como filtro: públicos y de un tipo válido, en el orden de Web → Campos. */
+/** Campos que se pueden ofrecer como filtro: públicos y de un tipo válido, en el orden de Catálogo → Características. */
 function catalog_filter_candidates(): array
 {
     return array_filter(fields_all(), fn($f) => $f['is_public'] === 1 && in_array($f['kind'], CATALOG_FILTER_KINDS, true));

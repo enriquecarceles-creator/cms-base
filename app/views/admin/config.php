@@ -1,5 +1,5 @@
-<div class="head"><h1>Configuración</h1></div>
-<p class="hint">Qué partes de la web se usan y cómo se comporta. Los datos de la empresa (nombre, logotipo, color, contacto, textos de la portada) están en <a href="<?= e(url('/admin/empresa')) ?>">Empresa</a>. El envío de correo, en <a href="<?= e(url('/admin/correo')) ?>">Correo</a>.</p>
+<div class="head"><h1>General</h1></div>
+<p class="hint">Qué partes de la web se usan y cómo se comporta. Los datos de la empresa (nombre, logotipo, color, contacto, textos de la portada) están en <a href="<?= e(url('/admin/empresa')) ?>">Empresa</a>. El envío de correo, en <a href="<?= e(url('/admin/correo')) ?>">Correo</a>. La doble verificación de Clientes y Ventas, en <a href="<?= e(url('/admin/usuarios#erp')) ?>">Usuarios y seguridad</a>.</p>
 <form method="post" class="form mods">
   <?= csrf_field() ?>
 
@@ -39,16 +39,11 @@
       <small><?= e(($help !== '' ? $help . ' ' : '') . 'Vacío = «' . $default . '».') ?></small></label>
   <?php endforeach; ?>
 
-  <h2 id="erp">Clientes y Ventas</h2>
-  <label class="check"><input type="checkbox" name="erp_2fa" value="1"<?= $erp2fa ? ' checked' : '' ?>> <span>Exigir doble verificación para Clientes y Ventas</span></label>
-  <p class="muted" style="margin:0">Con esto activado, solo entran en Clientes y Ventas los usuarios (rol «ERP» y administradores) que tengan activada la doble verificación en <a href="<?= e(url('/admin/clave#doble')) ?>">Mi cuenta</a>. Son datos personales de clientes: <strong>en la web publicada debe estar activado</strong>.</p>
-  <label>Tu contraseña (solo para desactivarla) <input type="password" name="erp_pass" autocomplete="current-password"><small>Si quitas la marca, escribe aquí tu contraseña. Se avisará por correo a todos los administradores y en Inicio saldrá un aviso mientras esté desactivada.</small></label>
-
   <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
 </form>
 
 <h2 id="panel">Dirección del panel</h2>
-<form method="post" action="<?= e(url('/admin/configuracion')) ?>" class="form">
+<form method="post" action="<?= e(url('/admin/general')) ?>" class="form">
   <?= csrf_field() ?><input type="hidden" name="action" value="panel_path">
   <p style="margin:0">Ahora el panel está en: <strong><code><?= e(site_origin() . url('/admin')) ?></code></strong></p>
   <p class="muted" style="margin:0">Puedes cambiar <code>/admin</code> por otra dirección (por ejemplo <code>gestion-x7k</code>) para que los robots no la encuentren. Es un complemento, <strong>no sustituye a una buena contraseña</strong>. Al cambiarla, <code>/admin</code> dará «página no encontrada».</p>

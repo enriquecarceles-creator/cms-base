@@ -523,7 +523,7 @@ function dbimp_apply_profile(array $job, array $p): array
     $m['profile'] = (int)$p['id'];
     $job['map'] = $m;
     $job['msg'] = 'Se ha aplicado el perfil «' . $p['name'] . '».'
-        . ($created ? ' He creado estos campos que no existían: ' . implode(', ', $created) . ' (puedes cambiarlos en Web → Campos).' : '');
+        . ($created ? ' He creado estos campos que no existían: ' . implode(', ', $created) . ' (puedes cambiarlos en Catálogo → Características).' : '');
     $job['warnings'] = $missing ? ['El perfil usa cosas que no están en esta base de datos y se han dejado en «— ninguna —»: ' . implode(', ', array_unique($missing)) . '.'] : [];
     return $job;
 }
@@ -739,7 +739,7 @@ function dbimp_map_form(array $job): string
         . '<label class="check"><input type="radio" name="m[mode]" value="import"' . ($mode === 'import' ? ' checked' : '') . '> <span><b>Importar artículos</b>: crea los nuevos y rellena los huecos de los que ya existen (no cambia nada que ya tenga valor).</span></label>'
         . '<label class="check"><input type="radio" name="m[mode]" value="update"' . ($mode === 'update' ? ' checked' : '') . '> <span><b>Actualizar precios y stock</b>: busca cada artículo por su <b>referencia</b> y cambia solo los campos marcados, aunque ya tengan valor. No crea ni borra artículos, ni toca nombre, descripción, ' . e(term('family', true)) . ' ni fotos.</span></label>'
         . '<div class="upd-opts"><small>Solo para «Actualizar»: campos que se actualizan</small>'
-        . ($updBoxes !== '' ? $updBoxes : '<small>No hay campos del catálogo. Créalos en Web → Campos.</small>')
+        . ($updBoxes !== '' ? $updBoxes : '<small>No hay campos del catálogo. Créalos en Catálogo → Características.</small>')
         . '<label class="check"><input type="checkbox" name="m[upd_visible]" value="1"' . (($m['upd_visible'] ?? '') === '1' ? ' checked' : '') . '> <span>Actualizar también la visibilidad' . ($visCol !== '' ? ' (' . e($visCol) . ')' : ' <small class="muted">(sin columna de visible)</small>') . '</span></label>'
         . '<small>Si en el origen un valor está vacío, se deja el que hay en la web. Un precio 0 cuenta como vacío; un stock 0 sí se actualiza.</small></div>'
         . '</fieldset>'

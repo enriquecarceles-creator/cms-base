@@ -409,7 +409,7 @@ function auth_ftp_disable_totp(): void
     }
 }
 
-/** Quita de un archivo SQLite de copia de seguridad las claves de doble verificación y los códigos de recuperación. */
+/** Quita de un archivo SQLite de copia de seguridad las claves de doble verificación, los códigos de recuperación y los registros de correo y de descargas. */
 function auth_scrub_backup(string $sqliteFile, bool $withErp = false): void
 {
     $pdo = db_connect(['driver' => 'sqlite', 'file' => $sqliteFile]);
@@ -418,6 +418,11 @@ function auth_scrub_backup(string $sqliteFile, bool $withErp = false): void
     }
     if (in_array('user_recovery_codes', db_tables($pdo), true)) {
         $pdo->exec('DELETE FROM user_recovery_codes');
+    }
+    foreach (['mail_log', 'backup_log'] as $t) { // registro de correos (direcciones) e historial de descargas: nunca en la copia
+        if (in_array($t, db_tables($pdo), true)) {
+            $pdo->exec('DELETE FROM ' . $t);
+        }
     }
     if (!$withErp) { // clientes y ventas (datos personales) no van en la copia salvo que se pida
         foreach (array_reverse(ERP_TABLES) as $t) {

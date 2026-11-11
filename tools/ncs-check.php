@@ -348,12 +348,15 @@ $check('sincronizar de nuevo no toca el estado propio (cobros, notas, historial)
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();
+$db->prepare('INSERT INTO mail_log (sent_at, to_email, subject, ok, transport, error) VALUES (?,?,?,?,?,?)')->execute([time(), 'destino-unico-prueba@ejemplo.com', 'asunto', 1, 'smtp', '']);
+$db->prepare('INSERT INTO backup_log (created_at, username, with_erp, size_bytes) VALUES (?,?,?,?)')->execute([time(), 'usuario-unico-prueba', 0, 1]);
 $bk = $tmp . '/data/backup-test.sqlite';
 $db->exec("VACUUM INTO '" . str_replace("'", "''", $bk) . "'");
 auth_scrub_backup($bk, false);
 $bytes = (string)file_get_contents($bk);
 @unlink($bk);
 $check('la copia por defecto no lleva clientes ni facturas (ni restos en el archivo)', $sample !== '' && !str_contains($bytes, $sample));
+$check('la copia no lleva el registro de correos ni el historial de descargas (ni restos en el archivo)', !str_contains($bytes, 'destino-unico-prueba@ejemplo.com') && !str_contains($bytes, 'usuario-unico-prueba'));
 
 /* 7. Ningún dato personal en el repositorio */
 $section('Datos personales fuera del repositorio');

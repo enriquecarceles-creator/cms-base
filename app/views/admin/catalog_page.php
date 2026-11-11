@@ -1,6 +1,6 @@
 <?php /* Web → Página del catálogo: título, presentación, artículos por página, orden y qué sale en las tarjetas. */ ?>
 <div class="head"><h1>Página del catálogo</h1><a href="<?= e(url('/catalogo')) ?>" target="_blank" rel="noopener">Ver el catálogo ↗</a></div>
-<p class="hint">Cómo se ve el catálogo en la web. Los nombres de los grupos (<?= e(term('family')) ?> / <?= e(term('sub')) ?>) se cambian en <a href="<?= e(url('/admin/configuracion')) ?>">Configuración</a>.</p>
+<p class="hint">Cómo se ve el catálogo en la web. Los nombres de los grupos (<?= e(term('family')) ?> / <?= e(term('sub')) ?>) se cambian en <a href="<?= e(url('/admin/general')) ?>">Configuración</a>.</p>
 
 <form method="post" class="form">
   <?= csrf_field() ?>
@@ -22,7 +22,7 @@
 
   <h2>Filtros</h2>
   <?php if (!$cand): ?>
-    <p class="muted" style="margin:0">Todavía no hay campos públicos que sirvan como filtro. Se crean en <a href="<?= e(url('/admin/campos')) ?>">Web → Campos</a> (texto, listas, sí/no o precio).</p>
+    <p class="muted" style="margin:0">Todavía no hay campos públicos que sirvan como filtro. Se crean en <a href="<?= e(url('/admin/caracteristicas')) ?>">Catálogo → Características</a> (texto, listas, sí/no o precio).</p>
   <?php else: ?>
     <p class="hint" style="margin:0 0 8px">Marca hasta <?= (int)CATALOG_FILTER_MAX ?> campos para que los visitantes puedan filtrar el catálogo. Sin ninguno marcado, el catálogo queda como siempre. Los campos internos nunca se ofrecen.</p>
     <?php foreach ($cand as $fid => $cf): ?>

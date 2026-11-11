@@ -286,6 +286,20 @@ const SCHEMA_MAIL_DDL = "
     );
 ";
 
+/**
+ * Historial de descargas de la copia de seguridad (Configuración → Copias de seguridad). Solo usuario, fecha y tamaño.
+ * Como mail_log, queda fuera de DB_TABLES: restaurar una copia no debe reescribir quién descargó qué.
+ */
+const SCHEMA_BACKUP_DDL = "
+    CREATE TABLE backup_log (
+        id {ID},
+        created_at {BIG} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        with_erp {I} NOT NULL DEFAULT 0,
+        size_bytes {BIG} NOT NULL DEFAULT 0
+    );
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -371,7 +385,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -467,6 +481,11 @@ function migrate_schema(CmsPdo $pdo): void
             foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
             }
+        }
+    }
+    if ($ver < 25 && !in_array('backup_log', db_tables($pdo), true)) {
+        foreach (db_ddl(SCHEMA_BACKUP_DDL, $pdo->drv) as $st) {
+            $pdo->rawExec($st);
         }
     }
     if ($ver < 24 && in_array('erp_invoice_links', db_tables($pdo), true)) {
