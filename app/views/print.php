@@ -33,6 +33,8 @@ $pdfIcon = '<svg class="pdf-ico" viewBox="0 0 32 32" width="22" height="22" aria
       <label><input type="checkbox" name="cover" value="1"<?= $opt['cover'] ? ' checked' : '' ?>> Fotos</label>
       <label><input type="checkbox" name="ref" value="1"<?= $opt['ref'] ? ' checked' : '' ?>> Referencia</label>
       <label><input type="checkbox" name="dims" value="1"<?= $opt['dims'] ? ' checked' : '' ?>> Medidas</label>
+      <?php foreach ($pfields as $fid => $pf): ?><label><input type="checkbox" name="p[]" value="<?= (int)$fid ?>"<?= in_array($fid, $psel, true) ? ' checked' : '' ?>> <?= e($pf['name']) ?></label>
+      <?php endforeach; ?>
       <label>Columnas <select name="cols"><?php foreach ([2, 3, 4] as $n): ?><option<?= $n === $cols ? ' selected' : '' ?>><?= $n ?></option><?php endforeach; ?></select></label>
       <button class="btn small" type="submit">Aplicar</button>
       <a class="pf-all" href="<?= e(url('/catalogo/completo')) ?>">Todo</a>
@@ -68,6 +70,7 @@ document.querySelectorAll('[data-root]').forEach(function(r){r.addEventListener(
               <strong><?= e($p['name']) ?></strong>
               <?php if ($opt['ref'] && $p['ref'] !== ''): ?><span class="pr-ref">Ref. <?= e($p['ref']) ?></span><?php endif; ?>
               <?php if ($opt['dims'] && $p['dimensions'] !== ''): ?><span><?= e($p['dimensions']) ?></span><?php endif; ?>
+              <?php foreach ($psel as $fid): if (isset($pvals[(int)$p['id']][$fid])): ?><span class="pr-field"><?= e($pfields[$fid]['name']) ?>: <?= e($pvals[(int)$p['id']][$fid]) ?></span><?php endif; endforeach; ?>
             </figcaption>
           </figure>
         <?php endforeach; ?>

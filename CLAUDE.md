@@ -111,7 +111,7 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 
 **Orden de pendientes (una tarea cada vez, con plan primero, mi «sí» y pruebas solo de lo nuevo):**
 1. ~~Filtros por campos en el catálogo (Fase B).~~ Hecho (ver sección 5).
-2. Campos públicos en el catálogo PDF (Fase B).
+2. ~~Campos públicos en el catálogo PDF (Fase B).~~ Hecho: casillas en `/catalogo/completo` (`p[]=<id>`), solo campos públicos de tipo corto (`print_field_candidates()`, `print_field_values()` en `app/fields.php`: una consulta para todos; el servidor vuelve a comprobar que sean públicos); por defecto ninguno marcado.
 3. Doble verificación TOTP (sección 7).
 4. Fase C (clientes y facturas de NCS).
 
@@ -126,10 +126,10 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 2. ~~Páginas propias: tabla `pages` (título, slug `{K}` único, contenido, imagen de cabecera, título y descripción SEO, visible, orden, fechas; migración portable y en `DB_TABLES`); dirección `/<slug>` sin chocar con rutas existentes; editor sencillo guardado en formato seguro (Markdown limitado o HTML saneado con lista blanca; nunca HTML libre); plantillas «Aviso legal», «Política de privacidad», «Política de cookies» rellenas con datos de Empresa y aviso de revisarlas; en el sitemap.~~ (hecho: ver sección 5)
 3. ~~Menú (Web → Menú): elegir y ordenar qué sale arriba y en el pie (Inicio, Catálogo, Contacto, cada página) con nombre opcional.~~ (hecho: ver sección 5)
 
-**Fase B — Catálogo avanzado** (PENDIENTE: tarea 2 del orden de arriba)
+**Fase B — Catálogo avanzado** (hecha)
 - ~~Nombres de la jerarquía configurables~~ (hecho: ver sección 5).
 - ~~Filtros por campos públicos (Tallas, Color…) en el catálogo.~~ Hecho.
-- Campos públicos en el catálogo PDF (`/catalogo/completo`), nunca los internos.
+- ~~Campos públicos en el catálogo PDF (`/catalogo/completo`), nunca los internos.~~ Hecho.
 
 **Fase C — ERP (clientes y ventas de NCS)**, en tablas y módulos aparte, sin ensuciar el catálogo:
 - `FCUENTAS.MDB` (clientes y proveedores): `CODIGO`, `NOMBRE`, `NIF`, `NCOMERCIAL`, `DOMICILIO`, `POBLACION`, `CODPOSTAL`, `PROVINCIA`, `TELEFONO1`, `EMAIL`, `TARIFA`, `FPAGO`, `BLOQUEADA` (invertido).

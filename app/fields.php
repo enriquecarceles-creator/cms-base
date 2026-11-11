@@ -424,3 +424,36 @@ function catalog_filters_build(string $scopeSql, array $scopeArgs, array $get): 
     }
     return $res;
 }
+
+/* ---------- Campos en el catálogo PDF (/catalogo/completo) ---------- */
+
+/** Campos que se pueden imprimir en el PDF: públicos y de un tipo corto (no texto largo ni enlace). Nunca los internos. */
+function print_field_candidates(): array
+{
+    return array_filter(fields_all(), fn($f) => $f['is_public'] === 1 && !in_array($f['kind'], ['textarea', 'url'], true));
+}
+
+/**
+ * Valores ya formateados de los campos elegidos para todos los artículos, en UNA consulta:
+ * [id artículo => [id campo => texto]]. Solo campos públicos (se vuelve a comprobar aquí), sin vacíos y sin «No».
+ */
+function print_field_values(array $fids): array
+{
+    $cand = print_field_candidates();
+    $fids = array_values(array_filter(array_map('intval', $fids), fn($i) => isset($cand[$i])));
+    if (!$fids) {
+        return [];
+    }
+    $st = db()->prepare('SELECT product_id, field_id, value FROM product_fields WHERE value <> \'\' AND field_id IN (' . implode(',', array_fill(0, count($fids), '?')) . ')');
+    $st->execute($fids);
+    $out = [];
+    foreach ($st->fetchAll() as $r) {
+        $f = $cand[(int)$r['field_id']];
+        $v = (string)$r['value'];
+        if ($f['kind'] === 'bool' && $v !== '1') {
+            continue;
+        }
+        $out[(int)$r['product_id']][(int)$r['field_id']] = $f['kind'] === 'bool' ? 'Sí' : field_format($f, $v);
+    }
+    return $out;
+}

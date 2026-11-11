@@ -493,3 +493,4 @@ html{scrollbar-gutter:stable}
 .filters .fl-range input{min-width:0;width:100px}
 .filters .fl-clear{align-self:center;font-size:.9rem}
 @media (max-width:600px){.filters label:not(.check),.filters select{width:100%}}
+.print-doc .pr-field{display:block}

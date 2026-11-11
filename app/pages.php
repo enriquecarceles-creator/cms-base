@@ -249,6 +249,15 @@ function page_print(): void
     ];
     $cols = (int)($_GET['cols'] ?? 3);
     $cols = in_array($cols, [2, 3, 4], true) ? $cols : 3;
+    // Campos públicos que se pueden imprimir (nunca los internos). Por defecto ninguno; se eligen con p[]=<id>.
+    $pfields = print_field_candidates();
+    $psel = [];
+    foreach (array_map('intval', (array)($filtered ? ($_GET['p'] ?? []) : [])) as $fid) {
+        if (isset($pfields[$fid]) && !in_array($fid, $psel, true)) {
+            $psel[] = $fid;
+        }
+    }
+    $pvals = $psel ? print_field_values($psel) : [];
     $rows = db()->query('SELECT p.*, ' . PCAT_FIELDS . ', c.id AS cid FROM products p ' . PCAT_JOIN . ' WHERE p.visible = 1 ORDER BY ' . PCAT_ORDER)->fetchAll();
     $groups = [];
     $total = 0;
@@ -263,7 +272,7 @@ function page_print(): void
         $total++;
     }
     render('print', [
-        'groups' => $groups, 'tree' => $tree, 'sel' => $sel, 'opt' => $opt, 'cols' => $cols, 'total' => $total,
+        'groups' => $groups, 'tree' => $tree, 'sel' => $sel, 'opt' => $opt, 'pfields' => $pfields, 'psel' => $psel, 'pvals' => $pvals, 'cols' => $cols, 'total' => $total,
         'filtered' => $filtered, 'title' => 'Catálogo en PDF · ' . site_name(), 'noindex' => true,
     ], null);
 }
