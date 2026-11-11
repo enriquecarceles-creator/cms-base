@@ -45,6 +45,17 @@ function admin_dispatch(array $segs): void
 
     switch ($page) {
         case '':
+            // Direcciones antiguas: /admin?c=…, ?q=… eran la lista de artículos → redirección temporal
+            if (array_intersect(array_keys($_GET), ['c', 'cat', 'q', 'visible', 'foto', 'precio'])) {
+                $q = $_GET;
+                if (isset($q['cat']) && !isset($q['c'])) {
+                    $q['c'] = $q['cat'];
+                }
+                header('Location: ' . url(admin_list_url(admin_list_query($q))), true, 302);
+                exit;
+            }
+            admin_home();
+            break;
         case 'articulos':
             admin_products();
             break;
@@ -105,6 +116,78 @@ function admin_render(string $view, array $vars = []): void
     render('admin/' . $view, $vars, 'admin/layout');
 }
 
+/* ---------- Iconos del panel (SVG en línea, de trazo, sin librerías) ---------- */
+
+/** Icono SVG decorativo (aria-hidden). Usa currentColor, así toma el color del texto. */
+function admin_icon(string $name): string
+{
+    static $paths = [
+        'home' => '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+        'catalog' => '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+        'import' => '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>',
+        'web' => '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
+        'users' => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.5c2.6.2 4.4 1.9 5 4.5"/>',
+        'user' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.2 4-6.5 8-6.5s7.2 2.3 8 6.5"/>',
+        'search' => '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>',
+        'external' => '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v6H4V6h6"/>',
+        'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
+        'plus' => '<path d="M12 5v14M5 12h14"/>',
+        'folder' => '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/>',
+        'download' => '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
+        'alert' => '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5"/><path d="M12 17.5v.01"/>',
+        'info' => '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/>',
+        'chevron' => '<path d="M9 6l6 6-6 6"/>',
+    ];
+    return '<svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        . ($paths[$name] ?? '') . '</svg>';
+}
+
+/**
+ * Menú del panel: secciones con sus páginas. Cada página: [etiqueta, ruta, segmentos que la marcan, solo admin].
+ * Respeta roles (solo admin) y módulos desactivados (slider, representantes).
+ */
+function admin_menu(): array
+{
+    $adm = is_admin();
+    $menu = [
+        'home' => ['Inicio', 'home', [['Inicio', '/admin', [''], false]]],
+        'catalog' => ['Catálogo', 'catalog', [
+            ['Artículos', '/admin/articulos', ['articulos', 'articulo'], false],
+            [term('families'), '/admin/categorias', ['categorias', 'portada'], false],
+            ['Fotos', '/admin/fotos', ['fotos'], false],
+        ]],
+        'import' => ['Importar', 'import', [
+            ['Importar artículos', '/admin/importar', ['importar'], false],
+            ['Fotos por FTP', '/admin/ftp', ['ftp'], false],
+        ]],
+        'web' => ['Web', 'web', [
+            ['Empresa', '/admin/empresa', ['empresa'], true],
+            ['Configuración', '/admin/configuracion', ['configuracion'], true],
+            ['Campos', '/admin/campos', ['campos'], true],
+            ...(feature('slider') ? [['Slider', '/admin/slider', ['slider'], true]] : []),
+            ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
+        ]],
+        'users' => ['Usuarios', 'users', [['Usuarios', '/admin/usuarios', ['usuarios'], true]]],
+    ];
+    foreach ($menu as $k => &$sec) {
+        $sec[2] = array_values(array_filter($sec[2], fn($p) => !$p[3] || $adm));
+        if (!$sec[2]) {
+            unset($menu[$k]);
+        }
+    }
+    unset($sec);
+    return $menu;
+}
+
+/** Primer segmento de la dirección del panel: '' (Inicio), 'articulos', 'articulo', 'categorias'… */
+function admin_segment(): string
+{
+    $path = (string)(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
+    $base = url('/admin');
+    $rest = str_starts_with($path, $base) ? substr($path, strlen($base)) : '';
+    return explode('/', trim($rest, '/'))[0] ?? '';
+}
+
 /* ---------- Primer uso: crear la cuenta ---------- */
 
 /* ---------- Acceso ---------- */
@@ -146,9 +229,156 @@ function admin_login(): void
 
 /* ---------- Artículos ---------- */
 
+/* ---------- Inicio del panel ---------- */
+
+/** Nº de fotos rotas (archivo que ya no está en uploads/). Se guarda 10 minutos: mirar el disco es lento. */
+function admin_broken_photos(): int
+{
+    $c = json_decode(setting('broken_photos'), true);
+    if (is_array($c) && (int)($c['at'] ?? 0) > time() - 600) {
+        return (int)$c['n'];
+    }
+    require_once __DIR__ . '/ftp.php';
+    $n = count(ftp_broken());
+    save_setting('broken_photos', (string)json_encode(['at' => time(), 'n' => $n]));
+    return $n;
+}
+
+function admin_home(): void
+{
+    $db = db();
+    $count = fn(string $sql, array $args = []) => (function () use ($db, $sql, $args): int {
+        $st = $db->prepare($sql);
+        $st->execute($args);
+        return (int)$st->fetchColumn();
+    })();
+    $pf = admin_price_field();
+    $stats = [
+        'visible' => $count('SELECT COUNT(*) FROM products WHERE visible = 1'),
+        'hidden' => $count('SELECT COUNT(*) FROM products WHERE visible = 0'),
+        'families' => $count('SELECT COUNT(*) FROM categories WHERE parent_id IS NULL'),
+        'subs' => $count('SELECT COUNT(*) FROM categories WHERE parent_id IS NOT NULL'),
+        'nophoto' => $count('SELECT COUNT(*) FROM products p WHERE NOT EXISTS (SELECT 1 FROM product_images i WHERE i.product_id = p.id)'),
+        'noprice' => $pf ? $count("SELECT COUNT(*) FROM products p WHERE NOT EXISTS (SELECT 1 FROM product_fields v WHERE v.product_id = p.id AND v.field_id = ? AND v.value <> '')", [$pf['id']]) : null,
+    ];
+    $lastImport = json_decode(setting('last_import'), true) ?: null;
+
+    // Avisos
+    $alerts = [];
+    if (is_file(ROOT . '/instalar.php')) {
+        $alerts[] = ['err', 'El archivo instalar.php sigue en la web: bórralo por FTP. Cualquiera podría volver a instalarla.', null, null];
+    }
+    if (setting('noindex') === '1') {
+        $alerts[] = ['warn', 'La web está oculta a Google (noindex). Quítalo cuando la publiques.', is_admin() ? '/admin/configuracion' : null, 'Configuración'];
+    }
+    if (is_admin()) {
+        $last = setting('last_backup_at');
+        $days = $last !== '' ? (int)floor((time() - (int)strtotime($last)) / 86400) : null;
+        if ($days === null) {
+            $alerts[] = ['warn', 'Todavía no has descargado ninguna copia de seguridad.', '/admin/empresa#copia', 'Descargar copia'];
+        } elseif ($days > 30) {
+            $alerts[] = ['warn', 'Hace ' . $days . ' días que no descargas una copia de seguridad.', '/admin/empresa#copia', 'Descargar copia'];
+        }
+    }
+    $broken = admin_broken_photos();
+    if ($broken > 0) {
+        $alerts[] = ['err', $broken . ' foto' . ($broken === 1 ? '' : 's') . ' de artículos apunta' . ($broken === 1 ? '' : 'n') . ' a un archivo que ya no existe (se ven rotas).', '/admin/ftp', 'Revisar'];
+    }
+
+    $recent = $db->query('SELECT p.id, p.name, p.ref, p.image, p.visible, p.updated_at, ' . PCAT_FIELDS . ' FROM products p ' . PCAT_JOIN
+        . ' ORDER BY p.updated_at DESC, p.id DESC LIMIT 10')->fetchAll();
+
+    admin_render('home', [
+        'stats' => $stats, 'pf' => $pf, 'lastImport' => $lastImport, 'alerts' => $alerts,
+        'lastBackup' => setting('last_backup_at'), 'recent' => $recent, 'title' => 'Inicio',
+    ]);
+}
+
+/* ---------- Lista de artículos: filtros y vuelta a la lista ---------- */
+
+
+/**
+ * Filtros válidos de la lista de artículos (lo demás se descarta).
+ * c = familia (incluye sus subfamilias) · q = nombre o referencia · visible = 1|0 · foto = 1|0 · precio = 1|0
+ */
+function admin_list_query(array $src): array
+{
+    $out = [];
+    if ((int)($src['c'] ?? 0) > 0) {
+        $out['c'] = (int)$src['c'];
+    }
+    $q = mb_substr(trim((string)($src['q'] ?? '')), 0, 100);
+    if ($q !== '') {
+        $out['q'] = $q;
+    }
+    foreach (['visible', 'foto', 'precio'] as $k) {
+        if (isset($src[$k]) && in_array((string)$src[$k], ['0', '1'], true)) {
+            $out[$k] = (string)$src[$k];
+        }
+    }
+    return $out;
+}
+
+/** Dirección de la lista con esos filtros. */
+function admin_list_url(array $q): string
+{
+    return '/admin/articulos' . ($q ? '?' . http_build_query($q) : '');
+}
+
+/** Filtros con los que se llegó a una pantalla (parámetro «back», en GET o POST). */
+function admin_back(): array
+{
+    parse_str((string)($_POST['back'] ?? $_GET['back'] ?? ''), $raw);
+    return admin_list_query($raw);
+}
+
+/** Campo del precio para «sin precio»: el primero de tipo precio (mejor si es público), o null. */
+function admin_price_field(): ?array
+{
+    $any = null;
+    foreach (fields_all() as $f) {
+        if ($f['kind'] === 'price') {
+            if ($f['is_public']) {
+                return $f;
+            }
+            $any ??= $f;
+        }
+    }
+    return $any;
+}
+
+/** Condiciones SQL de los filtros de la lista: [sql, argumentos]. */
+function admin_list_where(array $f): array
+{
+    $sql = '';
+    $args = [];
+    if (isset($f['c'])) {
+        $sql .= ' AND (p.category_id = ? OR c.parent_id = ?)';
+        array_push($args, $f['c'], $f['c']);
+    }
+    if (isset($f['q'])) {
+        $sql .= ' AND (p.name LIKE ? OR p.ref LIKE ?)';
+        array_push($args, '%' . $f['q'] . '%', '%' . $f['q'] . '%');
+    }
+    if (isset($f['visible'])) {
+        $sql .= ' AND p.visible = ?';
+        $args[] = (int)$f['visible'];
+    }
+    if (isset($f['foto'])) {
+        $sql .= ' AND ' . ($f['foto'] === '1' ? '' : 'NOT ') . 'EXISTS (SELECT 1 FROM product_images i WHERE i.product_id = p.id)';
+    }
+    $pf = admin_price_field();
+    if (isset($f['precio']) && $pf) {
+        $sql .= ' AND ' . ($f['precio'] === '1' ? '' : 'NOT ') . "EXISTS (SELECT 1 FROM product_fields v WHERE v.product_id = p.id AND v.field_id = ? AND v.value <> '')";
+        $args[] = $pf['id'];
+    }
+    return [$sql, $args];
+}
+
 function admin_products(): void
 {
     $db = db();
+    $filters = admin_list_query($_GET);
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         if (($_POST['action'] ?? '') === 'toggle') {
@@ -156,27 +386,16 @@ function admin_products(): void
                 ->execute([date('Y-m-d H:i:s'), (int)($_POST['id'] ?? 0)]);
             flash('Visibilidad actualizada.');
         }
-        redirect('/admin' . (!empty($_POST['back']) ? '?' . $_POST['back'] : ''));
+        redirect(admin_list_url(admin_back()));
     }
     $cats = admin_category_options();
-    $c = (int)($_GET['c'] ?? 0);
-    $q = trim((string)($_GET['q'] ?? ''));
-    $sql = 'SELECT p.*, ' . PCAT_FIELDS . ' FROM products p ' . PCAT_JOIN . ' WHERE 1=1';
-    $args = [];
-    if ($c) {
-        $sql .= ' AND (p.category_id = ? OR c.parent_id = ?)';
-        array_push($args, $c, $c);
-    }
-    if ($q !== '') {
-        $sql .= ' AND (p.name LIKE ? OR p.ref LIKE ?)';
-        array_push($args, "%$q%", "%$q%");
-    }
-    $sql .= ' ORDER BY ' . PCAT_ORDER;
-    $st = $db->prepare($sql);
+    [$where, $args] = admin_list_where($filters);
+    $st = $db->prepare('SELECT p.*, ' . PCAT_FIELDS . ' FROM products p ' . PCAT_JOIN . ' WHERE 1=1' . $where . ' ORDER BY ' . PCAT_ORDER);
     $st->execute($args);
     admin_render('products', [
-        'rows' => $st->fetchAll(), 'cats' => $cats, 'c' => $c, 'q' => $q,
-        'back' => http_build_query(array_filter(['c' => $c ?: null, 'q' => $q ?: null])),
+        'rows' => $st->fetchAll(), 'cats' => $cats, 'c' => (int)($filters['c'] ?? 0), 'q' => (string)($filters['q'] ?? ''),
+        'filters' => $filters,
+        'back' => http_build_query($filters),
         'title' => 'Artículos',
     ]);
 }
@@ -202,17 +421,20 @@ function admin_product(string $id): void
         'dimensions' => '', 'description' => '', 'image' => null, 'visible' => 1, 'sort' => 0, 'shape' => '',
     ];
 
+    // Filtros de la lista de la que se vino (para volver a ella tal cual)
+    $back = admin_back();
+    $backQs = $back ? '?back=' . rawurlencode(http_build_query($back)) : '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
             flash('Las fotos pesan demasiado de una vez (el servidor admite ' . ini_get('post_max_size') . ' en total). Sube menos fotos cada vez.', 'err');
-            redirect('/admin/articulo/' . $id);
+            redirect('/admin/articulo/' . $id . $backQs);
         }
         csrf_check();
         if (($_POST['action'] ?? '') === 'delete' && $p) {
             delete_product_files((int)$p['id']);
             $db->prepare('DELETE FROM products WHERE id = ?')->execute([$p['id']]);
             flash('Artículo «' . $p['name'] . '» eliminado.');
-            redirect('/admin');
+            redirect(admin_list_url($back));
         }
         $form = array_merge($form, [
             'category_id' => (int)($_POST['category_id'] ?? 0),
@@ -282,14 +504,16 @@ function admin_product(string $id): void
                 foreach ($photoErrors as $m) {
                     flash($m, 'err');
                 }
-                redirect('/admin/articulo/' . $pid);
+                redirect('/admin/articulo/' . $pid . $backQs);
             }
-            redirect('/admin?c=' . $form['category_id']);
+            redirect(admin_list_url($back ?: ['c' => (int)$form['category_id']]));
         }
     }
     admin_render('product_form', [
         'p' => $p, 'f' => $form, 'cats' => $cats, 'errors' => $errors, 'isNew' => $isNew,
         'gallery' => $p ? gallery_for((int)$p['id']) : [],
+        'back' => $back,
+        'crumb' => $isNew ? 'Nuevo artículo' : 'Editar «' . $p['name'] . '»',
         'title' => $isNew ? 'Nuevo artículo' : 'Editar artículo',
     ]);
 }
@@ -415,7 +639,7 @@ function admin_cover(int $id): void
         JOIN categories c ON c.id = p.category_id WHERE c.id = ? OR c.parent_id = ?
         ORDER BY p.sort, p.id, i.sort LIMIT 400');
     $st->execute([$id, $id]);
-    admin_render('cover', ['cat' => $cat, 'photos' => $st->fetchAll(), 'title' => 'Portada de ' . $cat['name']]);
+    admin_render('cover', ['cat' => $cat, 'photos' => $st->fetchAll(), 'crumb' => 'Foto de portada de «' . $cat['name'] . '»', 'title' => 'Portada de ' . $cat['name']]);
 }
 
 /* ---------- Slider de la portada ---------- */
@@ -1080,6 +1304,7 @@ function admin_backup(): void
         redirect('/admin/empresa');
     }
     $name = 'copia-' . preg_replace('/[^a-z0-9]+/', '-', strtolower(site_name())) . '-' . date('Y-m-d-His') . '.zip';
+    save_setting('last_backup_at', date('Y-m-d H:i:s')); // para el aviso de Inicio (más de 30 días sin copia)
     header('Content-Type: application/zip');
     header('Content-Disposition: attachment; filename="' . $name . '"');
     header('Content-Length: ' . filesize($tmp));

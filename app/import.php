@@ -813,6 +813,16 @@ function import_run(array &$job, float $deadline): void
     $job['lock'] = 0;
     $job['finished'] = time();
     import_save($job);
+    // Resumen para la página de Inicio del panel
+    $sum = ['at' => date('Y-m-d H:i:s'), 'source' => (string)($job['source_label'] ?? ''), 'origin' => (string)($job['origin'] ?? ''), 'created' => 0, 'updated' => 0, 'photos' => 0];
+    foreach ($job['items'] as $it) {
+        $sum['created'] += empty($it['created']) ? 0 : 1;
+        $sum['updated'] += empty($it['updated']) ? 0 : 1;
+        foreach ($it['images'] as $im) {
+            $sum['photos'] += $im['state'] === 'ok' ? 1 : 0;
+        }
+    }
+    db_put_setting(db(), 'last_import', (string)json_encode($sum, JSON_UNESCAPED_UNICODE));
     import_files_clear();
     @unlink(IMPORT_DB_FILE);
 }

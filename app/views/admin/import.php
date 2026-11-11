@@ -217,7 +217,7 @@
     </ul>
     <?php if ($errs): ?><ul class="errlist"><?php foreach ($errs as [$name, , $msg]): ?><li><b><?= e($name) ?></b>: <?= e($msg) ?></li><?php endforeach; ?></ul><?php endif; ?>
     <div class="buttons">
-      <a class="btn" href="<?= e(url('/admin')) ?>">Ver artículos</a>
+      <a class="btn" href="<?= e(url('/admin/articulos')) ?>">Ver artículos</a>
       <form method="post" class="inline"><?= csrf_field() ?><button class="btn ghost" name="action" value="reset" type="submit">Nuevo análisis</button></form>
     </div>
   <?php else: ?>
@@ -239,7 +239,7 @@
       <p class="muted">Puedes subir esas fotos a mano desde cada artículo.</p>
     <?php endif; ?>
     <div class="buttons">
-      <a class="btn" href="<?= e(url('/admin')) ?>">Ver artículos</a>
+      <a class="btn" href="<?= e(url('/admin/articulos')) ?>">Ver artículos</a>
       <form method="post" class="inline"><?= csrf_field() ?><button class="btn ghost" name="action" value="reset" type="submit">Nuevo análisis</button></form>
     </div>
   <?php endif; ?>

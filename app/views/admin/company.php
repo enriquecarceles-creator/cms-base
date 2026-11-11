@@ -73,7 +73,7 @@ $cards = array_pad($v['home_cards'], 4, ['', '']);
 </form>
 
 <h2>Copia de seguridad</h2>
-<form method="post" action="<?= e(url('/admin/copia')) ?>" class="form">
+<form method="post" action="<?= e(url('/admin/copia')) ?>" class="form" id="copia">
   <?= csrf_field() ?>
   <p class="muted" style="margin:0">Descarga un ZIP con la base de datos (artículos, <?= e(term('families', true)) ?>, usuarios, textos) y todas las fotos. Hazlo antes de actualizar la web.</p>
   <div class="buttons"><button class="btn ghost" type="submit">Descargar copia de seguridad</button></div>

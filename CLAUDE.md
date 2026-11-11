@@ -19,6 +19,10 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 - `app/schema.php` — esquema único con marcadores que `db_ddl()` convierte a cada motor, y migraciones (`SCHEMA_VERSION`, ahora 15). Marcadores: `{ID}` autonumérico · `{S}` texto corto (255) · `{K}` texto con índice único (VARCHAR(191) en MariaDB) · `{T}` texto largo · `{I}` entero · `{BIG}` entero grande · `{Q:nombre}` nombre reservado.
 - `app/fields.php` — campos libres del catálogo (tablas `custom_fields` y `product_fields`); panel en Web → Campos.
 - `app/admin.php` — controladores del panel (incluidos login, usuarios y bloqueo de intentos). `app/pages.php` — páginas públicas.
+- **Panel** (`app/views/admin/layout.php` + `assets/admin.css`, con variables de color en `:root`): cabecera (marca, buscador rápido → `/admin/articulos?q=`, «Ver web», menú de usuario con `<details>`), menú lateral `admin_menu()` (respeta roles y módulos; nombres con `term()`), iconos SVG en línea `admin_icon()`, migas de pan (las pantallas pueden pasar `crumb`). En el móvil el menú se pliega con una casilla + `<label>` (sin JavaScript).
+- **Direcciones del panel:** `/admin` = Inicio (`admin_home()`: cifras, avisos, accesos rápidos, últimos 10 modificados); la lista de artículos es `/admin/articulos`. `/admin?c=…`, `?cat=`, `?q=`, `?visible=`, `?foto=`, `?precio=` (direcciones antiguas) redirigen con **302** a `/admin/articulos` con esos filtros.
+- **Filtros de la lista:** `admin_list_query()` (solo `c`, `q`, `visible`, `foto`, `precio`), `admin_list_url()`, `admin_list_where()`. Para volver a la lista con los mismos filtros, los enlaces de edición llevan `?back=<filtros>` y los formularios un campo oculto `back` (`admin_back()` lo limpia).
+- Ajustes que guarda el panel: `last_import` (JSON al terminar cualquier importación), `last_backup_at` (al descargar la copia), `broken_photos` (recuento de fotos rotas guardado 10 minutos).
 - `app/views/` (públicas) y `app/views/admin/` (panel). Escapar siempre con `e()`.
 - `app/import.php` — núcleo del importador (plan → revisión → importación por tandas con transacciones). También aplica el modo «actualizar» (ítems con `update`: sobrescribe solo los campos elegidos).
 - `app/profiles.php` — perfiles de importación (tabla `import_profiles`): perfiles de sistema en `IMPORT_SYSTEM_PROFILES` (se copian solos a la tabla), perfiles propios, columnas prohibidas (`exclude_columns`, admite `PREFIJO*`) y creación de los campos que pida un perfil (por nombre, sin duplicar).
@@ -80,6 +84,9 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - Rol nuevo `erp_operator` cuando exista el módulo ERP; separar los helpers de acceso en `app/auth.php` (`require_auth()`, `require_role()`) manteniendo `require_login()` / `is_admin()` como alias.
 - Endpoints AJAX o JSON futuros: misma validación de sesión y CSRF antes de ejecutar nada.
 - Ficha pública: si hay un admin con sesión iniciada, mostrar también los campos internos con la insignia «Solo visible para administradores». Nunca a visitantes ni en el PDF.
+- Aviso por correo al usuario cuando entra desde una IP o un navegador nuevos.
+- Dirección del panel configurable en Web → Configuración (por defecto `/admin`), cambiando todos los enlaces internos (hoy `/admin` está escrito en muchos sitios: centralizarlo). Al cambiarla, avisar claramente de la nueva dirección y dejar una forma de recuperarla por FTP (un ajuste en `data/`).
+- **Tarea aparte, antes de la Fase C:** doble verificación opcional por usuario con código TOTP (Google Authenticator), sin librerías externas, con códigos de recuperación.
 
 ## 8. Hoja de ruta
 **Fase A — Perfiles de importación** (hecha: ver `app/profiles.php`; solo para el catálogo y el origen «Base de datos»)

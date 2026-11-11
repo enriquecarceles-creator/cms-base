@@ -1,12 +1,13 @@
 <div class="head">
   <h1><?= $isNew ? 'Nuevo artículo' : 'Editar artículo' ?></h1>
-  <a href="<?= e(url('/admin' . ($f['category_id'] ? '?c=' . (int)$f['category_id'] : ''))) ?>">← Volver a la lista</a>
+  <a href="<?= e(url(admin_list_url($back ?: ($f['category_id'] ? ['c' => (int)$f['category_id']] : [])))) ?>">← Volver a la lista</a>
 </div>
 
 <?php foreach ($errors as $er): ?><p class="flash err"><?= e($er) ?></p><?php endforeach; ?>
 
 <form method="post" enctype="multipart/form-data" class="form">
   <?= csrf_field() ?>
+  <?php if ($back): ?><input type="hidden" name="back" value="<?= e(http_build_query($back)) ?>"><?php endif; ?>
   <div class="two">
     <label><?= e(term('family')) . "\n" /* PHP se come el salto tras ?> */ ?>
       <select name="category_id" required>

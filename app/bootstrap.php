@@ -343,13 +343,20 @@ function take_flash(): array
 /** Rol del usuario con sesión: 'admin' (todo) o 'catalogo' (artículos, familias, fotos e importar). */
 function current_role(): string
 {
-    static $role = null;
-    if ($role === null) {
-        $st = db()->prepare('SELECT role FROM users WHERE id = ?');
+    return current_user()['role'];
+}
+
+/** Usuario con sesión: ['username', 'role'] (vacíos si no hay sesión). Una sola consulta por petición. */
+function current_user(): array
+{
+    static $me = null;
+    if ($me === null) {
+        $st = db()->prepare('SELECT username, role FROM users WHERE id = ?');
         $st->execute([(int)($_SESSION['uid'] ?? 0)]);
-        $role = (string)($st->fetchColumn() ?: '');
+        $row = $st->fetch() ?: [];
+        $me = ['username' => (string)($row['username'] ?? ''), 'role' => (string)($row['role'] ?? '')];
     }
-    return $role;
+    return $me;
 }
 
 function is_admin(): bool
