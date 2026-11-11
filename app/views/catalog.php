@@ -49,6 +49,28 @@
     </form>
   </div>
 
+  <?php if ($filters): ?>
+    <form class="filters" method="get" action="<?= e(url('/catalogo' . ($current ? '/' . $current['slug'] : ''))) ?>">
+      <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= e($q) ?>"><?php endif; ?>
+      <?php foreach ($filters as $fi): $fname = $fi['f']['name']; ?>
+        <?php if ($fi['kind'] === 'bool'): ?>
+          <label class="check"><input type="checkbox" name="<?= e($fi['name']) ?>" value="1"<?= $fi['value'] === '1' ? ' checked' : '' ?>> <span><?= e($fname) ?></span></label>
+        <?php elseif ($fi['kind'] === 'price'): ?>
+          <div class="fl-range"><span><?= e($fname) ?><?= $fi['f']['unit'] !== '' ? ' (' . e($fi['f']['unit']) . ')' : '' ?></span>
+            <input type="number" name="<?= e($fi['name']) ?>_min" value="<?= e($fi['min']) ?>" min="0" step="any" placeholder="Desde" aria-label="<?= e($fname) ?>: desde">
+            <input type="number" name="<?= e($fi['name']) ?>_max" value="<?= e($fi['max']) ?>" min="0" step="any" placeholder="Hasta" aria-label="<?= e($fname) ?>: hasta"></div>
+        <?php else: ?>
+          <label><span><?= e($fname) ?></span>
+            <select name="<?= e($fi['name']) ?>"><option value="">Todos</option>
+              <?php foreach ($fi['options'] as $k => $label): ?><option value="<?= e((string)$k) ?>"<?= (string)$k === $fi['value'] ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+            </select></label>
+        <?php endif; ?>
+      <?php endforeach; ?>
+      <button class="btn small" type="submit">Aplicar</button>
+      <?php if ($fqs): ?><a class="fl-clear" href="<?= e(url('/catalogo' . ($current ? '/' . $current['slug'] : '')) . ($q !== '' ? '?' . http_build_query(['q' => $q]) : '')) ?>">Quitar filtros</a><?php endif; ?>
+    </form>
+  <?php endif; ?>
+
   <?php if (count($subs) >= 2 && feature('lineup')): ?>
     <?php
       $lu = lineup_items($subs);
@@ -70,7 +92,7 @@
   <?php endif; ?>
 
   <?php if (!$groups && !$subs): ?>
-    <p class="empty"><?= $q !== '' ? 'No hay artículos que coincidan con «' . e($q) . '».' : 'Todavía no hay artículos en ' . tg('esta', 'este') . ' ' . e(term('family', true)) . '.' ?></p>
+    <p class="empty"><?= $fqs ? 'Ningún artículo cumple esos filtros.' : ($q !== '' ? 'No hay artículos que coincidan con «' . e($q) . '».' : 'Todavía no hay artículos en ' . tg('esta', 'este') . ' ' . e(term('family', true)) . '.') ?></p>
   <?php endif; ?>
 
   <?php foreach ($groups as $slug => $g): ?>
@@ -81,7 +103,7 @@
   <?php endforeach; ?>
   <?php if ($pages > 1):
       $base = '/catalogo' . ($current ? '/' . $current['slug'] : '');
-      $pg = fn(int $n) => url($base) . (($q !== '' || $n > 1) ? '?' . http_build_query(array_filter(['q' => $q, 'pag' => $n > 1 ? $n : null], fn($v) => $v !== null && $v !== '')) : ''); ?>
+      $pg = fn(int $n) => url($base) . (($q !== '' || $fqs || $n > 1) ? '?' . http_build_query(array_filter(['q' => $q] + $fqs + ['pag' => $n > 1 ? $n : null], fn($v) => $v !== null && $v !== '')) : ''); ?>
     <nav class="cat-pager" aria-label="Páginas del catálogo">
       <?php if ($page > 1): ?><a href="<?= e($pg($page - 1)) ?>" rel="prev">‹ Anterior</a><?php endif; ?>
       <?php for ($n = 1; $n <= $pages; $n++): if ($n === $page): ?><span class="cur" aria-current="page"><?= $n ?></span><?php elseif ($n <= 2 || $n > $pages - 2 || abs($n - $page) <= 2): ?><a href="<?= e($pg($n)) ?>"><?= $n ?></a><?php elseif ($n === 3 || $n === $pages - 2): ?><span>…</span><?php endif; endfor; ?>

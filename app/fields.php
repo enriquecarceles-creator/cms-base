@@ -309,3 +309,118 @@ function import_norm_simple(string $s): string
     $s = strtr($s, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
     return trim((string)preg_replace('/[^a-z0-9]+/', ' ', $s));
 }
+
+/* ---------- Filtros del catálogo público (Web → Página del catálogo) ---------- */
+
+const CATALOG_FILTER_MAX = 4;
+/** Tipos de campo que se pueden usar como filtro (texto largo, enlace y número libre no). */
+const CATALOG_FILTER_KINDS = ['text', 'select', 'multi', 'bool', 'price'];
+
+/** Campos que se pueden ofrecer como filtro: públicos y de un tipo válido, en el orden de Web → Campos. */
+function catalog_filter_candidates(): array
+{
+    return array_filter(fields_all(), fn($f) => $f['is_public'] === 1 && in_array($f['kind'], CATALOG_FILTER_KINDS, true));
+}
+
+/** Filtros activados (ajuste catalog_filters = JSON con ids), solo los que siguen siendo válidos; máximo CATALOG_FILTER_MAX. */
+function catalog_filter_fields(): array
+{
+    $ids = json_decode(setting('catalog_filters', '[]'), true);
+    $cand = catalog_filter_candidates();
+    $out = [];
+    foreach (is_array($ids) ? $ids : [] as $id) {
+        if (isset($cand[(int)$id]) && count($out) < CATALOG_FILTER_MAX) {
+            $out[(int)$id] = $cand[(int)$id];
+        }
+    }
+    return $out;
+}
+
+/** Valores sueltos de un valor guardado: «36, 37 ; 38» (texto) o «a|b» (listas) → ['36','37','38']. */
+function filter_tokens(array $f, string $v): array
+{
+    $parts = $f['kind'] === 'text' ? preg_split('/\s*[,;|]\s*/u', $v) : explode('|', $v);
+    return array_values(array_filter(array_map('trim', $parts), 'strlen'));
+}
+
+/**
+ * Prepara los filtros del catálogo. $scopeSql = consulta de ids de los artículos que se están viendo (sin buscador ni filtros),
+ * $get = $_GET. Devuelve ['filters' => lo que pinta la vista, 'where' => condiciones para añadir al SQL, 'args' => sus valores,
+ * 'qs' => parámetros activos para los enlaces]. Una consulta por filtro (nunca una por artículo).
+ */
+function catalog_filters_build(string $scopeSql, array $scopeArgs, array $get): array
+{
+    $res = ['filters' => [], 'where' => '', 'args' => [], 'qs' => []];
+    $budget = 1500; // parámetros máximos en listas «IN (…)» (SQL Server admite 2.100 por consulta)
+    foreach (catalog_filter_fields() as $id => $f) {
+        $name = 'f' . $id;
+        $kind = $f['kind'];
+        $item = ['f' => $f, 'name' => $name, 'kind' => $kind];
+        if ($kind === 'bool') {
+            $on = ($get[$name] ?? '') === '1';
+            $item['value'] = $on ? '1' : '';
+            if ($on) {
+                $res['where'] .= " AND p.id IN (SELECT product_id FROM product_fields WHERE field_id = ? AND value = '1')";
+                $res['args'][] = $id;
+                $res['qs'][$name] = '1';
+            }
+        } elseif ($kind === 'price') {
+            $lim = [];
+            foreach (['min' => '>=', 'max' => '<='] as $k => $op) {
+                $raw = $get[$name . '_' . $k] ?? '';
+                $v = is_string($raw) ? field_clean(['kind' => 'price'], $raw) : '';
+                $item[$k] = $v !== '' ? rtrim(rtrim($v, '0'), '.') : '';
+                if ($v !== '') {
+                    $lim[] = ["CASE WHEN value <> '' THEN CAST(value AS DECIMAL(14,4)) END " . $op . ' CAST(? AS DECIMAL(14,4))', $v];
+                    $res['qs'][$name . '_' . $k] = $item[$k];
+                }
+            }
+            if ($lim) {
+                $res['where'] .= " AND p.id IN (SELECT product_id FROM product_fields WHERE field_id = ? AND " . implode(' AND ', array_column($lim, 0)) . ')';
+                array_push($res['args'], $id, ...array_column($lim, 1));
+            }
+        } else {
+            // Valores distintos entre los artículos que se ven (una consulta) y, de cada uno, los textos guardados que lo contienen.
+            $st = db()->prepare("SELECT value, COUNT(*) AS n FROM product_fields WHERE field_id = ? AND value <> '' AND product_id IN ($scopeSql) GROUP BY value");
+            $st->execute(array_merge([$id], $scopeArgs));
+            $opts = [];
+            $raws = [];
+            $cnt = [];
+            foreach ($st->fetchAll() as $r) {
+                $raw = (string)$r['value'];
+                foreach (filter_tokens($f, $raw) as $t) {
+                    $key = mb_strtolower($t);
+                    $opts[$key] ??= $t;
+                    $raws[$key][$raw] = true;
+                    $cnt[$key] = ($cnt[$key] ?? 0) + (int)$r['n'];
+                }
+            }
+            if (!$opts) {
+                continue; // sin valores en lo que se está viendo: no se ofrece el filtro
+            }
+            if (count($opts) > 300) { // campos de texto muy variados: se ofrecen los 300 valores más usados
+                arsort($cnt);
+                $opts = array_intersect_key($opts, array_slice($cnt, 0, 300, true));
+            }
+            uasort($opts, 'strnatcasecmp');
+            $sel = $get[$name] ?? '';
+            $key = is_string($sel) ? mb_strtolower(trim($sel)) : '';
+            $item['options'] = $opts;
+            $item['value'] = isset($opts[$key]) ? $key : '';
+            if ($item['value'] !== '') {
+                $list = array_map('strval', array_keys($raws[$key]));
+                if (count($list) <= $budget) { // exacto: los textos guardados que contienen ese valor
+                    $budget -= count($list);
+                    $res['where'] .= ' AND p.id IN (SELECT product_id FROM product_fields WHERE field_id = ? AND value IN (' . implode(',', array_fill(0, count($list), '?')) . '))';
+                    array_push($res['args'], $id, ...$list);
+                } else { // valor muy repetido: lista demasiado larga para SQL Server (2.100 parámetros); se busca el texto
+                    $res['where'] .= " AND p.id IN (SELECT product_id FROM product_fields WHERE field_id = ? AND LOWER(value) LIKE ? ESCAPE '!')";
+                    array_push($res['args'], $id, '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $key) . '%');
+                }
+                $res['qs'][$name] = $key;
+            }
+        }
+        $res['filters'][] = $item;
+    }
+    return $res;
+}

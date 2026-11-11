@@ -1183,12 +1183,21 @@ function admin_catalog_page(): void
         save_setting('catalog_order', isset(CATALOG_ORDERS[$o]) ? $o : 'manual');
         save_setting('catalog_show_ref', empty($_POST['catalog_show_ref']) ? '0' : '1');
         save_setting('catalog_show_price', empty($_POST['catalog_show_price']) ? '0' : '1');
+        $want = array_map('intval', is_array($_POST['catalog_filters'] ?? null) ? $_POST['catalog_filters'] : []);
+        $keep = [];
+        foreach (array_keys(catalog_filter_candidates()) as $fid) { // solo campos válidos, en el orden de Campos
+            if (in_array($fid, $want, true) && count($keep) < CATALOG_FILTER_MAX) {
+                $keep[] = $fid;
+            }
+        }
+        save_setting('catalog_filters', json_encode($keep));
         flash('Página del catálogo guardada.');
         redirect('/admin/pagina-catalogo');
     }
     admin_render('catalog_page', [
         'title_v' => db_setting('catalog_title'), 'intro' => db_setting('catalog_intro'), 'opts' => catalog_opts(),
         'hasPrice' => field_price_public() !== null,
+        'cand' => catalog_filter_candidates(), 'active' => catalog_filter_fields(),
         'title' => 'Página del catálogo',
     ]);
 }

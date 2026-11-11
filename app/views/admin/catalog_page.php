@@ -21,7 +21,14 @@
   <label class="check"><input type="checkbox" name="catalog_show_price" value="1"<?= $opts['show_price'] ? ' checked' : '' ?>> <span>Mostrar el precio<?= $hasPrice ? '' : ' (cuando haya un campo de precio público)' ?></span></label>
 
   <h2>Filtros</h2>
-  <p class="muted" style="margin:0">Próximamente: filtros por tallas, color y otros campos públicos. Se activarán aquí.</p>
+  <?php if (!$cand): ?>
+    <p class="muted" style="margin:0">Todavía no hay campos públicos que sirvan como filtro. Se crean en <a href="<?= e(url('/admin/campos')) ?>">Web → Campos</a> (texto, listas, sí/no o precio).</p>
+  <?php else: ?>
+    <p class="hint" style="margin:0 0 8px">Marca hasta <?= (int)CATALOG_FILTER_MAX ?> campos para que los visitantes puedan filtrar el catálogo. Sin ninguno marcado, el catálogo queda como siempre. Los campos internos nunca se ofrecen.</p>
+    <?php foreach ($cand as $fid => $cf): ?>
+      <label class="check"><input type="checkbox" name="catalog_filters[]" value="<?= (int)$fid ?>"<?= isset($active[$fid]) ? ' checked' : '' ?>> <span><?= e($cf['name']) ?> <small>(<?= e(FIELD_KINDS[$cf['kind']][0]) ?>)</small></span></label>
+    <?php endforeach; ?>
+  <?php endif; ?>
 
   <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
 </form>

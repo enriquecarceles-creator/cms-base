@@ -482,3 +482,14 @@ html{scrollbar-gutter:stable}
 .doc a{color:var(--ink)}
 .foot-pages{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;padding-block:14px;font-size:.88rem;border-top:1px solid var(--line)}
 .foot-pages a{color:var(--steel)}
+
+/* Filtros del catálogo (Web → Página del catálogo) */
+.filters{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;margin:0 0 20px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--soft)}
+.filters label,.filters .fl-range{display:flex;flex-direction:column;gap:4px;font-size:.9rem}
+.filters label.check{flex-direction:row;align-items:center;gap:8px}
+.filters select,.filters input[type=number]{padding:7px 10px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;min-width:130px}
+.filters .fl-range{flex-direction:row;flex-wrap:wrap;align-items:center}
+.filters .fl-range span{flex-basis:100%}
+.filters .fl-range input{min-width:0;width:100px}
+.filters .fl-clear{align-self:center;font-size:.9rem}
+@media (max-width:600px){.filters label:not(.check),.filters select{width:100%}}

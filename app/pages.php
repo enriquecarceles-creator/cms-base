@@ -124,12 +124,16 @@ function page_catalog(?string $slug): void
         }
         $args[] = $current['id'];
     }
+    // Filtros por campos (Web → Página del catálogo): los valores que se ofrecen son los de los artículos que se están viendo.
+    $fl = catalog_filters_build(str_replace('SELECT p.*, ' . PCAT_FIELDS . ' FROM', 'SELECT p.id FROM', $sql), $args, $_GET);
     if ($q !== '') {
         $sql .= ' AND (p.name LIKE ? OR p.ref LIKE ? OR p.description LIKE ? OR p.dimensions LIKE ?
             OR p.id IN (SELECT pf.product_id FROM product_fields pf JOIN custom_fields cf ON cf.id = pf.field_id WHERE cf.is_public = 1 AND pf.value LIKE ?))';
         $like = '%' . $q . '%';
         array_push($args, $like, $like, $like, $like, $like);
     }
+    $sql .= $fl['where'];
+    array_push($args, ...$fl['args']);
     // Orden y páginas (Web → Página del catálogo). Por defecto: orden manual y todo en una página, como siempre.
     $opts = catalog_opts();
     $order = PCAT_ORDER;
@@ -170,10 +174,10 @@ function page_catalog(?string $slug): void
     $title = ($current ? ($parent ? $parent['name'] . ' · ' : '') . $current['name'] . ' · ' : '') . 'Catálogo · ' . site_name();
     render('catalog', [
         'cats' => $cats, 'current' => $current, 'parent' => $parent, 'subs' => $q === '' ? $subs : [],
-        'groups' => $groups, 'q' => $q, 'page' => $page, 'pages' => $pages, 'total' => $total,
+        'groups' => $groups, 'q' => $q, 'filters' => $fl['filters'], 'fqs' => $fl['qs'], 'page' => $page, 'pages' => $pages, 'total' => $total,
         'title' => $title,
         'desc' => 'Catálogo de ' . ($current ? mb_strtolower($current['name']) : 'productos') . ' de ' . site_name() . '.',
-        'noindex' => $q !== '',
+        'noindex' => $q !== '' || $fl['qs'] !== [],
     ]);
 }
 
