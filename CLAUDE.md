@@ -48,7 +48,7 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 - Ajustes: `save_setting()` / `db_put_setting()`. Columnas: `db_columns()`. Tablas: `db_tables()`.
 - Nombres de columna: evitar palabras reservadas (`public`, `order`, `option`, `user`, `key`, `file`…).
 - Para revisar las consultas: arrancar con `CMS_SQL_LOG=/ruta/sql.log php -S …` y traducirlas con `db_sql($sql, 'mysql')` / `db_sql($sql, 'sqlsrv')`.
-- MariaDB y SQL Server están **sin probar en un servidor real**: si falla algo, el arreglo suele ir en `db_sql()` o `db_ddl()`.
+- **MariaDB está probada en un servidor real** (IONOS, la web publicada funciona con ella). **SQL Server sigue sin probar en un servidor real**: si falla algo, el arreglo suele ir en `db_sql()` o `db_ddl()`. Las pruebas locales solo comprueban la traducción de las consultas (`db_sql()` / `db_ddl()`), no ejecutan MariaDB ni SQL Server: en MariaDB mirar límites de columnas (`VARCHAR(255)`), índices con `{K}` y estrictez de tipos.
 
 ## 4. Seguridad (lo que existe hoy)
 - **Usuarios** (tabla `users`): `id`, `username` (único), `pass_hash` (`password_hash(…, PASSWORD_DEFAULT)`), `role`, `email`. Roles (`USER_ROLES` en `app/admin.php`): `admin` (todo) y `catalogo` (artículos, importar y su cuenta). Siempre queda al menos un admin. El instalador crea el primero como `admin`.
@@ -80,7 +80,9 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 ```bash
 php -d upload_max_filesize=1G -d post_max_size=1G -d memory_limit=1G -d max_execution_time=600 -S 127.0.0.1:8099 router.php
 ```
-Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flujo en el navegador.
+Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flujo en el navegador. Usar siempre este comando al arrancar la web en local (puerto 8099). Los servidores de prueba sobre copias temporales, en otros puertos, pueden llevar los límites que hagan falta.
+
+**Estado: la web está publicada en IONOS con MariaDB y funciona.** A partir de ahora toda entrega es una **actualización** de una web en producción: no tocar `data/` ni `uploads/` del hosting, no subir `instalar.php`, y las migraciones de esquema (`SCHEMA_VERSION`) deben ser seguras sobre datos reales (se aplican solas en la primera visita). Dar siempre la lista de archivos cambiados para subir por FTP.
 
 **Hosting:** subir el contenido (con `.htaccess` y `.user.ini`) directamente en la carpeta, no dentro de otra carpeta `cms-base/`. Al actualizar: no tocar `data/` ni `uploads/`, no subir `instalar.php`.
 
@@ -101,13 +103,18 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - Ficha pública: si hay un admin con sesión iniciada, mostrar también los campos internos con la insignia «Solo visible para administradores». Nunca a visitantes ni en el PDF.
 - ~~Aviso por correo al usuario cuando entra desde una IP o un navegador nuevos.~~ Hecho.
 - ~~Dirección del panel configurable en Web → Configuración (por defecto `/admin`), cambiando todos los enlaces internos (hoy `/admin` está escrito en muchos sitios: centralizarlo). Al cambiarla, avisar claramente de la nueva dirección y dejar una forma de recuperarla por FTP (un ajuste en `data/`).~~ Hecho (ver sección 4).
-- **PENDIENTE tras publicar (antes de la Fase C):** doble verificación opcional por usuario con código TOTP (Google Authenticator), sin librerías externas, con códigos de recuperación.
+- **PENDIENTE (tarea 3 del orden de la sección 8, antes de la Fase C):** doble verificación opcional por usuario con código TOTP (Google Authenticator), sin librerías externas, con códigos de recuperación.
 
 ## 8. Hoja de ruta
 
-**Orden acordado hasta la publicación:** (1) Web → Menú (entrega 3 de la sección Web) → (2) seguridad básica: bloqueo por usuario, aviso por correo al entrar desde un sitio nuevo y dirección del panel configurable → (3) lista definitiva de archivos para subir al hosting (una sola subida).
+**Publicación: hecha** (la web funciona en IONOS con MariaDB). Antes de publicar se hicieron, en este orden: Web → Menú, seguridad básica (bloqueo por usuario, aviso por correo de acceso nuevo, dirección del panel configurable) y el ZIP de subida.
 
-**Pendientes DESPUÉS de publicar** (no hacer antes): filtros por campos en el catálogo, campos públicos en el catálogo PDF y doble verificación TOTP (ver más abajo y sección 7).
+**Orden de pendientes (una tarea cada vez, con plan primero, mi «sí» y pruebas solo de lo nuevo):**
+1. Filtros por campos en el catálogo (Fase B).
+2. Campos públicos en el catálogo PDF (Fase B).
+3. Doble verificación TOTP (sección 7).
+4. Fase C (clientes y facturas de NCS).
+
 **Fase A — Perfiles de importación** (hecha: ver `app/profiles.php`; solo para el catálogo y el origen «Base de datos»)
 - Tabla `import_profiles`: `id`, `name`, `source_type` (`mdb`, `sql`, `csv`), `target_module` (`catalog`, `customers`, `sales`), `mapping_json`, `rules_json`, `is_system`, `created_at`.
 - Perfil de sistema «NCS Facturación — Almacén (FALMACEN.MDB)» con el emparejamiento de la sección 6 (inversión de `BLOQUEADO`, exclusión de `AMPLIACIOND`, `T00`, `C00`, `PVP2`, `SACTUAL`).
@@ -119,7 +126,7 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 2. ~~Páginas propias: tabla `pages` (título, slug `{K}` único, contenido, imagen de cabecera, título y descripción SEO, visible, orden, fechas; migración portable y en `DB_TABLES`); dirección `/<slug>` sin chocar con rutas existentes; editor sencillo guardado en formato seguro (Markdown limitado o HTML saneado con lista blanca; nunca HTML libre); plantillas «Aviso legal», «Política de privacidad», «Política de cookies» rellenas con datos de Empresa y aviso de revisarlas; en el sitemap.~~ (hecho: ver sección 5)
 3. ~~Menú (Web → Menú): elegir y ordenar qué sale arriba y en el pie (Inicio, Catálogo, Contacto, cada página) con nombre opcional.~~ (hecho: ver sección 5)
 
-**Fase B — Catálogo avanzado** (PENDIENTE: después de publicar)
+**Fase B — Catálogo avanzado** (PENDIENTE: tareas 1 y 2 del orden de arriba)
 - ~~Nombres de la jerarquía configurables~~ (hecho: ver sección 5).
 - Filtros por campos públicos (Tallas, Color…) en el catálogo.
 - Campos públicos en el catálogo PDF (`/catalogo/completo`), nunca los internos.
@@ -131,5 +138,5 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - Clientes y facturas son datos personales: solo en el panel, con acceso por rol, y fuera de las copias que se compartan.
 
 **Otros pendientes**
-- Probar MariaDB en IONOS (y SQL Server si algún cliente lo necesita).
-- El instalador queda abierto hasta que alguien lo completa: instalar nada más subir.
+- ~~Probar MariaDB en IONOS~~ (hecho: funciona en producción). Probar SQL Server solo si algún cliente lo necesita.
+- El instalador queda abierto hasta que alguien lo completa: instalar nada más subir. (Ya instalada la web de producción, no se sube `instalar.php` al actualizar.)
