@@ -25,6 +25,8 @@ const DB_ENGINES = [
 const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'user_recovery_codes', 'settings', 'categories', 'products',
     'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages'];
 
+/* mail_log (registro de los últimos 50 correos, con direcciones) queda fuera de DB_TABLES a propósito: no viaja en las copias. */
+
 /** Tablas del ERP (clientes y ventas de NCS): datos personales, FUERA de DB_TABLES; solo se copian si se pide (ver db_copy_all). */
 const ERP_TABLES = ['erp_customers', 'erp_invoices', 'erp_invoice_lines', 'erp_notes',
     'erp_invoice_state', 'erp_invoice_notes', 'erp_invoice_events', 'erp_invoice_links', 'erp_invoice_sends'];

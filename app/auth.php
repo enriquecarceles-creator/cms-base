@@ -22,20 +22,8 @@ const AUTH_KEEP_SITES = 10;
 /** Un solo mensaje para usuario inexistente, contraseña incorrecta y usuario bloqueado: no revela si el usuario existe. */
 const AUTH_GENERIC_ERROR = 'Usuario o contraseña incorrectos. Si fallas varias veces seguidas, el acceso se bloquea unos minutos.';
 
-/**
- * Envía un correo de texto (UTF-8) desde noreply@<dominio>. Para pruebas, si existe la variable de entorno
- * CMS_MAIL_LOG el correo se añade a ese archivo en vez de enviarse (como CMS_SQL_LOG con las consultas).
- */
-function app_mail(string $to, string $subject, string $body): bool
-{
-    $host = preg_replace('/^www\./', '', (string)parse_url(site_origin(), PHP_URL_HOST));
-    $from = str_replace(["\r", "\n"], ' ', site_name()) . ' <noreply@' . ($host ?: 'localhost') . '>';
-    $log = (string)getenv('CMS_MAIL_LOG');
-    if ($log !== '') {
-        return @file_put_contents($log, "TO: $to\nFROM: $from\nSUBJECT: $subject\n\n$body\n=====\n", FILE_APPEND) !== false;
-    }
-    return @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, "From: $from\r\nContent-Type: text/plain; charset=UTF-8\r\n");
-}
+// El envío de correo (app_mail(), mail_send(), SMTP, registro) está en app/mail.php; todos los correos pasan por allí.
+require_once __DIR__ . '/mail.php';
 
 /* ---------- Bloqueo por usuario ---------- */
 

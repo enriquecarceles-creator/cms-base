@@ -54,7 +54,7 @@ function admin_dispatch(array $segs): void
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
-    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'menu', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
+    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'menu', 'configuracion', 'correo', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
@@ -101,6 +101,9 @@ function admin_dispatch(array $segs): void
             break;
         case 'configuracion':
             admin_config();
+            break;
+        case 'correo':
+            admin_mail();
             break;
         case 'campos':
             admin_fields();
@@ -210,6 +213,7 @@ function admin_menu(): array
             ['Páginas', '/admin/paginas', ['paginas'], true],
             ['Menú', '/admin/menu', ['menu'], true],
             ['Configuración', '/admin/configuracion', ['configuracion'], true],
+            ['Correo', '/admin/correo', ['correo'], true],
             ['Campos', '/admin/campos', ['campos'], true],
             ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
         ]],
@@ -412,6 +416,9 @@ function admin_home(): void
     }
     if (is_admin() && !erp_2fa_required()) {
         $alerts[] = ['warn', 'La doble verificación para Clientes y Ventas está desactivada', '/admin/configuracion#erp', 'Configuración'];
+    }
+    if (is_admin() && ($mailErr = mail_last_error())) {
+        $alerts[] = ['err', 'No se pudo enviar un correo el ' . date('d/m/Y H:i', $mailErr['at']) . ': ' . $mailErr['error'], '/admin/correo', 'Revisar el correo'];
     }
     $broken = admin_broken_photos();
     if ($broken > 0) {

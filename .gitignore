@@ -2,6 +2,7 @@
 data/*.sqlite
 data/*.sqlite-*
 data/db.php
+data/mail.php
 data/import/
 
 # Fotos subidas (se conservan .htaccess e index.html)

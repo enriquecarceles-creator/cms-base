@@ -95,11 +95,8 @@ function erp_notify_2fa_off(string $who): void
             . "  Desde:   " . ($_SERVER['REMOTE_ADDR'] ?? '') . "\r\n\r\n"
             . "Mientras esté desactivada, quien tenga el rol ERP o sea administrador puede ver los datos de clientes y ventas solo con su contraseña.\r\n"
             . "Si no lo esperabas, vuelve a activarla en Web → Configuración (" . site_origin() . url('/admin/configuracion') . "#erp) y revisa los usuarios.\r\n";
-        foreach (db()->query("SELECT email FROM users WHERE role = 'admin'")->fetchAll(PDO::FETCH_COLUMN) as $to) {
-            $to = trim((string)$to);
-            if ($to !== '' && filter_var($to, FILTER_VALIDATE_EMAIL)) {
-                app_mail($to, 'Doble verificación desactivada para Clientes y Ventas · ' . site_name(), $body);
-            }
+        foreach (mail_notify_recipients() as $to) { // los de Web → Correo → Avisos del sistema o, por defecto, los administradores
+            app_mail($to, 'Doble verificación desactivada para Clientes y Ventas · ' . site_name(), $body);
         }
     } catch (Throwable $e) {
         error_log('Aviso 2FA ERP: ' . get_class($e)); // nunca impide cambiar el ajuste

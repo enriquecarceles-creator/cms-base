@@ -1,5 +1,5 @@
 <div class="head"><h1>Configuración</h1></div>
-<p class="hint">Qué partes de la web se usan y cómo se comporta. Los datos de la empresa (nombre, logotipo, color, contacto, textos de la portada) están en <a href="<?= e(url('/admin/empresa')) ?>">Empresa</a>.</p>
+<p class="hint">Qué partes de la web se usan y cómo se comporta. Los datos de la empresa (nombre, logotipo, color, contacto, textos de la portada) están en <a href="<?= e(url('/admin/empresa')) ?>">Empresa</a>. El envío de correo, en <a href="<?= e(url('/admin/correo')) ?>">Correo</a>.</p>
 <form method="post" class="form mods">
   <?= csrf_field() ?>
 

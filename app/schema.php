@@ -265,6 +265,22 @@ const SCHEMA_ERP_NOTES_DDL = "
     CREATE INDEX idx_erp_notes_cust ON erp_notes(cust_code, created_at);
 ";
 
+/**
+ * Registro de los últimos 50 correos enviados (Web → Correo). Sin el cuerpo. Lleva direcciones de correo (a veces de clientes),
+ * así que NO está en DB_TABLES: no viaja en las copias de seguridad (igual que data/mail.php).
+ */
+const SCHEMA_MAIL_DDL = "
+    CREATE TABLE mail_log (
+        id {ID},
+        sent_at {BIG} NOT NULL DEFAULT 0,
+        to_email {S} NOT NULL DEFAULT '',
+        subject {S} NOT NULL DEFAULT '',
+        ok {I} NOT NULL DEFAULT 0,
+        transport {S} NOT NULL DEFAULT '',
+        error {S} NOT NULL DEFAULT ''
+    );
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -350,7 +366,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -446,6 +462,11 @@ function migrate_schema(CmsPdo $pdo): void
             foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
             }
+        }
+    }
+    if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
+        foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
+            $pdo->rawExec($st);
         }
     }
     db_set_schema_version($pdo, SCHEMA_VERSION);
