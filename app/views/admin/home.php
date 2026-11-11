@@ -1,10 +1,13 @@
 <?php
 /** Inicio del panel: cifras, avisos, accesos rápidos y últimos artículos modificados. */
 $n = fn(int $v) => number_format($v, 0, ',', '.');
+// «42 familias · 3 subfamilias» (singular si es 1)
+$famText = $n($stats['families']) . ' ' . term($stats['families'] === 1 ? 'family' : 'families', true)
+    . ' · ' . $n($stats['subs']) . ' ' . term($stats['subs'] === 1 ? 'sub' : 'subs', true);
 $cards = [
     ['Visibles', $stats['visible'], '/admin/articulos?visible=1', 'en la web', ''],
     ['Ocultos', $stats['hidden'], '/admin/articulos?visible=0', 'no salen en la web', ''],
-    [term('families'), $stats['families'], '/admin/categorias', $stats['subs'] ? $n($stats['subs']) . ' ' . term($stats['subs'] === 1 ? 'sub' : 'subs', true) : 'sin ' . term('subs', true), ''],
+    [term('families'), $stats['families'], '/admin/categorias', $famText, ''],
     ['Sin foto', $stats['nophoto'], '/admin/articulos?foto=0', 'artículos sin ninguna foto', $stats['nophoto'] ? 'warn' : ''],
 ];
 if ($stats['noprice'] !== null) {

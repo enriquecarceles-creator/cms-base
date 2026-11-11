@@ -1,11 +1,16 @@
-<div class="head"><h1>Importar artículos</h1></div>
+<div class="head"><h1><?= !empty($only) ? 'Fotos por carpeta' : 'Importar artículos' ?></h1></div>
 
 <?php $status = $job['status'] ?? ''; ?>
 
-<?php if (!$job): ?>
+<?php if (!$job && !empty($only)): ?>
+  <p class="hint">Añade a los artículos que ya están en la web las fotos guardadas en carpetas <code>ARTICULO_&lt;código&gt;</code> (por ejemplo FOTOS_ARTICULOS_001 de NCS Facturación). Primero se <strong>analiza</strong> y verás cuántas carpetas encajan antes de importar nada.</p>
+<?php elseif (!$job): ?>
   <p class="hint">Trae artículos, <?= e(term('families', true)) ?>, textos y fotos desde otra web o aplicación. Primero se <strong>analiza</strong> y verás un resumen para elegir qué importar.
   Nada se sobrescribe: solo se crean artículos nuevos, se añaden fotos y se rellenan los campos que estén vacíos. Se puede repetir sin duplicar.
-  Para poner al día precios y stock desde un programa de gestión, usa «Base de datos» y elige «Actualizar precios y stock» en el paso de columnas.</p>
+  Para poner al día precios y stock desde un programa de gestión, usa «Base de datos» y elige «Actualizar precios y stock» en el paso de columnas.
+  ¿Fotos en carpetas <code>ARTICULO_&lt;código&gt;</code>? Usa <a href="<?= e(url('/admin/importar/carpetas')) ?>">Fotos por carpeta</a>.</p>
+  <?php endif; ?>
+<?php if (!$job): ?>
   <?php if ($ftpZip): ?><p class="flash ok">Hay un ZIP de fotos subido por FTP: <code><?= e(basename($ftpZip)) ?></code>. Se usará si no subes otro.</p><?php endif; ?>
   <?php foreach ($sources as $id => $src): ?>
     <form method="post" enctype="multipart/form-data" class="form imp-src">

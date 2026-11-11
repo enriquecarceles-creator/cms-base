@@ -9,15 +9,19 @@ $seg = admin_segment();
 $menu = admin_menu();
 $me = current_user();
 
-// Página actual: [clave de sección, índice de página]
+// Página actual: [clave de sección, índice de página]. Primero la dirección completa
+// («importar/carpetas»), después solo el primer tramo («importar», «articulo»…).
 $curSec = null;
 $curPage = null;
-foreach ($menu as $sk => [$sl, $si, $pages]) {
-    foreach ($pages as $pi => $pg) {
-        if (in_array($seg, $pg[2], true)) {
-            $curSec = $sk;
-            $curPage = $pi;
-            break 2;
+$two = implode('/', array_slice(explode('/', admin_segment(true)), 0, 2));
+foreach ([$two, $seg] as $want) {
+    foreach ($menu as $sk => [$sl, $si, $pages]) {
+        foreach ($pages as $pi => $pg) {
+            if (in_array($want, $pg[2], true)) {
+                $curSec = $sk;
+                $curPage = $pi;
+                break 3;
+            }
         }
     }
 }
@@ -59,7 +63,7 @@ $logo = brand_logo();
 <header class="bar">
   <label for="nav-t" class="nav-btn" title="Menú"><?= admin_icon('menu') ?><span>Menú</span></label>
   <a class="brand" href="<?= e(url('/admin')) ?>">
-    <?php if ($logo): ?><img src="<?= e($logo) ?>" alt="" height="28"><?php endif; ?>
+    <?php if ($logo): ?><img src="<?= e($logo) ?>" alt="" height="28"><?php else: ?><span class="brand-mark" aria-hidden="true"><?= e(mb_strtoupper(mb_substr(site_name(), 0, 1))) ?></span><?php endif; ?>
     <span class="brand-n"><?= e(site_name()) ?></span><span class="brand-p">panel</span>
   </a>
   <form class="qsearch" method="get" action="<?= e(url('/admin/articulos')) ?>" role="search">

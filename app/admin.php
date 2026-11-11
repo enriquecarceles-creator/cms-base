@@ -78,7 +78,7 @@ function admin_dispatch(array $segs): void
             admin_fields();
             break;
         case 'importar':
-            admin_import();
+            admin_import((string)($segs[2] ?? ''));
             break;
         case 'slider':
             admin_slider();
@@ -158,6 +158,7 @@ function admin_menu(): array
         ]],
         'import' => ['Importar', 'import', [
             ['Importar artículos', '/admin/importar', ['importar'], false],
+            ['Fotos por carpeta', '/admin/importar/carpetas', ['importar/carpetas'], false],
             ['Fotos por FTP', '/admin/ftp', ['ftp'], false],
         ]],
         'web' => ['Web', 'web', [
@@ -179,13 +180,16 @@ function admin_menu(): array
     return $menu;
 }
 
-/** Primer segmento de la dirección del panel: '' (Inicio), 'articulos', 'articulo', 'categorias'… */
-function admin_segment(): string
+/**
+ * Tramos de la dirección del panel tras /admin: '' (Inicio), 'articulos', 'articulo/310', 'importar/carpetas'…
+ * Con $full = false solo el primero.
+ */
+function admin_segment(bool $full = false): string
 {
     $path = (string)(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
     $base = url('/admin');
-    $rest = str_starts_with($path, $base) ? substr($path, strlen($base)) : '';
-    return explode('/', trim($rest, '/'))[0] ?? '';
+    $rest = trim(str_starts_with($path, $base) ? substr($path, strlen($base)) : '', '/');
+    return $full ? $rest : (explode('/', $rest)[0] ?? '');
 }
 
 /* ---------- Primer uso: crear la cuenta ---------- */
@@ -926,10 +930,23 @@ function admin_fields(): void
 
 /* ---------- Importar (WordPress, hojas de cálculo y otros orígenes de app/importers/) ---------- */
 
-function admin_import(): void
+/** Orígenes del importador con página propia en el menú: segmento de la dirección => id del origen. */
+const IMPORT_OWN_PAGES = ['carpetas' => 'fotos-carpetas'];
+
+/**
+ * Importar. /admin/importar muestra todos los orígenes salvo los que tienen página propia
+ * (/admin/importar/carpetas → «Fotos por carpeta»). El trabajo en curso es el mismo en las dos.
+ */
+function admin_import(string $sub = ''): void
 {
     require_once __DIR__ . '/import.php';
     $sources = import_sources();
+    if ($sub !== '' && !isset(IMPORT_OWN_PAGES[$sub])) {
+        not_found();
+        return;
+    }
+    $only = IMPORT_OWN_PAGES[$sub] ?? null;
+    $self = '/admin/importar' . ($only ? '/' . $sub : '');
 
     // Plantilla CSV de un origen
     if (isset($_GET['plantilla'], $sources[$_GET['plantilla']]['template'])) {
@@ -957,7 +974,7 @@ function admin_import(): void
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
             flash('Los archivos pesan más de lo que admite el servidor (' . ini_get('post_max_size') . '). Copia el ZIP de fotos por FTP a data/importar/ y vuelve a analizar.', 'err');
-            redirect('/admin/importar');
+            redirect($self);
         }
         csrf_check();
         $action = $_POST['action'] ?? '';
@@ -983,7 +1000,7 @@ function admin_import(): void
             error_log((string)$e);
             flash('Ha ocurrido un error inesperado al analizar.', 'err');
         }
-        redirect('/admin/importar');
+        redirect($self);
     }
 
     if ($job && ($job['status'] ?? '') === 'running') {
@@ -995,10 +1012,11 @@ function admin_import(): void
     }
     admin_render('import', [
         'job' => $job,
-        'sources' => $sources,
+        'sources' => $only ? array_intersect_key($sources, [$only => 1]) : array_diff_key($sources, array_flip(IMPORT_OWN_PAGES)),
+        'only' => $only,
         'ftpZip' => import_zip_input(null),
         'refresh' => $job && ($job['status'] ?? '') === 'running',
-        'title' => 'Importar',
+        'title' => $only ? 'Fotos por carpeta' : 'Importar',
     ]);
 }
 
