@@ -89,6 +89,13 @@ function is_https(): bool
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 }
 
+/** ¿Se está usando la web en este mismo equipo (localhost / 127.0.0.1)? Pide dirección y visitante locales a la vez. */
+function is_local_request(): bool
+{
+    $host = strtolower(trim((string)preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? '')), '[]'));
+    return in_array($host, ['localhost', '127.0.0.1', '::1'], true) && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
+}
+
 function site_origin(): string
 {
     return (is_https() ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');

@@ -399,7 +399,7 @@ function admin_home(): void
 
     // Avisos
     $alerts = [];
-    if (is_file(ROOT . '/instalar.php')) {
+    if (is_file(ROOT . '/instalar.php') && !is_local_request()) { // en local (127.0.0.1) el instalador está para quedarse
         $alerts[] = ['err', 'El archivo instalar.php sigue en la web: bórralo por FTP. Cualquiera podría volver a instalarla.', null, null];
     }
     if (setting('noindex') === '1') {
