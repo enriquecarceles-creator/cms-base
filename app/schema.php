@@ -139,6 +139,8 @@ const SCHEMA_ERP_DDL = "
         rectifies {S} NOT NULL DEFAULT '',
         iva_incl {I} NOT NULL DEFAULT 0,
         vat_json {T} NULL,
+        origin {S} NOT NULL DEFAULT 'ncs',
+        delivered_cents {BIG} NOT NULL DEFAULT 0,
         row_hash {S} NOT NULL,
         synced_at {BIG} NOT NULL DEFAULT 0
     );
@@ -185,6 +187,72 @@ const SCHEMA_ERP_V21_COLUMNS = [
     'iva_incl' => '{I} NOT NULL DEFAULT 0',
     'vat_json' => '{T} NULL',
 ];
+/**
+ * v22: formulario de factura. Datos PROPIOS del CMS sobre las facturas (estado de cobro, etiquetas, correo de envío, notas,
+ * historial, envíos por correo y enlaces públicos con token). La sincronización con NCS no los toca. `origin` es «ncs»
+ * (solo lectura) o, el día que el CMS emita facturas propias, «cms» (editables). `delivered_cents` = ENTREGADO de NCS.
+ */
+const SCHEMA_ERP_V22_COLUMNS = [
+    'origin' => "{S} NOT NULL DEFAULT 'ncs'",
+    'delivered_cents' => '{BIG} NOT NULL DEFAULT 0',
+];
+const SCHEMA_ERP_DOCS_DDL = "
+    CREATE TABLE erp_invoice_state (
+        id {ID},
+        invoice_id {I} NOT NULL UNIQUE,
+        paid {I} NOT NULL DEFAULT 0,
+        paid_day {I} NOT NULL DEFAULT 0,
+        tags {S} NOT NULL DEFAULT '',
+        email_to {S} NOT NULL DEFAULT '',
+        updated_at {BIG} NOT NULL DEFAULT 0,
+        updated_by {S} NOT NULL DEFAULT ''
+    );
+    CREATE TABLE erp_invoice_notes (
+        id {ID},
+        invoice_id {I} NOT NULL,
+        note {T} NOT NULL,
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        created_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_inote_inv ON erp_invoice_notes(invoice_id, created_at);
+    CREATE TABLE erp_invoice_events (
+        id {ID},
+        invoice_id {I} NOT NULL,
+        kind {S} NOT NULL DEFAULT '',
+        detail {S} NOT NULL DEFAULT '',
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        created_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_ievent_inv ON erp_invoice_events(invoice_id, created_at);
+    CREATE TABLE erp_invoice_links (
+        id {ID},
+        invoice_id {I} NOT NULL,
+        token_hash {K} NOT NULL UNIQUE,
+        expires_at {BIG} NOT NULL DEFAULT 0,
+        created_at {BIG} NOT NULL DEFAULT 0,
+        created_by {S} NOT NULL DEFAULT '',
+        email_to {S} NOT NULL DEFAULT '',
+        revoked_at {BIG} NOT NULL DEFAULT 0,
+        views {I} NOT NULL DEFAULT 0,
+        last_view_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_ilink_inv ON erp_invoice_links(invoice_id);
+    CREATE TABLE erp_invoice_sends (
+        id {ID},
+        invoice_id {I} NOT NULL,
+        link_id {I} NOT NULL DEFAULT 0,
+        to_email {S} NOT NULL DEFAULT '',
+        subject {S} NOT NULL DEFAULT '',
+        status {S} NOT NULL DEFAULT '',
+        error {S} NOT NULL DEFAULT '',
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        sent_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_isend_inv ON erp_invoice_sends(invoice_id, sent_at);
+";
 const SCHEMA_ERP_NOTES_DDL = "
     CREATE TABLE erp_notes (
         id {ID},
@@ -282,7 +350,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -364,6 +432,19 @@ function migrate_schema(CmsPdo $pdo): void
         foreach (SCHEMA_ERP_V21_COLUMNS as $col => $def) {
             if (!in_array($col, $have, true)) {
                 db_add_column($pdo, 'erp_invoices', $col, $def);
+            }
+        }
+    }
+    if ($ver < 22 && in_array('erp_invoices', db_tables($pdo), true)) {
+        $have = db_columns($pdo, 'erp_invoices');
+        foreach (SCHEMA_ERP_V22_COLUMNS as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'erp_invoices', $col, $def);
+            }
+        }
+        if (!in_array('erp_invoice_state', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
             }
         }
     }

@@ -96,4 +96,16 @@ $st = $job['status'] ?? '';
     <?php else: ?><p class="muted">Aparecerán aquí los códigos de forma de pago cuando se sincronicen facturas y clientes.</p><?php endif; ?>
     <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
   </form>
+
+  <h2 id="cobros">Cobros</h2>
+  <form method="post" class="form">
+    <?= csrf_field() ?><input type="hidden" name="action" value="preload_paid">
+    <?php if ($preloadDone !== ''): ?>
+      <p style="margin:0">Cobros precargados el <?= e(date('d/m/Y H:i', (int)$preloadDone)) ?>. Desde entonces el cobro se marca a mano en cada factura (Modificar).</p>
+    <?php else: ?>
+      <p style="margin:0">NCS no guarda si una factura está cobrada. <strong>Una sola vez</strong> puedes marcar como cobradas, con la fecha de la venta, las facturas donde lo entregado en caja (<code>ENTREGADO</code>) cubre el total: <strong><?= e(number_format($preloadN, 0, ',', '.')) ?></strong> ahora (probablemente tickets de caja; puede haber cobros con tarjeta que no lo reflejen). Queda anotado en el historial de cada una. Hace falta haber sincronizado después de la última actualización.</p>
+      <label class="check"><input type="checkbox" name="confirm" value="1"> <span>Entiendo que se hace una sola vez</span></label>
+      <div class="buttons"><button class="btn ghost" type="submit"<?= $preloadN === 0 ? ' disabled' : '' ?>>Precargar cobros</button></div>
+    <?php endif; ?>
+  </form>
 <?php endif; ?>

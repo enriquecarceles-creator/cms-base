@@ -554,6 +554,8 @@
         "lineas_color_texto": 19687,
         "cliente_contado": "propuesto",
         "facturas_iva_incluido": 13895,
+        "cobros_precargables": 5754,
+        "facturas_origen_ncs": 14075,
         "iva_desglose_cuadra": 14075,
         "iva_total_cuadra": 14075,
         "iva_indices_usados": [

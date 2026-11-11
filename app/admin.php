@@ -128,7 +128,7 @@ function admin_dispatch(array $segs): void
             if ($sub === '' || isset(ERP_SALES_TABS[$sub])) {
                 admin_sales($sub);
             } else {
-                admin_invoice($sub);
+                admin_invoice($sub, (string)($segs[3] ?? ''));
             }
             break;
         case 'erp':

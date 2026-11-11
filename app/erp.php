@@ -16,6 +16,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/mdb.php';
 require_once __DIR__ . '/erp_client.php';
 require_once __DIR__ . '/documents.php';
+require_once __DIR__ . '/erp_invoice.php';
 require_once __DIR__ . '/erp_sales.php';
 
 const ERP_STAGE = DATA_DIR . '/erp_stage.sqlite';
@@ -174,6 +175,8 @@ function erp_map_invoice(array $h): array
         'rectifies' => erp_txt($h['FRECTIFI'] ?? '', 40),
         'iva_incl' => (int)($h['IVAINCLUIDO'] ?? 0) !== 0 ? 1 : 0,
         'vat_json' => json_encode($vatRows),
+        'origin' => 'ncs',
+        'delivered_cents' => erp_cents($h['ENTREGADO'] ?? 0),
     ];
 }
 
@@ -602,6 +605,14 @@ function admin_erp_sync(): void
             flash('Cliente de contado guardado.');
             redirect('/admin/erp');
         }
+        if ($act === 'preload_paid') { // una sola vez
+            if (db_setting('erp_paid_preload_done') !== '' || empty($_POST['confirm'])) {
+                flash(db_setting('erp_paid_preload_done') !== '' ? 'Los cobros ya se precargaron.' : 'Marca la casilla para confirmar.', 'err');
+            } else {
+                flash('Cobros precargados: ' . erp_preload_paid() . ' facturas marcadas como cobradas (la fecha de la venta).');
+            }
+            redirect('/admin/erp#documentos');
+        }
         if ($act === 'docs') { // serie de las facturas y nombres de las formas de pago
             $mode = (string)($_POST['serie_mode'] ?? 'letras');
             save_setting('erp_serie_mode', in_array($mode, ['letras', 'ninguna', 'n'], true) ? $mode : 'letras');
@@ -655,7 +666,7 @@ function admin_erp_sync(): void
     $last = json_decode(db_setting('erp_last_sync'), true);
     admin_render('erp_sync', [
         'job' => $job, 'last' => is_array($last) ? $last : null, 'ftp' => erp_ftp_sources(), 'retail' => erp_retail_code(),
-        'refresh' => $refresh, 'totals' => erp_totals(), 'payCodes' => erp_pay_codes(), 'payNames' => erp_pay_names(), 'title' => 'Sincronizar con NCS',
+        'refresh' => $refresh, 'totals' => erp_totals(), 'payCodes' => erp_pay_codes(), 'payNames' => erp_pay_names(), 'preloadDone' => db_setting('erp_paid_preload_done'), 'preloadN' => erp_preload_candidates(), 'title' => 'Sincronizar con NCS',
     ]);
 }
 

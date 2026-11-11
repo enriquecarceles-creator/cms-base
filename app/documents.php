@@ -148,12 +148,9 @@ function erp_invoice_doc_vars(string $num): ?array
     ];
 }
 
-/** Factura como documento impreso (/admin/ventas/<número>). Página aparte: hoja A4 sobre fondo gris. */
-function admin_invoice(string $num): void
+/** Visor de la factura como documento impreso (/admin/ventas/<número>/ver). Página aparte: hoja A4 sobre fondo gris. El acceso ya está comprobado. */
+function admin_invoice_view(string $num): void
 {
-    if (!erp_guard()) {
-        return;
-    }
     $vars = erp_invoice_doc_vars($num);
     if ($vars === null) {
         not_found();

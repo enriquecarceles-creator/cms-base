@@ -140,6 +140,8 @@ $now['erp'] = [
     'lineas_color_texto' => $one("SELECT COUNT(*) FROM erp_invoice_lines WHERE color_no > 0 AND color_txt <> ''"),
     'cliente_contado' => $res['retail_suggest'] !== '' ? 'propuesto' : 'ninguno',
     'facturas_iva_incluido' => $one('SELECT COUNT(*) FROM erp_invoices WHERE iva_incl = 1'),
+    'cobros_precargables' => erp_preload_candidates(),
+    'facturas_origen_ncs' => $one("SELECT COUNT(*) FROM erp_invoices WHERE origin = 'ncs'"),
 ];
 // Desglose de IVA guardado (vat_json): Σ(base+cuota+recargo−retención) debe dar el total de cada factura (céntimos, ±2)
 $vatOk = 0;
@@ -261,7 +263,7 @@ foreach (['folders' => 'carpetas', 'exact' => 'emparejadas exactas', 'loose' => 
 /* 5. Sincronización del ERP */
 $section('Sincronización del ERP (base temporal)');
 $check('sin errores y termina', empty($job['error']) && $guard <= 200);
-foreach (['clientes', 'facturas', 'lineas', 'total_cents', 'facturas_negativas', 'lineas_talla', 'lineas_talla_texto', 'lineas_color', 'lineas_color_texto', 'cliente_contado', 'iva_total_cuadra', 'iva_indices_usados', 'iva_porcentaje_por_indice', 'facturas_iva_incluido', 'iva_desglose_cuadra'] as $k) {
+foreach (['clientes', 'facturas', 'lineas', 'total_cents', 'facturas_negativas', 'lineas_talla', 'lineas_talla_texto', 'lineas_color', 'lineas_color_texto', 'cliente_contado', 'iva_total_cuadra', 'iva_indices_usados', 'iva_porcentaje_por_indice', 'facturas_iva_incluido', 'iva_desglose_cuadra', 'cobros_precargables', 'facturas_origen_ncs'] as $k) {
     $check("ERP · $k", $now['erp'][$k] === ($exp['erp'][$k] ?? null), json_encode($now['erp'][$k]) . ' (esperado ' . json_encode($exp['erp'][$k] ?? '?') . ')');
 }
 $check('el plan contaba lo mismo que se guardó', $res['counts']['cust']['new'] === $now['erp']['clientes'] && $res['counts']['inv']['new'] === $now['erp']['facturas'] && $res['counts']['lines'] === $now['erp']['lineas']);
@@ -300,6 +302,22 @@ foreach ([[$pick, 'con recargo', false], [$pickNeg, 'negativa y anulada', true]]
     $check("documento «{$label}»: total, líneas, sello y pie legal", $okTotal && $okLines && str_contains($html, 'class="stamp"') === $stamp && str_contains($html, 'Copia informativa'));
 }
 $db->prepare('UPDATE erp_invoices SET annulled = 0 WHERE inv_number = ?')->execute([$pickNeg]);
+
+/* 5c. Formulario de factura: datos propios del CMS (nunca los de NCS) */
+$section('Formulario de factura (datos propios del CMS)');
+$check('etiquetas: se limpian, sin repetir y máximo 10', erp_tags_list('Reclamar, <b>urgente</b>, reclamar, a,b,c,d,e,f,g,h,i,j,k') === ['Reclamar', 'urgente', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+$check('solo las facturas con origen «cms» son editables; las de NCS, no', erp_invoice_editable(['origin' => 'cms']) && !erp_invoice_editable(['origin' => 'ncs']) && !erp_invoice_editable([]));
+$check('fecha de cobro: ida y vuelta del campo de fecha', erp_day_from_input('2022-03-15') === 20220315 && erp_day_from_input('2022-02-31') === 0 && erp_day_to_input(20220315) === '2022-03-15');
+$cand = erp_preload_candidates();
+$done = erp_preload_paid();
+$check('precarga de cobros: marca las candidatas una sola vez', $done === $cand && $one('SELECT COUNT(*) FROM erp_invoice_state WHERE paid = 1') === $cand && $one("SELECT COUNT(*) FROM erp_invoice_events WHERE kind = 'cobro'") === $cand && erp_preload_candidates() === 0, "$done facturas");
+$check('precarga: cobradas en la fecha de la venta', $one('SELECT COUNT(*) FROM erp_invoice_state s JOIN erp_invoices i ON i.id = s.invoice_id WHERE s.paid_day <> i.inv_day') === 0);
+$firstId = (int)$db->query('SELECT id FROM erp_invoices ORDER BY id LIMIT 1')->fetchColumn();
+erp_event($firstId, 'nota', 'prueba', 'batería', 0);
+$check('el historial anota hechos con su usuario', $one("SELECT COUNT(*) FROM erp_invoice_events WHERE invoice_id = $firstId AND kind = 'nota' AND username = 'batería'") === 1);
+$res3 = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
+erp_job_clear();
+$check('sincronizar de nuevo no toca el estado propio (cobros, notas, historial)', $one('SELECT COUNT(*) FROM erp_invoice_state') === $cand && $res3['counts']['inv']['new'] + $res3['counts']['inv']['changed'] === 0);
 
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');

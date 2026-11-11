@@ -78,8 +78,9 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 <body>
 <div class="toolbar">
   <div class="grp">
-    <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['prev']))) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
-    <?php if ($nb['next'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['next']))) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="dis"><a>Siguiente ›</a></span><?php endif; ?>
+    <a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$inv['inv_number']))) ?>">← Formulario</a>
+    <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['prev']) . '/ver')) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
+    <?php if ($nb['next'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['next']) . '/ver')) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="dis"><a>Siguiente ›</a></span><?php endif; ?>
   </div>
   <div class="grp">
     <?php if ($cust): ?><a href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
