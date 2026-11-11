@@ -56,6 +56,8 @@ $img = function (string $name, string $label, string $cur, string $help) { ?>
 <form method="post" action="<?= e(url('/admin/copia')) ?>" class="form" id="copia">
   <?= csrf_field() ?>
   <p class="muted" style="margin:0">Descarga un ZIP con la base de datos (artículos, <?= e(term('families', true)) ?>, usuarios, textos, portada) y todas las fotos. Hazlo antes de actualizar la web.</p>
+  <label class="check"><input type="checkbox" name="with_erp" value="1"> <span>Incluir clientes y ventas (datos personales)</span></label>
+  <p class="muted" style="margin:0">Por defecto la copia <strong>no</strong> lleva los clientes ni las facturas, ni las claves de la doble verificación: así se puede guardar o compartir sin datos personales. Si restauras una copia, los clientes y ventas se vuelven a traer sincronizando con NCS.</p>
   <div class="buttons"><button class="btn ghost" type="submit">Descargar copia de seguridad</button></div>
 </form>
 <?php if (ALLOW_RESET): ?>

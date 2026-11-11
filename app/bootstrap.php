@@ -358,7 +358,7 @@ function staff_logged_in(): bool
         return false;
     }
     start_session();
-    return !empty($_SESSION['uid']) && current_role() !== '';
+    return !empty($_SESSION['uid']) && current_role() !== '' && current_role() !== 'erp'; // el rol ERP no edita la web
 }
 
 /** Menú lateral del catálogo: familias y subfamilias. */

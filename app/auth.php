@@ -422,7 +422,7 @@ function auth_ftp_disable_totp(): void
 }
 
 /** Quita de un archivo SQLite de copia de seguridad las claves de doble verificación y los códigos de recuperación. */
-function auth_scrub_backup(string $sqliteFile): void
+function auth_scrub_backup(string $sqliteFile, bool $withErp = false): void
 {
     $pdo = db_connect(['driver' => 'sqlite', 'file' => $sqliteFile]);
     if (in_array('totp_secret', db_columns($pdo, 'users'), true)) {
@@ -431,4 +431,13 @@ function auth_scrub_backup(string $sqliteFile): void
     if (in_array('user_recovery_codes', db_tables($pdo), true)) {
         $pdo->exec('DELETE FROM user_recovery_codes');
     }
+    if (!$withErp) { // clientes y ventas (datos personales) no van en la copia salvo que se pida
+        foreach (array_reverse(ERP_TABLES) as $t) {
+            if (in_array($t, db_tables($pdo), true)) {
+                $pdo->exec('DELETE FROM ' . $t);
+            }
+        }
+    }
+    // DELETE deja el contenido en las páginas libres del archivo SQLite; VACUUM lo reescribe sin ellas (si no, los datos borrados seguirían dentro de la copia)
+    $pdo->exec('VACUUM');
 }

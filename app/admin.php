@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/erp.php';
 
 function admin_dispatch(array $segs): void
 {
@@ -44,6 +45,15 @@ function admin_dispatch(array $segs): void
         redirect('/admin/login');
     }
     require_login();
+    $role = current_role();
+    if ($role === 'erp') { // el rol ERP solo ve Clientes, Ventas, Sincronizar y su cuenta
+        if ($page === '' || !in_array($page, [...ERP_PAGES, 'clave'], true)) {
+            redirect('/admin/clientes');
+        }
+    } elseif ($role !== 'admin' && in_array($page, ERP_PAGES, true)) {
+        flash('Tu usuario no tiene acceso a esa sección.', 'err');
+        redirect('/admin');
+    }
     if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'menu', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
@@ -109,6 +119,18 @@ function admin_dispatch(array $segs): void
             break;
         case 'fotos':
             admin_photos();
+            break;
+        case 'clientes':
+            admin_clients((string)($segs[2] ?? ''));
+            break;
+        case 'ventas':
+            if ((string)($segs[2] ?? '') === '') {
+                redirect('/admin/clientes'); // la lista de ventas llega en la entrega B
+            }
+            admin_invoice((string)$segs[2]);
+            break;
+        case 'erp':
+            admin_erp_sync();
             break;
         case 'usuarios':
             admin_users();
@@ -189,8 +211,18 @@ function admin_menu(): array
             ['Campos', '/admin/campos', ['campos'], true],
             ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
         ]],
+        'erp' => ['Clientes y Ventas', 'users', [
+            ['Clientes', '/admin/clientes', ['clientes', 'ventas'], false],
+            ['Sincronizar con NCS', '/admin/erp', ['erp'], false],
+        ]],
         'users' => ['Usuarios', 'users', [['Usuarios', '/admin/usuarios', ['usuarios'], true]]],
     ];
+    $role = current_role();
+    if ($role === 'erp') {
+        $menu = ['erp' => $menu['erp']];
+    } elseif ($role !== 'admin') {
+        unset($menu['erp']);
+    }
     foreach ($menu as $k => &$sec) {
         $sec[2] = array_values(array_filter($sec[2], fn($p) => !$p[3] || $adm));
         if (!$sec[2]) {
@@ -374,6 +406,9 @@ function admin_home(): void
         } elseif ($days > 30) {
             $alerts[] = ['warn', 'Hace ' . $days . ' días que no descargas una copia de seguridad.', '/admin/empresa#copia', 'Descargar copia'];
         }
+    }
+    if (is_admin() && !erp_2fa_required()) {
+        $alerts[] = ['warn', 'La doble verificación para Clientes y Ventas está desactivada', '/admin/configuracion#erp', 'Configuración'];
     }
     $broken = admin_broken_photos();
     if ($broken > 0) {
@@ -1361,6 +1396,23 @@ function admin_config(): void
             save_setting('term_' . $k, mb_substr(trim(strip_tags((string)($_POST['term_' . $k] ?? ''))), 0, 40));
         }
         save_setting('term_gender', ($_POST['term_gender'] ?? '') === 'm' ? 'm' : 'f');
+        // Doble verificación exigida para Clientes y Ventas: activarla es libre; desactivarla pide la contraseña del admin y avisa por correo
+        $wantErp = !empty($_POST['erp_2fa']);
+        if ($wantErp && !erp_2fa_required()) {
+            save_setting('erp_require_2fa', '1');
+        } elseif (!$wantErp && erp_2fa_required()) {
+            $st = db()->prepare('SELECT username, pass_hash FROM users WHERE id = ?');
+            $st->execute([(int)$_SESSION['uid']]);
+            $me = $st->fetch();
+            if (!$me || !password_verify((string)($_POST['erp_pass'] ?? ''), (string)$me['pass_hash'])) {
+                auth_register_failure((int)$_SESSION['uid']);
+                flash('No se ha desactivado la doble verificación de Clientes y Ventas: la contraseña no es correcta.', 'err');
+            } else {
+                save_setting('erp_require_2fa', '0');
+                erp_notify_2fa_off((string)$me['username']);
+                flash('Doble verificación de Clientes y Ventas desactivada. Se ha avisado por correo a los administradores.', 'err');
+            }
+        }
         flash('Configuración guardada.');
         redirect('/admin/configuracion');
     }
@@ -1378,6 +1430,7 @@ function admin_config(): void
         'prefix' => setting('phone_prefix', '34'),
         'tz' => date_default_timezone_get(),
         'noindex' => setting('noindex') === '1',
+        'erp2fa' => erp_2fa_required(),
         'title' => 'Configuración',
     ]);
 }
@@ -1906,7 +1959,10 @@ function admin_totp_post(array $me, array &$errors): void
 
 /* ---------- Usuarios (solo administradores) ---------- */
 
-const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'Gestión de catálogo'];
+const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'Gestión de catálogo', 'erp' => 'ERP (clientes y ventas)'];
+
+/** Secciones del ERP (clientes y ventas de NCS): solo rol «erp» y administradores. */
+const ERP_PAGES = ['clientes', 'ventas', 'erp'];
 
 function admin_users(): void
 {
@@ -2094,7 +2150,7 @@ function admin_reset(string $token): void
 /* ---------- Copia de seguridad y «Empezar de cero» ---------- */
 
 /** Crea un ZIP con la base de datos y las fotos. Devuelve la ruta del archivo temporal. */
-function backup_make(string $dest): bool
+function backup_make(string $dest, bool $withErp = false): bool
 {
     if (!class_exists('ZipArchive')) {
         return false;
@@ -2110,9 +2166,9 @@ function backup_make(string $dest): bool
             db()->exec("VACUUM INTO '" . str_replace("'", "''", $tmpDb) . "'");
         } else {
             @set_time_limit(300);
-            db_export_sqlite($tmpDb);
+            db_export_sqlite($tmpDb, $withErp);
         }
-        auth_scrub_backup($tmpDb); // la copia no lleva las claves de doble verificación
+        auth_scrub_backup($tmpDb, $withErp); // la copia no lleva las claves de doble verificación
         $zip->addFile($tmpDb, 'data/site.sqlite');
     } catch (Throwable $e) {
         error_log((string)$e);
@@ -2145,7 +2201,7 @@ function admin_backup(): void
     csrf_check();
     @set_time_limit(300);
     $tmp = tempnam(sys_get_temp_dir(), 'bak');
-    if (!$tmp || !backup_make($tmp)) {
+    if (!$tmp || !backup_make($tmp, !empty($_POST['with_erp']))) { // clientes y ventas solo si se marca la casilla
         flash('No se pudo crear la copia de seguridad en este servidor.', 'err');
         redirect('/admin/empresa');
     }

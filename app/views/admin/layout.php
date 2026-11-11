@@ -66,16 +66,16 @@ $logo = brand_logo();
     <?php if ($logo): ?><img src="<?= e($logo) ?>" alt="" height="28"><?php else: ?><span class="brand-mark" aria-hidden="true"><?= e(mb_strtoupper(mb_substr(site_name(), 0, 1))) ?></span><?php endif; ?>
     <span class="brand-n"><?= e(site_name()) ?></span><span class="brand-p">panel</span>
   </a>
-  <form class="qsearch" method="get" action="<?= e(url('/admin/articulos')) ?>" role="search">
+  <?php if ($me['role'] !== 'erp'): ?><form class="qsearch" method="get" action="<?= e(url('/admin/articulos')) ?>" role="search">
     <label for="qs" class="sr-only">Buscar artículos</label>
     <input id="qs" type="search" name="q" placeholder="Buscar artículo por nombre o referencia" value="<?= e($seg === 'articulos' ? (string)($_GET['q'] ?? '') : '') ?>">
     <button type="submit" title="Buscar"><?= admin_icon('search') ?><span class="sr-only">Buscar</span></button>
-  </form>
+  </form><?php endif; ?>
   <a class="bar-link" href="<?= e(url('/')) ?>" target="_blank" rel="noopener"><?= admin_icon('external') ?><span>Ver web</span></a>
   <details class="umenu">
     <summary><?= admin_icon('user') ?><span><?= e($me['username']) ?></span></summary>
     <div class="umenu-box">
-      <p class="muted"><?= e($me['role'] === 'admin' ? 'Administrador' : 'Gestión de catálogo') ?></p>
+      <p class="muted"><?= e(['admin' => 'Administrador', 'erp' => 'ERP (clientes y ventas)'][$me['role']] ?? 'Gestión de catálogo') ?></p>
       <a href="<?= e(url('/admin/clave')) ?>">Mi cuenta</a>
       <form method="post" action="<?= e(url('/admin/logout')) ?>"><?= csrf_field() ?><button class="link" type="submit">Salir</button></form>
     </div>

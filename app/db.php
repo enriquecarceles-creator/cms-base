@@ -25,6 +25,9 @@ const DB_ENGINES = [
 const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'user_recovery_codes', 'settings', 'categories', 'products',
     'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages'];
 
+/** Tablas del ERP (clientes y ventas de NCS): datos personales, FUERA de DB_TABLES; solo se copian si se pide (ver db_copy_all). */
+const ERP_TABLES = ['erp_customers', 'erp_invoices', 'erp_invoice_lines'];
+
 /** PDO que traduce el SQL al motor de destino. */
 final class CmsPdo extends PDO
 {
@@ -336,8 +339,9 @@ function db_put_setting(CmsPdo $pdo, string $key, string $value): void
 /* ---------- Copiar datos entre bases (copias de seguridad y cambio de motor) ---------- */
 
 /** Copia todas las filas de las tablas de la aplicación de $from a $to (vacía antes las de $to). */
-function db_copy_all(CmsPdo $from, CmsPdo $to): void
+function db_copy_all(CmsPdo $from, CmsPdo $to, bool $withErp = false): void
 {
+    $tables = $withErp ? array_merge(DB_TABLES, ERP_TABLES) : DB_TABLES; // clientes y ventas solo si se piden
     $have = db_tables($from);
     $toTables = db_tables($to);
     $to->beginTransaction();
@@ -345,12 +349,12 @@ function db_copy_all(CmsPdo $from, CmsPdo $to): void
         if (in_array('categories', $toTables, true)) {
             $to->exec('UPDATE categories SET parent_id = NULL'); // MySQL comprueba las claves fila a fila
         }
-        foreach (array_reverse(DB_TABLES) as $t) {
+        foreach (array_reverse($tables) as $t) {
             if (in_array($t, $toTables, true)) {
                 $to->exec('DELETE FROM ' . $t);
             }
         }
-        foreach (DB_TABLES as $t) {
+        foreach ($tables as $t) {
             if (!in_array($t, $have, true) || !in_array($t, $toTables, true)) {
                 continue;
             }
@@ -384,12 +388,12 @@ function db_copy_all(CmsPdo $from, CmsPdo $to): void
 }
 
 /** Crea un archivo SQLite con el esquema y una copia de los datos de la base actual. */
-function db_export_sqlite(string $file): void
+function db_export_sqlite(string $file, bool $withErp = false): void
 {
     @unlink($file);
     $to = db_connect(['driver' => 'sqlite', 'file' => $file]);
     require_once __DIR__ . '/schema.php';
     install_schema($to);
-    db_copy_all(db(), $to);
+    db_copy_all(db(), $to, $withErp);
     db_set_schema_version($to, SCHEMA_VERSION);
 }

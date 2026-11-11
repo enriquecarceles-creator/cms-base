@@ -357,3 +357,12 @@ html:has(.savebar){scroll-padding-bottom:96px}
 .codes{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .codes code,.totp-key code{font-family:ui-monospace,Consolas,monospace;font-size:1.05rem;letter-spacing:.04em}
 .totp-key{margin:0;padding:12px 14px;border:1px dashed var(--line,#ccc);border-radius:8px;background:var(--soft,#f7f6f3);overflow-wrap:anywhere}
+
+/* Clientes y Ventas (ERP) */
+.bar-prog{height:14px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0 12px}
+.bar-prog span{display:block;height:100%;background:var(--gold)}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px 24px;margin:0 0 8px}
+.kv div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.kv dt{font-size:.78rem;color:var(--steel);letter-spacing:.04em;text-transform:uppercase}
+.kv dd{margin:2px 0 0;overflow-wrap:anywhere}
+.tbl tfoot th,.tbl tfoot td{padding:10px 14px;border-top:1px solid var(--line);text-align:right}

@@ -90,7 +90,7 @@ function backup_restore(string $zipPath): int
                 migrate_schema($src);
             }
             @set_time_limit(600);
-            db_copy_all($src, db());
+            db_copy_all($src, db(), true); // restaurar sustituye todo, también el ERP (vacío si la copia no lo incluía: se vuelve a sincronizar)
             $src = null;
         } catch (Throwable $e) {
             error_log((string)$e);

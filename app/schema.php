@@ -91,6 +91,77 @@ const SCHEMA_RECOVERY_DDL = "
     CREATE INDEX idx_recovery_user ON user_recovery_codes(user_id);
 ";
 
+/**
+ * v19: ERP de solo consulta (clientes, facturas y líneas de NCS; ver app/erp.php). Tablas aparte del catálogo y
+ * FUERA de DB_TABLES (lista ERP_TABLES): llevan datos personales y no viajan en las copias de seguridad salvo que se pida.
+ * Importes en céntimos (enteros); fechas como aaaammdd (entero); sin claves foráneas (se sincroniza en cualquier orden).
+ */
+const SCHEMA_ERP_DDL = "
+    CREATE TABLE erp_customers (
+        id {ID},
+        cust_code {K} NOT NULL UNIQUE,
+        name {S} NOT NULL DEFAULT '',
+        trade_name {S} NOT NULL DEFAULT '',
+        nif {S} NOT NULL DEFAULT '',
+        address {S} NOT NULL DEFAULT '',
+        city {S} NOT NULL DEFAULT '',
+        postcode {S} NOT NULL DEFAULT '',
+        province {S} NOT NULL DEFAULT '',
+        country {S} NOT NULL DEFAULT '',
+        phone {S} NOT NULL DEFAULT '',
+        phone2 {S} NOT NULL DEFAULT '',
+        email {S} NOT NULL DEFAULT '',
+        contact {S} NOT NULL DEFAULT '',
+        pay_code {S} NOT NULL DEFAULT '',
+        tariff {I} NOT NULL DEFAULT 0,
+        disc_bp {I} NOT NULL DEFAULT 0,
+        blocked {I} NOT NULL DEFAULT 0,
+        created_day {I} NOT NULL DEFAULT 0,
+        ended_day {I} NOT NULL DEFAULT 0,
+        row_hash {S} NOT NULL,
+        synced_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE TABLE erp_invoices (
+        id {ID},
+        inv_number {K} NOT NULL UNIQUE,
+        cust_code {K} NOT NULL DEFAULT '',
+        inv_day {I} NOT NULL DEFAULT 0,
+        inv_year {I} NOT NULL DEFAULT 0,
+        inv_month {I} NOT NULL DEFAULT 0,
+        subtotal_cents {BIG} NOT NULL DEFAULT 0,
+        base_cents {BIG} NOT NULL DEFAULT 0,
+        vat_cents {BIG} NOT NULL DEFAULT 0,
+        total_cents {BIG} NOT NULL DEFAULT 0,
+        oper {S} NOT NULL DEFAULT '',
+        seller {S} NOT NULL DEFAULT '',
+        pay_code {S} NOT NULL DEFAULT '',
+        annulled {I} NOT NULL DEFAULT 0,
+        rectifies {S} NOT NULL DEFAULT '',
+        row_hash {S} NOT NULL,
+        synced_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_inv_cust ON erp_invoices(cust_code);
+    CREATE INDEX idx_erp_inv_day ON erp_invoices(inv_day);
+    CREATE INDEX idx_erp_inv_ym ON erp_invoices(inv_year, inv_month);
+    CREATE TABLE erp_invoice_lines (
+        id {ID},
+        invoice_id {I} NOT NULL,
+        src_key {K} NOT NULL UNIQUE,
+        line_no {I} NOT NULL DEFAULT 0,
+        article_code {K} NOT NULL DEFAULT '',
+        title {S} NOT NULL DEFAULT '',
+        qty_milli {BIG} NOT NULL DEFAULT 0,
+        price_cents {BIG} NOT NULL DEFAULT 0,
+        disc_bp {I} NOT NULL DEFAULT 0,
+        amount_cents {BIG} NOT NULL DEFAULT 0,
+        vat_code {S} NOT NULL DEFAULT '',
+        size_no {I} NOT NULL DEFAULT 0,
+        color_no {I} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_line_inv ON erp_invoice_lines(invoice_id);
+    CREATE INDEX idx_erp_line_art ON erp_invoice_lines(article_code);
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -176,7 +247,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -233,6 +304,11 @@ function migrate_schema(CmsPdo $pdo): void
             foreach (db_ddl(SCHEMA_RECOVERY_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
             }
+        }
+    }
+    if ($ver < 19 && !in_array('erp_customers', db_tables($pdo), true)) {
+        foreach (db_ddl(SCHEMA_ERP_DDL, $pdo->drv) as $st) {
+            $pdo->rawExec($st);
         }
     }
     db_set_schema_version($pdo, SCHEMA_VERSION);
