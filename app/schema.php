@@ -156,10 +156,38 @@ const SCHEMA_ERP_DDL = "
         amount_cents {BIG} NOT NULL DEFAULT 0,
         vat_code {S} NOT NULL DEFAULT '',
         size_no {I} NOT NULL DEFAULT 0,
-        color_no {I} NOT NULL DEFAULT 0
+        color_no {I} NOT NULL DEFAULT 0,
+        size_txt {S} NOT NULL DEFAULT '',
+        color_txt {S} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_erp_line_inv ON erp_invoice_lines(invoice_id);
     CREATE INDEX idx_erp_line_art ON erp_invoice_lines(article_code);
+    CREATE TABLE erp_notes (
+        id {ID},
+        cust_code {K} NOT NULL,
+        note {T} NOT NULL,
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        created_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_notes_cust ON erp_notes(cust_code, created_at);
+";
+
+/** v20: texto real de la talla y el color en las líneas (de FALMACEN) y notas internas de clientes. Las notas se escriben en la web: no se recuperan sincronizando. */
+const SCHEMA_ERP_V20_COLUMNS = [
+    'size_txt' => "{S} NOT NULL DEFAULT ''",
+    'color_txt' => "{S} NOT NULL DEFAULT ''",
+];
+const SCHEMA_ERP_NOTES_DDL = "
+    CREATE TABLE erp_notes (
+        id {ID},
+        cust_code {K} NOT NULL,
+        note {T} NOT NULL,
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        created_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_erp_notes_cust ON erp_notes(cust_code, created_at);
 ";
 
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
@@ -309,6 +337,19 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 19 && !in_array('erp_customers', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_ERP_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    if ($ver < 20 && in_array('erp_customers', db_tables($pdo), true)) {
+        $have = db_columns($pdo, 'erp_invoice_lines');
+        foreach (SCHEMA_ERP_V20_COLUMNS as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'erp_invoice_lines', $col, $def);
+            }
+        }
+        if (!in_array('erp_notes', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_ERP_NOTES_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
         }
     }
     db_set_schema_version($pdo, SCHEMA_VERSION);

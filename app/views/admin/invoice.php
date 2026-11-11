@@ -13,12 +13,14 @@ $neg = (int)$inv['total_cents'] < 0;
   <?= $inv['pay_code'] !== '' ? ' · forma de pago (código) ' . e($inv['pay_code']) : '' ?></p>
 
 <div class="tbl-wrap"><table class="tbl list">
-  <thead><tr><th scope="col">Artículo</th><th scope="col">Unidades</th><th scope="col">Precio</th><th scope="col">Dto.</th><th scope="col">Importe</th></tr></thead>
+  <thead><tr><th scope="col">Artículo</th><th scope="col">Talla</th><th scope="col">Color</th><th scope="col">Unidades</th><th scope="col">Precio</th><th scope="col">Dto.</th><th scope="col">Importe</th></tr></thead>
   <tbody>
-  <?php if (!$lines): ?><tr><td colspan="5" class="muted">Esta factura no tiene líneas.</td></tr><?php endif; ?>
+  <?php if (!$lines): ?><tr><td colspan="7" class="muted">Esta factura no tiene líneas.</td></tr><?php endif; ?>
   <?php foreach ($lines as $l): $code = (string)$l['article_code']; ?>
     <tr<?= (int)$l['qty_milli'] < 0 ? ' class="off"' : '' ?>>
       <td><?php if (isset($links[$code])): ?><a href="<?= e(url('/admin/articulo/' . (int)$links[$code])) ?>"><?= e($code) ?></a><?php else: ?><?= e($code) ?><?php endif; ?> <span class="muted"><?= e($l['title']) ?></span></td>
+      <td><?= e($l['size_txt'] !== '' ? $l['size_txt'] : ((int)$l['size_no'] > 0 ? 'nº ' . $l['size_no'] : '')) ?></td>
+      <td><?= e($l['color_txt'] !== '' ? $l['color_txt'] : ((int)$l['color_no'] > 0 ? 'nº ' . $l['color_no'] : '')) ?></td>
       <td><?= e(erp_qty((int)$l['qty_milli'])) ?></td>
       <td><?= e(erp_money((int)$l['price_cents'])) ?></td>
       <td><?= (int)$l['disc_bp'] > 0 ? e(rtrim(rtrim(number_format($l['disc_bp'] / 100, 2, ',', ''), '0'), ',')) . ' %' : '' ?></td>
@@ -27,8 +29,8 @@ $neg = (int)$inv['total_cents'] < 0;
   <?php endforeach; ?>
   </tbody>
   <tfoot>
-    <tr><th scope="row" colspan="4">Base imponible</th><td><?= e(erp_money((int)$inv['base_cents'])) ?></td></tr>
-    <tr><th scope="row" colspan="4">IVA</th><td><?= e(erp_money((int)$inv['vat_cents'])) ?></td></tr>
-    <tr><th scope="row" colspan="4">Total</th><td><strong><?= e(erp_money((int)$inv['total_cents'])) ?></strong></td></tr>
+    <tr><th scope="row" colspan="6">Base imponible</th><td><?= e(erp_money((int)$inv['base_cents'])) ?></td></tr>
+    <tr><th scope="row" colspan="6">IVA</th><td><?= e(erp_money((int)$inv['vat_cents'])) ?></td></tr>
+    <tr><th scope="row" colspan="6">Total</th><td><strong><?= e(erp_money((int)$inv['total_cents'])) ?></strong></td></tr>
   </tfoot>
 </table></div>

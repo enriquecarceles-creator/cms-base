@@ -19,9 +19,15 @@ $st = $job['status'] ?? '';
   $totC = $c['cust']['new'] + $c['cust']['changed'];
   $totI = $c['inv']['new'] + $c['inv']['changed'];
   $doneI = (int)($job['done_inv'] ?? 0);
-  $pct = $totI > 0 ? (int)floor(100 * $doneI / $totI) : 100; ?>
+  $pct = $totI > 0 ? (int)floor(100 * $doneI / $totI) : 100;
+  $inTxt = in_array($job['phase'] ?? '', ['txt_prep', 'txt'], true);
+  if ($inTxt && (int)($job['total_txt'] ?? 0) > 0) { $pct = (int)floor(100 * (int)$job['done_txt'] / (int)$job['total_txt']); } ?>
   <h2>Sincronizando…</h2>
-  <p>Clientes: <?= e($n((int)($job['done_cust'] ?? 0))) ?> de <?= e($n($totC)) ?> · Facturas: <?= e($n($doneI)) ?> de <?= e($n($totI)) ?> (<?= $pct ?> %)</p>
+  <?php if ($inTxt): ?>
+    <p>Tallas y colores: <?= e($n((int)($job['done_txt'] ?? 0))) ?> de <?= e($n((int)($job['total_txt'] ?? 0))) ?> combinaciones (<?= $pct ?> %)</p>
+  <?php else: ?>
+    <p>Clientes: <?= e($n((int)($job['done_cust'] ?? 0))) ?> de <?= e($n($totC)) ?> · Facturas: <?= e($n($doneI)) ?> de <?= e($n($totI)) ?> (<?= $pct ?> %)</p>
+  <?php endif; ?>
   <div class="bar-prog" role="progressbar" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100"><span style="width:<?= $pct ?>%"></span></div>
   <p class="muted">No cierres esta página: se actualiza sola. Si la cierras, vuelve aquí y continúa donde se quedó.</p>
   <?php if (!empty($job['error'])): ?>
@@ -41,6 +47,7 @@ $st = $job['status'] ?? '';
   </table></div>
   <p class="muted">Líneas de factura a escribir: <?= e($n((int)$c['lines'])) ?><?= $c['skipped'] ? ' · filas descartadas por no tener código o por repetirse: ' . e($n((int)$c['skipped'])) : '' ?>. Los que «ya no están en NCS» se conservan; no se borra nada.</p>
 
+  <p class="muted" style="margin-top:0"><?= !empty($job['has_art']) ? 'Tallas y colores: se guardará el <strong>texto real</strong> (FALMACEN.MDB incluido: ' . e($n((int)($c['art'] ?? 0))) . ' artículos).' : 'Tallas y colores: sin FALMACEN.MDB se guarda solo el número; los textos ya guardados se conservan.' ?></p>
   <form method="post" class="form">
     <?= csrf_field() ?>
     <label>Cliente de contado (el de los tickets de mostrador)
@@ -58,6 +65,9 @@ $st = $job['status'] ?? '';
     <?= csrf_field() ?><input type="hidden" name="action" value="analyze">
     <label>FCUENTAS.MDB (clientes) <input type="file" name="cuentas" accept=".mdb,.MDB"><small><?= $ftp['cuentas'] ? 'Ya hay uno en <code>data/importar/</code>: se usará si no eliges otro.' : 'O déjalo por FTP en <code>data/importar/</code>.' ?></small></label>
     <label>FHISTORI.MDB (facturas y líneas) <input type="file" name="historico" accept=".mdb,.MDB"><small><?= $ftp['historico'] ? 'Ya hay uno en <code>data/importar/</code>: se usará si no eliges otro.' : 'Pesa mucho: si el servidor no deja subirlo, déjalo por FTP en <code>data/importar/</code>.' ?></small></label>
+    <label>FALMACEN.MDB (opcional: texto real de la talla y el color) <input type="file" name="almacen" accept=".mdb,.MDB">
+      <small>De él solo se leen el código, <code>T00</code> y <code>C00</code> de cada artículo. Sin él se guarda solo el número de talla y de color.</small></label>
+    <?php if ($ftp['almacen']): ?><label class="check"><input type="checkbox" name="con_almacen" value="1" checked> <span>Usar el <code>FALMACEN.MDB</code> de <code>data/importar/</code> (no se borra: también lo usa la importación del catálogo)</span></label><?php endif; ?>
     <p class="muted" style="margin:0">Se lee solo lo necesario. <strong>No se importan</strong> datos bancarios (cuenta, banco, BIC, mandato, tarjeta), notas libres ni saldos internos de NCS. Los archivos de <code>data/importar/</code> se borran al terminar.</p>
     <div class="buttons"><button class="btn" type="submit">Analizar y ver el resumen</button></div>
   </form>

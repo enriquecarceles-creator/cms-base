@@ -26,7 +26,7 @@ const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices'
     'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages'];
 
 /** Tablas del ERP (clientes y ventas de NCS): datos personales, FUERA de DB_TABLES; solo se copian si se pide (ver db_copy_all). */
-const ERP_TABLES = ['erp_customers', 'erp_invoices', 'erp_invoice_lines'];
+const ERP_TABLES = ['erp_customers', 'erp_invoices', 'erp_invoice_lines', 'erp_notes'];
 
 /** PDO que traduce el SQL al motor de destino. */
 final class CmsPdo extends PDO

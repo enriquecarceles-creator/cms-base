@@ -14,6 +14,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/mdb.php';
+require_once __DIR__ . '/erp_client.php';
 
 const ERP_STAGE = DATA_DIR . '/erp_stage.sqlite';
 const ERP_JOB = DATA_DIR . '/erp_job.json';
@@ -175,7 +176,15 @@ function erp_map_line(array $l): array
         'vat_code' => erp_txt($l['TIVA'] ?? '', 10),
         'size_no' => (int)($l['TALLA'] ?? 0),
         'color_no' => (int)($l['COLOR'] ?? 0),
+        'size_txt' => '',
+        'color_txt' => '',
     ];
+}
+
+/** Texto de un hueco de ancho fijo (talla: 4 caracteres; color: 10). $idx empieza en 1; 0 = sin talla / sin color. */
+function erp_slot(string $raw, int $idx, int $width): string
+{
+    return $idx < 1 ? '' : erp_txt(mb_substr($raw, ($idx - 1) * $width, $width), 60);
 }
 
 function erp_hash(array $data): string
@@ -209,12 +218,14 @@ function erp_job_clear(): void
 /** Archivos NCS dejados por FTP en data/importar/: ['cuentas' => ruta|null, 'historico' => ruta|null]. */
 function erp_ftp_sources(): array
 {
-    $out = ['cuentas' => null, 'historico' => null];
+    $out = ['cuentas' => null, 'historico' => null, 'almacen' => null];
     foreach (is_dir(ERP_FTP_DIR) ? (scandir(ERP_FTP_DIR) ?: []) : [] as $n) {
         if (preg_match('/^fcuentas.*\.mdb$/i', $n)) {
             $out['cuentas'] = ERP_FTP_DIR . '/' . $n;
         } elseif (preg_match('/^fhistori.*\.mdb$/i', $n)) {
             $out['historico'] = ERP_FTP_DIR . '/' . $n;
+        } elseif (preg_match('/^falmacen.*\.mdb$/i', $n)) {
+            $out['almacen'] = ERP_FTP_DIR . '/' . $n; // lo usa también la importación del catálogo: NO se borra al terminar
         }
     }
     return $out;
@@ -224,7 +235,7 @@ function erp_ftp_sources(): array
  * Lee las dos bases de NCS, prepara en data/erp_stage.sqlite lo que se va a importar (solo los campos elegidos) y
  * lo compara con lo que ya hay. Devuelve los recuentos (nada personal). Lanza RuntimeException con mensajes sin datos.
  */
-function erp_stage_build(string $cuentasFile, string $historicoFile): array
+function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $almacenFile = null): array
 {
     @set_time_limit(300);
     @ini_set('memory_limit', '512M');
@@ -307,7 +318,8 @@ function erp_stage_build(string $cuentasFile, string $historicoFile): array
         $ls = $lines[$m['inv_number']] ?? [];
         usort($ls, fn($a, $b) => $a['line_no'] <=> $b['line_no'] ?: strcmp($a['src_key'], $b['src_key']));
         unset($lines[$m['inv_number']]);
-        $m['row_hash'] = erp_hash(['i' => $m, 'l' => $ls]);
+        // La huella no incluye los textos de talla y color (vienen de FALMACEN, que es opcional): no cambian al sincronizar sin él
+        $m['row_hash'] = erp_hash(['i' => $m, 'l' => array_map(fn($l) => array_diff_key($l, ['size_txt' => 1, 'color_txt' => 1]), $ls)]);
         $perCust[$m['cust_code']] = ($perCust[$m['cust_code']] ?? 0) + 1;
         $state = !isset($haveI[$m['inv_number']]) ? 'new' : ($haveI[$m['inv_number']] === $m['row_hash'] ? 'same' : 'changed');
         $cnt['inv'][$state]++;
@@ -320,6 +332,31 @@ function erp_stage_build(string $cuentasFile, string $historicoFile): array
     $cnt['inv']['gone'] = count(array_diff_key($haveI, $seenI));
     $cnt['skipped'] += array_sum(array_map('count', $lines)); // líneas sin cabecera
     unset($lines, $seenI);
+
+    // Tallas y colores reales (opcional): TART.T00 y TART.C00 son texto de ancho fijo (huecos de 4 y de 10 caracteres)
+    // y TLHVENTAS.TALLA / COLOR son la posición, empezando en 1 (comprobado: 100 % de las líneas caen en un hueco con valor).
+    $cnt['art'] = 0;
+    if ($almacenFile !== null) {
+        try {
+            $al = new MdbReader($almacenFile);
+            if (!isset($al->tables()['TART'])) {
+                throw new RuntimeException('x');
+            }
+            $st->exec('CREATE TABLE art (code TEXT PRIMARY KEY, t TEXT, c TEXT)');
+            $st->beginTransaction();
+            $ins = $st->prepare('INSERT OR REPLACE INTO art (code, t, c) VALUES (?,?,?)');
+            foreach ($al->rows('TART') as $r) { // solo CODIGO, T00 y C00: ninguna otra columna se guarda ni se muestra
+                $code = erp_txt($r['CODIGO'] ?? '', 60);
+                if ($code !== '') {
+                    $ins->execute([$code, (string)($r['T00'] ?? ''), (string)($r['C00'] ?? '')]);
+                    $cnt['art']++;
+                }
+            }
+            $st->commit();
+        } catch (Throwable $e) {
+            throw new RuntimeException('No se pudo leer FALMACEN.MDB (tabla TART). Quítalo para sincronizar sin los textos de talla y color.');
+        }
+    }
 
     // Cliente de contado: el que más facturas tiene si es muy grande y no tiene NIF
     $suggest = '';
@@ -380,32 +417,93 @@ function erp_run(array &$job, float $deadline): bool
             $job['phase'] = 'inv';
             $job['cursor'] = 0;
         }
-        while (microtime(true) < $deadline) {
-            $q = $st->prepare("SELECT seq, data FROM inv WHERE seq > ? AND state <> 'same' ORDER BY seq LIMIT " . ERP_INV_BATCH);
-            $q->execute([(int)$job['cursor']]);
-            $rows = $q->fetchAll();
-            if (!$rows) {
-                return true;
-            }
-            $db->beginTransaction();
-            $find = $db->prepare('SELECT id FROM erp_invoices WHERE inv_number = ?');
-            foreach ($rows as $row) {
-                $d = json_decode((string)$row['data'], true);
-                $inv = $d['i'];
-                $inv['synced_at'] = $now;
-                $find->execute([$inv['inv_number']]);
-                $id = $find->fetchColumn();
-                $id = erp_save_row('erp_invoices', 'inv_number', $inv, $id === false ? null : (int)$id);
-                $db->prepare('DELETE FROM erp_invoice_lines WHERE invoice_id = ?')->execute([$id]);
-                foreach ($d['l'] as $l) {
-                    $db->prepare('DELETE FROM erp_invoice_lines WHERE src_key = ?')->execute([$l['src_key']]); // una CLAVE no puede repetirse
-                    $l['invoice_id'] = $id;
-                    erp_save_row('erp_invoice_lines', 'src_key', $l, null);
+        if ($job['phase'] === 'inv') {
+            while (microtime(true) < $deadline) {
+                $q = $st->prepare("SELECT seq, data FROM inv WHERE seq > ? AND state <> 'same' ORDER BY seq LIMIT " . ERP_INV_BATCH);
+                $q->execute([(int)$job['cursor']]);
+                $rows = $q->fetchAll();
+                if (!$rows) {
+                    if (empty($job['has_art'])) {
+                        return true;
+                    }
+                    $job['phase'] = 'txt_prep';
+                    break;
                 }
-                $job['cursor'] = (int)$row['seq'];
-                $job['done_inv'] = ($job['done_inv'] ?? 0) + 1;
+                $db->beginTransaction();
+                $find = $db->prepare('SELECT id FROM erp_invoices WHERE inv_number = ?');
+                $old = $db->prepare('SELECT src_key, size_no, color_no, size_txt, color_txt FROM erp_invoice_lines WHERE invoice_id = ?');
+                foreach ($rows as $row) {
+                    $d = json_decode((string)$row['data'], true);
+                    $inv = $d['i'];
+                    $inv['synced_at'] = $now;
+                    $find->execute([$inv['inv_number']]);
+                    $id = $find->fetchColumn();
+                    $keep = [];
+                    if ($id !== false) { // al reescribir las líneas se conservan los textos de talla y color ya guardados
+                        $old->execute([(int)$id]);
+                        foreach ($old->fetchAll() as $o) {
+                            $keep[$o['src_key']] = $o;
+                        }
+                    }
+                    $id = erp_save_row('erp_invoices', 'inv_number', $inv, $id === false ? null : (int)$id);
+                    $db->prepare('DELETE FROM erp_invoice_lines WHERE invoice_id = ?')->execute([$id]);
+                    foreach ($d['l'] as $l) {
+                        $db->prepare('DELETE FROM erp_invoice_lines WHERE src_key = ?')->execute([$l['src_key']]); // una CLAVE no puede repetirse
+                        $o = $keep[$l['src_key']] ?? null;
+                        if ($o && (int)$o['size_no'] === $l['size_no'] && (int)$o['color_no'] === $l['color_no']) {
+                            $l['size_txt'] = (string)$o['size_txt'];
+                            $l['color_txt'] = (string)$o['color_txt'];
+                        }
+                        $l['invoice_id'] = $id;
+                        erp_save_row('erp_invoice_lines', 'src_key', $l, null);
+                    }
+                    $job['cursor'] = (int)$row['seq'];
+                    $job['done_inv'] = ($job['done_inv'] ?? 0) + 1;
+                }
+                $db->commit();
             }
-            $db->commit();
+        }
+        if (in_array($job['phase'], ['txt_prep', 'txt'], true)) {
+            if ($job['phase'] === 'txt_prep') { // combinaciones distintas artículo + talla + color de lo guardado
+                $st->exec('CREATE TABLE IF NOT EXISTS combo (seq INTEGER PRIMARY KEY, code TEXT, s INTEGER, c INTEGER)');
+                $st->exec('DELETE FROM combo');
+                $st->beginTransaction();
+                $ins = $st->prepare('INSERT INTO combo (seq, code, s, c) VALUES (?,?,?,?)');
+                $n = 0;
+                foreach ($db->query('SELECT DISTINCT article_code, size_no, color_no FROM erp_invoice_lines WHERE size_no > 0 OR color_no > 0') as $r) {
+                    $ins->execute([++$n, (string)$r['article_code'], (int)$r['size_no'], (int)$r['color_no']]);
+                }
+                $st->commit();
+                $job['total_txt'] = $n;
+                $job['done_txt'] = 0;
+                $job['cursor'] = 0;
+                $job['phase'] = 'txt';
+            }
+            $art = $st->prepare('SELECT t, c FROM art WHERE code = ?');
+            while (microtime(true) < $deadline) {
+                $q = $st->prepare('SELECT seq, code, s, c FROM combo WHERE seq > ? ORDER BY seq LIMIT 500');
+                $q->execute([(int)$job['cursor']]);
+                $rows = $q->fetchAll();
+                if (!$rows) {
+                    return true;
+                }
+                $db->beginTransaction();
+                $upd = $db->prepare('UPDATE erp_invoice_lines SET size_txt = ?, color_txt = ? WHERE article_code = ? AND size_no = ? AND color_no = ? AND (size_txt <> ? OR color_txt <> ?)');
+                foreach ($rows as $r) {
+                    $art->execute([$r['code']]);
+                    $a = $art->fetch();
+                    if ($a) {
+                        $sz = erp_slot((string)$a['t'], (int)$r['s'], 4);
+                        $co = erp_slot((string)$a['c'], (int)$r['c'], 10);
+                        $upd->execute([$sz, $co, $r['code'], (int)$r['s'], (int)$r['c'], $sz, $co]);
+                    } else {
+                        $job['txt_missing'] = ($job['txt_missing'] ?? 0) + 1;
+                    }
+                    $job['cursor'] = (int)$r['seq'];
+                    $job['done_txt'] = ($job['done_txt'] ?? 0) + 1;
+                }
+                $db->commit();
+            }
         }
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
@@ -417,7 +515,6 @@ function erp_run(array &$job, float $deadline): bool
     }
     return false;
 }
-
 /** Fin: anota el resumen (solo números), borra el archivo de trabajo y los .mdb dejados por FTP. */
 function erp_finish(array $job): void
 {
@@ -454,12 +551,19 @@ function admin_erp_sync(): void
                     $fromFtp[] = $ftp[$key];
                 }
             }
+            $alm = null; // FALMACEN.MDB es opcional (textos de talla y color)
+            $up = $_FILES['almacen'] ?? null;
+            if ($up && (int)($up['error'] ?? 4) === UPLOAD_ERR_OK && is_uploaded_file((string)$up['tmp_name'])) {
+                $alm = (string)$up['tmp_name'];
+            } elseif ($ftp['almacen'] && !empty($_POST['con_almacen'])) {
+                $alm = $ftp['almacen'];
+            }
             if (count($paths) < 2) {
                 flash('Faltan archivos: sube FCUENTAS.MDB y FHISTORI.MDB, o déjalos por FTP en data/importar/.', 'err');
                 redirect('/admin/erp');
             }
             try {
-                $res = erp_stage_build($paths['cuentas'], $paths['historico']);
+                $res = erp_stage_build($paths['cuentas'], $paths['historico'], $alm);
             } catch (RuntimeException $e) {
                 erp_job_clear();
                 flash($e->getMessage(), 'err');
@@ -470,7 +574,7 @@ function admin_erp_sync(): void
                 flash('No se pudieron analizar los archivos (¿son de NCS Facturación? ¿pesan demasiado para este servidor?).', 'err');
                 redirect('/admin/erp');
             }
-            erp_job_save(['status' => 'plan', 'counts' => $res['counts'], 'retail_suggest' => $res['retail_suggest'], 'ftp_files' => $fromFtp, 'at' => time()]);
+            erp_job_save(['status' => 'plan', 'counts' => $res['counts'], 'retail_suggest' => $res['retail_suggest'], 'ftp_files' => $fromFtp, 'has_art' => $alm !== null, 'at' => time()]);
             redirect('/admin/erp');
         }
         if ($act === 'cancel') {
@@ -608,39 +712,6 @@ function admin_clients(string $code): void
     admin_render('clients', [
         'rows' => $st->fetchAll(), 'q' => $q, 'total' => $total, 'page' => $page, 'pages' => $pages, 'hidden' => $hidden, 'retail' => $retail,
         'totals' => erp_totals(), 'title' => 'Clientes',
-    ]);
-}
-
-/** Ficha de un cliente: datos, sus facturas y lo que ha comprado. */
-function admin_client(string $code): void
-{
-    $db = db();
-    $st = $db->prepare('SELECT * FROM erp_customers WHERE cust_code = ?');
-    $st->execute([$code]);
-    $c = $st->fetch();
-    if (!$c) {
-        not_found();
-        return;
-    }
-    $st = $db->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(total_cents), 0) AS tot, COALESCE(MIN(inv_day), 0) AS first_day, COALESCE(MAX(inv_day), 0) AS last_day FROM erp_invoices WHERE cust_code = ? AND annulled = 0');
-    $st->execute([$code]);
-    $sum = $st->fetch();
-    $page = max(1, (int)($_GET['pag'] ?? 1));
-    $pages = max(1, (int)ceil((int)$sum['n'] / ERP_PER_PAGE));
-    $page = min($page, $pages);
-    $st = $db->prepare('SELECT id, inv_number, inv_day, total_cents, annulled FROM erp_invoices WHERE cust_code = ? ORDER BY inv_day DESC, id DESC LIMIT ' . ERP_PER_PAGE . ($page > 1 ? ' OFFSET ' . (($page - 1) * ERP_PER_PAGE) : ''));
-    $st->execute([$code]);
-    $invoices = $st->fetchAll();
-    // Lo que ha comprado: artículos agrupados por código (una consulta), con devoluciones restadas
-    $st = $db->prepare('SELECT l.article_code, MAX(l.title) AS title, SUM(l.qty_milli) AS qty, SUM(l.amount_cents) AS amount, COUNT(*) AS n
-        FROM erp_invoice_lines l JOIN erp_invoices i ON i.id = l.invoice_id
-        WHERE i.cust_code = ? AND i.annulled = 0 GROUP BY l.article_code ORDER BY SUM(l.amount_cents) DESC LIMIT 30');
-    $st->execute([$code]);
-    $bought = $st->fetchAll();
-    admin_render('client', [
-        'c' => $c, 'sum' => $sum, 'invoices' => $invoices, 'page' => $page, 'pages' => $pages, 'bought' => $bought,
-        'links' => erp_article_links(array_column($bought, 'article_code')), 'retail' => erp_retail_code() === $code,
-        'crumb' => $c['name'] !== '' ? $c['name'] : $c['cust_code'], 'title' => 'Cliente',
     ]);
 }
 
