@@ -97,9 +97,13 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - Ficha pública: si hay un admin con sesión iniciada, mostrar también los campos internos con la insignia «Solo visible para administradores». Nunca a visitantes ni en el PDF.
 - Aviso por correo al usuario cuando entra desde una IP o un navegador nuevos.
 - Dirección del panel configurable en Web → Configuración (por defecto `/admin`), cambiando todos los enlaces internos (hoy `/admin` está escrito en muchos sitios: centralizarlo). Al cambiarla, avisar claramente de la nueva dirección y dejar una forma de recuperarla por FTP (un ajuste en `data/`).
-- **Tarea aparte, antes de la Fase C:** doble verificación opcional por usuario con código TOTP (Google Authenticator), sin librerías externas, con códigos de recuperación.
+- **PENDIENTE tras publicar (antes de la Fase C):** doble verificación opcional por usuario con código TOTP (Google Authenticator), sin librerías externas, con códigos de recuperación.
 
 ## 8. Hoja de ruta
+
+**Orden acordado hasta la publicación:** (1) Web → Menú (entrega 3 de la sección Web) → (2) seguridad básica: bloqueo por usuario, aviso por correo al entrar desde un sitio nuevo y dirección del panel configurable → (3) lista definitiva de archivos para subir al hosting (una sola subida).
+
+**Pendientes DESPUÉS de publicar** (no hacer antes): filtros por campos en el catálogo, campos públicos en el catálogo PDF y doble verificación TOTP (ver más abajo y sección 7).
 **Fase A — Perfiles de importación** (hecha: ver `app/profiles.php`; solo para el catálogo y el origen «Base de datos»)
 - Tabla `import_profiles`: `id`, `name`, `source_type` (`mdb`, `sql`, `csv`), `target_module` (`catalog`, `customers`, `sales`), `mapping_json`, `rules_json`, `is_system`, `created_at`.
 - Perfil de sistema «NCS Facturación — Almacén (FALMACEN.MDB)» con el emparejamiento de la sección 6 (inversión de `BLOQUEADO`, exclusión de `AMPLIACIOND`, `T00`, `C00`, `PVP2`, `SACTUAL`).
@@ -111,7 +115,7 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 2. ~~Páginas propias: tabla `pages` (título, slug `{K}` único, contenido, imagen de cabecera, título y descripción SEO, visible, orden, fechas; migración portable y en `DB_TABLES`); dirección `/<slug>` sin chocar con rutas existentes; editor sencillo guardado en formato seguro (Markdown limitado o HTML saneado con lista blanca; nunca HTML libre); plantillas «Aviso legal», «Política de privacidad», «Política de cookies» rellenas con datos de Empresa y aviso de revisarlas; en el sitemap.~~ (hecho: ver sección 5)
 3. Menú (Web → Menú): elegir y ordenar qué sale arriba y en el pie (Inicio, Catálogo, Contacto, cada página) con nombre opcional.
 
-**Fase B — Catálogo avanzado**
+**Fase B — Catálogo avanzado** (PENDIENTE: después de publicar)
 - ~~Nombres de la jerarquía configurables~~ (hecho: ver sección 5).
 - Filtros por campos públicos (Tallas, Color…) en el catálogo.
 - Campos públicos en el catálogo PDF (`/catalogo/completo`), nunca los internos.
