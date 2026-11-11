@@ -1,0 +1,20 @@
+# Base de datos y configuración de cada instalación
+data/*.sqlite
+data/*.sqlite-*
+data/db.php
+data/import/
+
+# Fotos subidas (se conservan .htaccess e index.html)
+uploads/*
+!uploads/.htaccess
+!uploads/index.html
+
+# Fotos de clientes (demasiado grandes y no son código)
+FOTOS_ARTICULOS_*/
+FOTOS_ARTICULOS_*.zip
+
+# Registros locales y archivos del sistema
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store

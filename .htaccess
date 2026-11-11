@@ -1,0 +1,38 @@
+# Documentación y archivos de desarrollo: no se pueden abrir desde el navegador
+<FilesMatch "(\.(md|sql|mdb|accdb|zip|log|bak)|^router\.php|^\.user\.ini)$">
+    Require all denied
+</FilesMatch>
+
+# Todas las URLs que no sean un archivo real pasan por index.php.
+# Funciona igual en la raíz del dominio que en una subcarpeta (/cms/, /nueva/…): no hay que cambiar nada.
+DirectoryIndex index.php
+RewriteEngine On
+RewriteRule ^index\.php$ - [L]
+# Detecta la carpeta de instalación (vacía en la raíz, «/cms» en una subcarpeta)
+RewriteCond %{REQUEST_URI}::$0 ^(/.+)/(.*)::\2$
+RewriteRule .* - [E=CMS_BASE:%1]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ %{ENV:CMS_BASE}/index.php [L]
+
+# Subida de fotos (si el hosting lo permite)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 70M
+</IfModule>
+
+# Velocidad: compresión y caché de archivos estáticos
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css application/javascript application/xml image/svg+xml
+</IfModule>
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType text/css "access plus 1 year"
+</IfModule>
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

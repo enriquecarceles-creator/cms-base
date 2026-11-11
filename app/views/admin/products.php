@@ -1,0 +1,43 @@
+<div class="head">
+  <h1>Artículos <small>(<?= count($rows) ?>)</small></h1>
+  <a class="btn" href="<?= e(url('/admin/articulo/nuevo' . ($c ? '?c=' . $c : ''))) ?>">+ Nuevo artículo</a>
+</div>
+
+<form class="filters" method="get" action="<?= e(url('/admin')) ?>">
+  <select name="c" onchange="this.form.submit()" aria-label="Familia">
+    <option value="0">Todas las familias</option>
+    <?php foreach ($cats as $cat): ?>
+      <option value="<?= (int)$cat['id'] ?>"<?= $c === (int)$cat['id'] ? ' selected' : '' ?>><?= e($cat['name']) ?></option>
+    <?php endforeach; ?>
+  </select>
+  <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar nombre o referencia" aria-label="Buscar">
+  <button class="btn small" type="submit">Filtrar</button>
+</form>
+
+<?php if (!$rows): ?>
+  <p class="empty">No hay artículos con ese filtro.</p>
+<?php else: ?>
+<div class="table">
+  <?php foreach ($rows as $r): ?>
+    <div class="row<?= $r['visible'] ? '' : ' off' ?>">
+      <a class="thumb" href="<?= e(url('/admin/articulo/' . $r['id'])) ?>">
+        <?php if ($r['image']): ?><img src="<?= e(img_url($r['image'], true)) ?>" alt="" loading="lazy" width="56" height="56"><?php else: ?><span class="nophoto">sin foto</span><?php endif; ?>
+      </a>
+      <div class="main">
+        <a href="<?= e(url('/admin/articulo/' . $r['id'])) ?>"><strong><?= e($r['name']) ?></strong></a>
+        <small><?= e($r['cat_name']) ?><?= $r['ref'] !== '' ? ' · Ref. ' . e($r['ref']) : '' ?><?= $r['dimensions'] !== '' ? ' · ' . e($r['dimensions']) : '' ?></small>
+      </div>
+      <div class="actions">
+        <form method="post" class="inline">
+          <?= csrf_field() ?>
+          <input type="hidden" name="action" value="toggle">
+          <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+          <input type="hidden" name="back" value="<?= e($back) ?>">
+          <button class="pill <?= $r['visible'] ? 'on' : '' ?>" type="submit" title="Mostrar u ocultar en la web"><?= $r['visible'] ? 'Visible' : 'Oculto' ?></button>
+        </form>
+        <a class="btn small ghost" href="<?= e(url('/admin/articulo/' . $r['id'])) ?>">Editar</a>
+      </div>
+    </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
