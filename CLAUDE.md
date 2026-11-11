@@ -51,7 +51,7 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 ## 5. Configuración por empresa (sin código)
 - Web → Empresa: identidad, contacto, logotipo, color, textos de portada, copia de seguridad.
 - Web → Configuración: módulos activables (`mod_reps`, `mod_slider`, `mod_pdf`, `mod_sketch`, `mod_lineup`, `mod_map`), prefijo telefónico, zona horaria, `noindex`, textos fijos y **nombres del catálogo** (`term_family`, `term_families`, `term_sub`, `term_subs`, `term_gender` f/m; por defecto Familia/Familias/Subfamilia/Subfamilias, femenino).
-- Textos visibles con «familia»: siempre con `term('family'|'families'|'sub'|'subs', )` y las palabras que concuerdan con `tg('una', 'un')`, `tg('de la', 'del')`… (web, panel, importadores, PDF y mensajes). Las direcciones (`/catalogo/…`, `/admin/categorias`) y los nombres internos (`categories`, `family`, alias de columnas del importador) no cambian. Con los valores por defecto la web queda idéntica a como era. Detrás de `<?= … ?>` PHP se come el salto de línea: si importa, añade `. "
+- Textos visibles con «familia»: siempre con `term('family'|'families'|'sub'|'subs', minúscula)` y las palabras que concuerdan con `tg('una', 'un')`, `tg('de la', 'del')`… (web, panel, importadores, PDF y mensajes). Las direcciones (`/catalogo/…`, `/admin/categorias`) y los nombres internos (`categories`, `family`, alias de columnas del importador) no cambian. Con los valores por defecto la web queda idéntica a como era. Detrás de `<?= … ?>` PHP se come el salto de línea: si importa, añade `. "
 "`.
 - Web → Campos: campos libres (texto, texto largo, número, precio, lista, lista múltiple, sí/no, enlace), públicos o internos.
 - Nada específico de una empresa en el código: todo va a `settings` o a los campos.
