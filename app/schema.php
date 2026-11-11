@@ -54,6 +54,27 @@ const SCHEMA_PAGES_DDL = "
     );
 ";
 
+/** v17: sitios desde los que ha entrado cada usuario (aviso por correo si hay uno nuevo; ver app/auth.php). */
+const SCHEMA_DEVICES_DDL = "
+    CREATE TABLE login_devices (
+        id {ID},
+        user_id {I} NOT NULL,
+        ip_net {S} NOT NULL,
+        browser {S} NOT NULL,
+        first_seen {BIG} NOT NULL,
+        last_seen {BIG} NOT NULL
+    );
+    CREATE INDEX idx_login_devices_user ON login_devices(user_id);
+";
+
+/** v17: columnas de seguridad de users (bloqueo por usuario y último acceso). Nombre => definición. */
+const SCHEMA_USER_SECURITY_COLUMNS = [
+    'failed_attempts' => '{I} NOT NULL DEFAULT 0',
+    'last_failed_at' => '{BIG} NOT NULL DEFAULT 0',
+    'locked_until' => '{BIG} NOT NULL DEFAULT 0',
+    'last_login_at' => '{BIG} NOT NULL DEFAULT 0',
+];
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -61,7 +82,11 @@ const SCHEMA_DDL = "
         username {K} NOT NULL UNIQUE,
         pass_hash {S} NOT NULL,
         role {S} NOT NULL DEFAULT 'admin',
-        email {S} NOT NULL DEFAULT ''
+        email {S} NOT NULL DEFAULT '',
+        failed_attempts {I} NOT NULL DEFAULT 0,
+        last_failed_at {BIG} NOT NULL DEFAULT 0,
+        locked_until {BIG} NOT NULL DEFAULT 0,
+        last_login_at {BIG} NOT NULL DEFAULT 0
     );
     CREATE TABLE login_attempts (
         id {ID},
@@ -132,7 +157,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -163,6 +188,19 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 16 && !in_array('pages', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_PAGES_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    if ($ver < 17) {
+        $have = db_columns($pdo, 'users');
+        foreach (SCHEMA_USER_SECURITY_COLUMNS as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'users', $col, $def);
+            }
+        }
+        if (!in_array('login_devices', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_DEVICES_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
         }
     }
     db_set_schema_version($pdo, SCHEMA_VERSION);

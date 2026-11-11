@@ -10,6 +10,17 @@ if (BASE !== '' && str_starts_with($path, BASE)) {
 }
 $segs = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
 $first = $segs[0] ?? '';
+// Dirección del panel configurable (data/panel.txt). Con otra dirección, /admin da «no encontrada» como cualquier
+// dirección que no existe (sin redirigir) y el panel vive en la nueva, que por dentro sigue siendo «admin».
+$ap = admin_path();
+if ($ap !== 'admin') {
+    if ($first === 'admin') {
+        $first = '#';
+    } elseif ($first === $ap) {
+        $first = 'admin';
+        $segs[0] = 'admin';
+    }
+}
 
 try {
     // Web recién subida: sin administrador todavía, se abre el asistente de instalación.
@@ -38,7 +49,8 @@ try {
             if (setting('noindex') === '1') {
                 echo "User-agent: *\nDisallow: /\n";
             } else {
-                echo "User-agent: *\nDisallow: " . url('/admin') . "\nSitemap: " . site_origin() . url('/sitemap.xml') . "\n";
+                // Con una dirección de panel propia no se menciona (sería hacerla pública)
+                echo "User-agent: *\n" . ($ap === 'admin' ? 'Disallow: ' . url('/admin') . "\n" : "Disallow:\n") . "Sitemap: " . site_origin() . url('/sitemap.xml') . "\n";
             }
             break;
         case 'admin':

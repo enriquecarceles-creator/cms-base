@@ -31,8 +31,36 @@ function e(mixed $s): string
     return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Dirección del panel: «admin» por defecto, u otra si data/panel.txt la define (Web → Configuración).
+ * Recuperación por FTP: borra data/panel.txt y el panel vuelve a /admin. Un contenido no válido se ignora.
+ * $refresh = true vuelve a leer el archivo (justo después de cambiarla).
+ */
+function admin_path(bool $refresh = false): string
+{
+    static $p = null;
+    if ($p === null || $refresh) {
+        $p = 'admin';
+        $f = DATA_DIR . '/panel.txt';
+        if (is_file($f)) {
+            $v = strtolower(trim((string)@file_get_contents($f, false, null, 0, 200)));
+            if (strlen($v) >= 3 && strlen($v) <= 40 && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $v) && !in_array($v, PAGE_RESERVED, true)) {
+                $p = $v;
+            }
+        }
+    }
+    return $p;
+}
+
+/**
+ * Dirección completa dentro de la web. Todo el código escribe «/admin/…»: si el panel tiene otra dirección,
+ * aquí se sustituye, así cambian solos los enlaces, las redirecciones y los correos.
+ */
 function url(string $path = ''): string
 {
+    if ($path !== '' && $path[0] === '/' && ($ap = admin_path()) !== 'admin' && preg_match('~^/admin(?=$|[/?#])~', $path)) {
+        $path = '/' . $ap . substr($path, 6);
+    }
     return BASE . $path;
 }
 

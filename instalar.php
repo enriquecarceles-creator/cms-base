@@ -17,7 +17,8 @@ header('X-Frame-Options: DENY');
 
 $self = __FILE__;
 $installed = is_installed();
-// Misma dirección por la que se ha abierto (/instalar.php o /admin/instalar.php)
+// Misma dirección por la que se ha abierto (/instalar.php o /admin/instalar.php; con otra dirección de panel en data/panel.txt,
+// /<esa dirección>/instalar.php). Los enlaces al panel pasan por url(), que ya usa la dirección configurada.
 $base = (string)strtok((string)($_SERVER['REQUEST_URI'] ?? url('/instalar.php')), '?');
 const INST_STEPS = 6;
 
@@ -423,7 +424,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 }
-$h = '<h1>Cuenta de administrador</h1><p>Con ella entrarás al panel (<code>/admin</code>). Después podrás crear más usuarios.</p>' . inst_errors($errors)
+$h = '<h1>Cuenta de administrador</h1><p>Con ella entrarás al panel (<code>' . e(url('/admin')) . '</code>). Después podrás crear más usuarios.</p>' . inst_errors($errors)
     . '<form method="post" autocomplete="off" class="form">' . csrf_field()
     . '<label>Usuario <input name="username" value="' . e($username) . '" required minlength="3" autocomplete="username"></label>'
     . '<label>Email (para recuperar la contraseña) <input type="email" name="email" value="' . e($email) . '" autocomplete="email"></label>'

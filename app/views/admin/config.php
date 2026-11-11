@@ -41,3 +41,14 @@
 
   <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
 </form>
+
+<h2 id="panel">Dirección del panel</h2>
+<form method="post" action="<?= e(url('/admin/configuracion')) ?>" class="form">
+  <?= csrf_field() ?><input type="hidden" name="action" value="panel_path">
+  <p style="margin:0">Ahora el panel está en: <strong><code><?= e(site_origin() . url('/admin')) ?></code></strong></p>
+  <p class="muted" style="margin:0">Puedes cambiar <code>/admin</code> por otra dirección (por ejemplo <code>gestion-x7k</code>) para que los robots no la encuentren. Es un complemento, <strong>no sustituye a una buena contraseña</strong>. Al cambiarla, <code>/admin</code> dará «página no encontrada».</p>
+  <label>Nueva dirección <input name="panel_path" maxlength="40" placeholder="admin" pattern="[a-z0-9]+(-[a-z0-9]+)*" autocomplete="off"><small>Minúsculas, números y guiones, de 3 a 40 caracteres. Vacío (o «admin») = la de siempre.</small></label>
+  <label class="check"><input type="checkbox" name="ack" value="1"> <span>Entiendo que la dirección actual dejará de funcionar y que anotaré la nueva en cuanto la vea.</span></label>
+  <p class="alert warn"><?= admin_icon('info') ?><span><strong>Si te quedas fuera:</strong> por FTP, borra el archivo <code>data/panel.txt</code> y el panel vuelve a <code>/admin</code>.</span></p>
+  <div class="buttons"><button class="btn" type="submit">Cambiar la dirección del panel</button></div>
+</form>

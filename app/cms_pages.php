@@ -27,7 +27,7 @@ function page_slug_error(string $slug, int $ignoreId = 0): ?string
     if ($slug === '' || strlen($slug) < 2 || strlen($slug) > 80 || !preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug)) {
         return 'La dirección solo puede llevar letras minúsculas, números y guiones (mínimo 2 caracteres).';
     }
-    if (in_array($slug, PAGE_RESERVED, true)) {
+    if (in_array($slug, PAGE_RESERVED, true) || $slug === admin_path()) { // también la dirección del panel
         return '«' . $slug . '» está reservada por la web. Elige otra dirección.';
     }
     if (file_exists(ROOT . '/' . $slug)) { // archivo o carpeta real de la raíz de la instalación

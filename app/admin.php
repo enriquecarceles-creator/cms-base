@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/auth.php';
+
 function admin_dispatch(array $segs): void
 {
     start_session();
@@ -229,16 +231,27 @@ function admin_login(): void
             $u = $db->prepare('SELECT * FROM users WHERE username = ?');
             $u->execute([trim((string)($_POST['username'] ?? ''))]);
             $user = $u->fetch();
-            $hash = $user['pass_hash'] ?? password_hash('x', PASSWORD_DEFAULT); // tiempo constante
-            $ok = password_verify((string)($_POST['password'] ?? ''), $hash) && $user;
-            if ($ok) {
+            $pass = (string)($_POST['password'] ?? '');
+            // Una sola operación de contraseña exista o no el usuario (comprobar o crear un hash cuesta lo mismo):
+            // el tiempo de respuesta no delata si el usuario existe.
+            if ($user) {
+                $ok = password_verify($pass, (string)$user['pass_hash']);
+            } else {
+                password_hash($pass, PASSWORD_DEFAULT);
+                $ok = false;
+            }
+            if ($ok && !auth_locked($user)) {
                 $db->prepare('DELETE FROM login_attempts WHERE ip = ?')->execute([$ip]);
                 session_regenerate_id(true);
                 $_SESSION['uid'] = (int)$user['id'];
+                auth_after_login($user); // limpia fallos, anota el acceso y avisa por correo si el sitio es nuevo
                 redirect('/admin');
             }
             $db->prepare('INSERT INTO login_attempts (ip, ts) VALUES (?, ?)')->execute([$ip, time()]);
-            $errors[] = 'Usuario o contraseña incorrectos.';
+            if ($user && !auth_locked($user)) {
+                auth_register_failure((int)$user['id']); // a los 5 fallos seguidos, 15 minutos bloqueado
+            }
+            $errors[] = AUTH_GENERIC_ERROR; // el mismo mensaje si no existe, si la contraseña falla o si está bloqueado
         }
     } elseif ($locked) {
         $errors[] = 'Demasiados intentos. Espera 15 minutos y vuelve a probar.';
@@ -1198,8 +1211,65 @@ function config_text_default(string $k): string
     return $k === 'catalog_title' ? catalog_title_default() : (CONFIG_TEXTS[$k][1] ?? '');
 }
 
+/**
+ * Cambiar la dirección del panel (Web → Configuración). Se guarda en data/panel.txt (no en la base de datos, para poder
+ * recuperarla por FTP: borrar ese archivo = /admin). Muestra la dirección nueva en una pantalla aparte, SIN redirigir,
+ * antes de que se salga de la página.
+ */
+function admin_set_panel_path(): void
+{
+    csrf_check();
+    $new = strtolower(trim((string)($_POST['panel_path'] ?? '')));
+    $new = $new === '' ? 'admin' : $new;
+    $cur = admin_path();
+    $err = null;
+    if (empty($_POST['ack'])) {
+        $err = 'Marca la casilla para confirmar que has anotado la nueva dirección.';
+    } elseif ($new === $cur) {
+        $err = 'Esa ya es la dirección actual del panel.';
+    } elseif ($new !== 'admin') {
+        if (strlen($new) < 3 || strlen($new) > 40 || !preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $new)) {
+            $err = 'La dirección solo puede llevar letras minúsculas, números y guiones (entre 3 y 40 caracteres).';
+        } elseif (in_array($new, PAGE_RESERVED, true)) {
+            $err = '«' . $new . '» está reservada por la web. Elige otra.';
+        } elseif (file_exists(ROOT . '/' . $new)) {
+            $err = '«' . $new . '» coincide con un archivo o carpeta de la web. Elige otra.';
+        } else {
+            $st = db()->prepare('SELECT COUNT(*) FROM pages WHERE slug = ?');
+            $st->execute([$new]);
+            if ((int)$st->fetchColumn() > 0) {
+                $err = 'Ya hay una página con la dirección «' . $new . '». Elige otra.';
+            }
+        }
+    }
+    $file = DATA_DIR . '/panel.txt';
+    if (!$err) {
+        if ($new === 'admin') {
+            if (is_file($file) && !@unlink($file)) {
+                $err = 'No se ha podido borrar data/panel.txt (permisos). Bórralo por FTP.';
+            }
+        } else {
+            $tmp = $file . '.tmp';
+            if (@file_put_contents($tmp, $new . "\n", LOCK_EX) === false || !@rename($tmp, $file)) {
+                @unlink($tmp);
+                $err = 'No se ha podido guardar data/panel.txt (permisos de la carpeta data/). No se ha cambiado nada.';
+            }
+        }
+    }
+    if ($err) {
+        flash($err, 'err');
+        redirect('/admin/configuracion');
+    }
+    admin_path(true); // a partir de aquí, url('/admin/…') ya da la dirección nueva
+    render('admin/panel_path_done', ['newPath' => $new, 'oldPath' => $cur, 'title' => 'Dirección del panel · ' . site_name()], 'admin/layout_bare');
+}
+
 function admin_config(): void
 {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'panel_path') {
+        admin_set_panel_path();
+        return;
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         foreach (array_keys(features_help()) as $k) { // sin «slider»: se activa en Web → Página de inicio
@@ -1656,6 +1726,12 @@ function admin_password(): void
     $me = $db->prepare('SELECT username, email FROM users WHERE id = ?');
     $me->execute([(int)$_SESSION['uid']]);
     $me = $me->fetch() ?: ['username' => '', 'email' => ''];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'forget_sites') {
+        csrf_check();
+        $n = auth_forget_sites((int)$_SESSION['uid']);
+        flash($n > 1 ? 'Se han olvidado ' . ($n - 1) . ' sitio' . ($n - 1 === 1 ? '' : 's') . ' conocido' . ($n - 1 === 1 ? '' : 's') . '. Solo queda este, el que estás usando ahora.' : 'No había otros sitios conocidos: solo queda este, el que estás usando ahora.');
+        redirect('/admin/clave');
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'email') {
         csrf_check();
         $em = trim((string)($_POST['email'] ?? ''));
@@ -1688,7 +1764,7 @@ function admin_password(): void
             redirect('/admin');
         }
     }
-    admin_render('password', ['errors' => $errors, 'me' => $me, 'title' => 'Mi cuenta']);
+    admin_render('password', ['errors' => $errors, 'me' => $me, 'sites' => auth_sites((int)$_SESSION['uid']), 'siteNow' => auth_current_site(), 'title' => 'Mi cuenta']);
 }
 
 
@@ -1769,15 +1845,21 @@ function admin_users(): void
                 $errors[] = 'La contraseña debe tener al menos 10 caracteres.';
             } else {
                 $db->prepare('UPDATE users SET pass_hash = ? WHERE id = ?')->execute([password_hash($pass, PASSWORD_DEFAULT), $id]);
+                auth_unlock($id); // una contraseña nueva también quita el bloqueo
                 flash('Contraseña de «' . $target['username'] . '» cambiada.');
                 redirect('/admin/usuarios');
             }
+        } elseif ($target && $act === 'unlock') {
+            auth_unlock($id);
+            flash('Usuario «' . $target['username'] . '» desbloqueado.');
+            redirect('/admin/usuarios');
         } elseif ($target && $act === 'delete') {
             if ($id === $me) {
                 $errors[] = 'No puedes borrar tu propio usuario.';
             } elseif ($target['role'] === 'admin' && $admins <= 1) {
                 $errors[] = 'Debe quedar al menos un administrador.';
             } else {
+                $db->prepare('DELETE FROM login_devices WHERE user_id = ?')->execute([$id]);
                 $db->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
                 flash('Usuario borrado.');
                 redirect('/admin/usuarios');
@@ -1785,7 +1867,7 @@ function admin_users(): void
         }
     }
     admin_render('users', [
-        'users' => $db->query('SELECT id, username, role, email FROM users ORDER BY username COLLATE NOCASE')->fetchAll(),
+        'users' => $db->query('SELECT id, username, role, email, locked_until, last_login_at FROM users ORDER BY username COLLATE NOCASE')->fetchAll(),
         'errors' => $errors, 'form' => $form, 'me' => $me, 'title' => 'Usuarios',
     ]);
 }
@@ -1805,11 +1887,9 @@ function reset_send(array $user): bool
     $db->prepare('INSERT INTO password_resets (user_id, token_hash, expires) VALUES (?, ?, ?)')
         ->execute([$user['id'], hash('sha256', $token), time() + 3600]);
     $link = site_origin() . url('/admin/restablecer/' . $token);
-    $host = preg_replace('/^www\./', '', (string)parse_url(site_origin(), PHP_URL_HOST));
     $body = "Hola " . $user['username'] . ",\r\n\r\nPara elegir una contraseña nueva en el panel de " . site_name() . " abre este enlace (válido 1 hora):\r\n\r\n"
         . $link . "\r\n\r\nSi no lo has pedido tú, ignora este mensaje: tu contraseña no cambia.\r\n";
-    $headers = "From: " . site_name() . " <noreply@" . ($host ?: 'localhost') . ">\r\nContent-Type: text/plain; charset=UTF-8\r\n";
-    return @mail($user['email'], '=?UTF-8?B?' . base64_encode('Restablecer contraseña · Panel ' . site_name()) . '?=', $body, $headers);
+    return app_mail($user['email'], 'Restablecer contraseña · Panel ' . site_name(), $body);
 }
 
 function admin_forgot(): void
@@ -1860,6 +1940,7 @@ function admin_reset(string $token): void
             $errors[] = 'Las contraseñas no coinciden.';
         } else {
             $db->prepare('UPDATE users SET pass_hash = ? WHERE id = ?')->execute([password_hash($new, PASSWORD_DEFAULT), $row['user_id']]);
+            auth_unlock((int)$row['user_id']); // elegir contraseña nueva por correo también desbloquea
             $db->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$row['user_id']]);
             flash('Contraseña cambiada. Ya puedes entrar.');
             redirect('/admin/login');

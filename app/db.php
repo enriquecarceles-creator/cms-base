@@ -22,7 +22,7 @@ const DB_ENGINES = [
 ];
 
 /** Tablas de la aplicación en orden de dependencias (padres antes que hijas). */
-const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'settings', 'categories', 'products',
+const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'settings', 'categories', 'products',
     'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages'];
 
 /** PDO que traduce el SQL al motor de destino. */
@@ -288,6 +288,18 @@ function db_columns(CmsPdo $pdo, string $table): array
     $st = $pdo->prepare($sql);
     $st->execute([$table]);
     return $st->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Añade una columna a una tabla que ya existe (migraciones). $def usa los marcadores de db_ddl()
+ * («{I} NOT NULL DEFAULT 0»). SQL Server escribe «ADD col», SQLite y MariaDB «ADD COLUMN col».
+ */
+function db_add_column(CmsPdo $pdo, string $table, string $col, string $def): void
+{
+    $sql = 'ALTER TABLE ' . $table . ($pdo->drv === 'sqlsrv' ? ' ADD ' : ' ADD COLUMN ') . $col . ' ' . $def;
+    foreach (db_ddl($sql, $pdo->drv) as $st) {
+        $pdo->rawExec($st);
+    }
 }
 
 function db_schema_version(CmsPdo $pdo): int

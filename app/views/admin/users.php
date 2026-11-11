@@ -6,7 +6,13 @@
   <tbody>
   <?php foreach ($users as $u): ?>
     <tr>
-      <td><?= e($u['username']) ?><?= (int)$u['id'] === $me ? ' <small>(tú)</small>' : '' ?></td>
+      <td><?= e($u['username']) ?><?= (int)$u['id'] === $me ? ' <small>(tú)</small>' : '' ?>
+        <br><small class="muted">Último acceso: <?= (int)$u['last_login_at'] > 0 ? e(date('d/m/Y H:i', (int)$u['last_login_at'])) : 'ninguno' ?></small>
+        <?php if ((int)$u['locked_until'] > time()): ?>
+          <br><small class="review-flag">Bloqueado por intentos fallidos hasta las <?= e(date('H:i', (int)$u['locked_until'])) ?></small>
+          <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="unlock"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="link" type="submit">Desbloquear</button></form>
+        <?php endif; ?>
+      </td>
       <td>
         <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="role"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
           <select name="role" onchange="this.form.submit()"><?php foreach (USER_ROLES as $k => $label): ?><option value="<?= e($k) ?>"<?= $u['role'] === $k ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
