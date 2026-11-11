@@ -315,6 +315,32 @@ $check('precarga: cobradas en la fecha de la venta', $one('SELECT COUNT(*) FROM 
 $firstId = (int)$db->query('SELECT id FROM erp_invoices ORDER BY id LIMIT 1')->fetchColumn();
 erp_event($firstId, 'nota', 'prueba', 'batería', 0);
 $check('el historial anota hechos con su usuario', $one("SELECT COUNT(*) FROM erp_invoice_events WHERE invoice_id = $firstId AND kind = 'nota' AND username = 'batería'") === 1);
+/* Enviar factura por email (B3b): enlace seguro, correo HTML con la factura real, sello de anulada */
+$section('Enviar factura por email (enlace seguro)');
+$realNum = (string)$db->query('SELECT inv_number FROM erp_invoices WHERE annulled = 0 AND total_cents > 0 ORDER BY id LIMIT 1')->fetchColumn();
+$lk = erp_link_create($firstId, 'prueba@ejemplo.com', 30, 'batería');
+$check('enlace: código de 64 hex y solo se guarda su huella sha256', preg_match('/^[a-f0-9]{64}$/', $lk['token']) === 1 && $one("SELECT COUNT(*) FROM erp_invoice_links WHERE token_hash = '" . hash('sha256', $lk['token']) . "'") === 1 && $one("SELECT COUNT(*) FROM erp_invoice_links WHERE token_hash = '" . $lk['token'] . "'") === 0);
+$found = erp_link_find($lk['token']);
+$check('enlace: se encuentra por su código y está vigente', $found !== null && (int)$found['id'] === $lk['id'] && erp_link_state($found) === 'vigente' && erp_link_find(str_repeat('a', 64)) === null);
+$check('enlace: caduca a los 30 días', $lk['expires'] - time() > 29 * 86400 && $lk['expires'] - time() <= 30 * 86400);
+$check('enlace: rango de días 7–365 (30 por defecto)', erp_link_days_default() === 30 && ERP_LINK_DAYS_MIN === 7 && ERP_LINK_DAYS_MAX === 365);
+$check('enlace: no se anula uno de otra factura', erp_link_revoke($firstId + 1, $lk['id']) === false && erp_link_state(erp_link_find($lk['token'])) === 'vigente');
+$check('enlace: anular lo deja anulado, lo anota y no se repite', erp_link_revoke($firstId, $lk['id']) === true && erp_link_state(erp_link_find($lk['token'])) === 'anulado' && erp_link_revoke($firstId, $lk['id']) === false && $one("SELECT COUNT(*) FROM erp_invoice_events WHERE invoice_id = $firstId AND kind = 'enlace_revocado'") === 1);
+$lk2 = erp_link_create($firstId, 'prueba@ejemplo.com', 7, 'batería');
+$db->prepare('UPDATE erp_invoice_links SET expires_at = ? WHERE id = ?')->execute([time() - 5, $lk2['id']]);
+$check('enlace: caducado', erp_link_state(erp_link_find($lk2['token'])) === 'caducado');
+$vars = erp_invoice_doc_vars($realNum);
+$html = $vars ? erp_invoice_email_html($vars, "Hola\nMensaje de prueba", 'https://ejemplo.test/factura/' . $lk['token'], time() + 86400) : '';
+$check('correo HTML con una factura real: número, total, enlace y líneas', $vars !== null && str_contains($html, $realNum) && str_contains($html, erp_money((int)$vars['inv']['total_cents'])) && str_contains($html, '/factura/' . $lk['token']) && substr_count($html, '<tr>') >= 3, $realNum);
+$check('correo HTML: sin enlaces ni datos del panel y sin sello si no está anulada', !str_contains($html, '/admin') && !str_contains($html, $vars['d']['stamp']));
+if ($vars) {
+    $vars['inv']['annulled'] = 1;
+    $htmlAnn = erp_invoice_email_html($vars, 'x', 'https://ejemplo.test/factura/x', time() + 86400);
+    $check('correo HTML de una factura anulada lleva el sello', str_contains($htmlAnn, $vars['d']['stamp']));
+    $txt = erp_invoice_email_text($vars, 'x', 'https://ejemplo.test/factura/x', time() + 86400);
+    $check('correo de texto de una factura anulada lleva el sello', str_contains($txt, $vars['d']['stamp']));
+}
+$check('correo de envío: nunca el del cliente de contado', erp_send_default_to(['email_to' => ''], ['email' => 'x@ejemplo.com'], true) === '' && erp_send_default_to(['email_to' => ''], ['email' => 'x@ejemplo.com'], false) === 'x@ejemplo.com' && erp_send_default_to(['email_to' => 'a@ejemplo.com'], ['email' => 'x@ejemplo.com'], false) === 'a@ejemplo.com');
 $res3 = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
 erp_job_clear();
 $check('sincronizar de nuevo no toca el estado propio (cobros, notas, historial)', $one('SELECT COUNT(*) FROM erp_invoice_state') === $cand && $res3['counts']['inv']['new'] + $res3['counts']['inv']['changed'] === 0);

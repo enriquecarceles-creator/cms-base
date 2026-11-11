@@ -196,6 +196,10 @@ const SCHEMA_ERP_V22_COLUMNS = [
     'origin' => "{S} NOT NULL DEFAULT 'ncs'",
     'delivered_cents' => '{BIG} NOT NULL DEFAULT 0',
 ];
+/** Versión 24: fecha de la primera apertura de cada enlace de factura (B3b). */
+const SCHEMA_ERP_V24_COLUMNS = [
+    'first_view_at' => '{BIG} NOT NULL DEFAULT 0',
+];
 const SCHEMA_ERP_DOCS_DDL = "
     CREATE TABLE erp_invoice_state (
         id {ID},
@@ -236,6 +240,7 @@ const SCHEMA_ERP_DOCS_DDL = "
         email_to {S} NOT NULL DEFAULT '',
         revoked_at {BIG} NOT NULL DEFAULT 0,
         views {I} NOT NULL DEFAULT 0,
+        first_view_at {BIG} NOT NULL DEFAULT 0,
         last_view_at {BIG} NOT NULL DEFAULT 0
     );
     CREATE INDEX idx_erp_ilink_inv ON erp_invoice_links(invoice_id);
@@ -461,6 +466,14 @@ function migrate_schema(CmsPdo $pdo): void
         if (!in_array('erp_invoice_state', db_tables($pdo), true)) {
             foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
+            }
+        }
+    }
+    if ($ver < 24 && in_array('erp_invoice_links', db_tables($pdo), true)) {
+        $have = db_columns($pdo, 'erp_invoice_links');
+        foreach (SCHEMA_ERP_V24_COLUMNS as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'erp_invoice_links', $col, $def);
             }
         }
     }

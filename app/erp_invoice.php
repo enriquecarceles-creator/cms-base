@@ -118,9 +118,17 @@ function admin_invoice(string $num, string $sub = ''): void
     $id = (int)$inv['id'];
     $self = '/admin/ventas/' . rawurlencode($num);
 
+    $sendForm = null;
+    $sendErrors = [];
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $act = (string)($_POST['action'] ?? '');
+        if ($act === 'link_revoke') {
+            erp_invoice_link_revoke_post($inv, $self);
+        }
+        if ($act === 'send' && $sub === 'enviar') {
+            [$sendForm, $sendErrors] = erp_invoice_send_post($inv, $self); // si va bien, redirige; si no, se vuelve a enseñar la pantalla
+        }
         if ($act === 'note_add') {
             $note = mb_substr(trim(str_replace("\r\n", "\n", (string)($_POST['note'] ?? ''))), 0, ERP_INVOICE_NOTE_MAX);
             if ($note === '') {
@@ -177,7 +185,9 @@ function admin_invoice(string $num, string $sub = ''): void
             flash('Cambios guardados.');
             redirect($self);
         }
-        redirect($self);
+        if ($sendForm === null) {
+            redirect($self);
+        }
     }
 
     $st = $db->prepare('SELECT * FROM erp_customers WHERE cust_code = ?');
@@ -203,6 +213,10 @@ function admin_invoice(string $num, string $sub = ''): void
         admin_render('invoice_edit', $v);
         return;
     }
+    if ($sub === 'enviar') {
+        erp_invoice_send_screen($v, $sendForm, $sendErrors);
+        return;
+    }
     if ($sub !== '') {
         not_found();
         return;
@@ -221,6 +235,7 @@ function admin_invoice(string $num, string $sub = ''): void
         $st = $db->prepare('SELECT kind, detail, username, created_at FROM erp_invoice_events WHERE invoice_id = ? ORDER BY created_at DESC, id DESC LIMIT 200');
         $st->execute([$id]);
         $v['events'] = $st->fetchAll();
+        $v['links'] = erp_links_for($id);
     }
     admin_render('invoice_form', $v);
 }

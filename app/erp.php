@@ -17,6 +17,7 @@ require_once __DIR__ . '/mdb.php';
 require_once __DIR__ . '/erp_client.php';
 require_once __DIR__ . '/documents.php';
 require_once __DIR__ . '/erp_invoice.php';
+require_once __DIR__ . '/erp_invoice_send.php';
 require_once __DIR__ . '/erp_sales.php';
 
 const ERP_STAGE = DATA_DIR . '/erp_stage.sqlite';

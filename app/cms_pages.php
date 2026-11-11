@@ -19,7 +19,7 @@ const PAGE_REVIEW_MARK = 'BORRADOR SIN REVISAR';
 
 /** Direcciones que una página no puede usar (rutas de la web y carpetas/archivos de la instalación). */
 const PAGE_RESERVED = ['catalogo', 'producto', 'contacto', 'admin', 'buscar', 'sitemap.xml', 'robots.txt', 'assets', 'uploads',
-    'data', 'app', 'index.php', 'instalar.php', 'router.php', 'favicon.ico', 'login', 'api'];
+    'data', 'app', 'index.php', 'instalar.php', 'router.php', 'favicon.ico', 'login', 'api', 'factura'];
 
 /** Mensaje de error si la dirección no vale (o null si vale). */
 function page_slug_error(string $slug, int $ignoreId = 0): ?string

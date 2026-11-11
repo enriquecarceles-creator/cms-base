@@ -26,7 +26,7 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
   <div class="if-grp">
     <a class="btn small" href="<?= e(url($self . '/ver')) ?>" target="_blank" rel="noopener">Imprimir</a>
     <a class="btn small ghost" href="<?= e(url($self . '/modificar')) ?>">Modificar</a>
-    <?php if (!empty($mailReady)): ?><a class="btn small ghost" href="<?= e(url($self . '/enviar')) ?>">Enviar por email</a><?php endif; ?>
+    <a class="btn small ghost" href="<?= e(url($self . '/enviar')) ?>">Enviar por email</a>
     <?php if ($cust): ?><a class="btn small ghost" href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
     <a class="btn small ghost" href="<?= e(url('/admin/ventas')) ?>">Volver</a>
   </div>
@@ -137,6 +137,30 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
       <?php endif; ?>
 
     <?php else: ?>
+      <?php if (!empty($links)): ?>
+        <h3 style="margin:0 0 6px">Enlaces enviados</h3>
+        <p class="muted" style="margin:0 0 8px"><small>Quien tenga un enlace vigente ve esta factura sin contraseña. Si se envió al correo equivocado, anúlalo. Algunos programas de correo abren los enlaces solos para comprobarlos, así que «primera apertura» puede ser anterior a que lo lea la persona.</small></p>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th scope="col">Enviado</th><th scope="col">A</th><th scope="col">Caduca</th><th scope="col">Estado</th><th scope="col">Visitas</th><th scope="col">Primera apertura</th><th scope="col">Última</th><th scope="col"></th></tr></thead>
+          <tbody>
+          <?php foreach ($links as $lk): $ls = erp_link_state($lk); ?>
+            <tr>
+              <td><?= e(date('d/m/Y H:i', (int)$lk['created_at'])) ?><br><small class="muted"><?= e($lk['created_by']) ?></small></td>
+              <td><?= e($lk['email_to']) ?></td>
+              <td><?= e(date('d/m/Y', (int)$lk['expires_at'])) ?></td>
+              <td><?= $ls === 'vigente' ? '<span class="tag tag-ok">Vigente</span>' : ($ls === 'anulado' ? '<span class="tag tag-off">Anulado ' . e(date('d/m/Y', (int)$lk['revoked_at'])) . '</span>' : '<span class="tag">Caducado</span>') ?></td>
+              <td><?= (int)$lk['views'] ?></td>
+              <td><?= (int)$lk['first_view_at'] > 0 ? e(date('d/m/Y H:i', (int)$lk['first_view_at'])) : '—' ?></td>
+              <td><?= (int)$lk['last_view_at'] > 0 ? e(date('d/m/Y H:i', (int)$lk['last_view_at'])) : '—' ?></td>
+              <td><?php if ($ls === 'vigente'): ?>
+                <form method="post" action="<?= e(url($self)) ?>" class="inline" onsubmit="return confirm('¿Anular este enlace? Quien lo tenga ya no podrá abrir la factura.')"><?= csrf_field() ?><input type="hidden" name="action" value="link_revoke"><input type="hidden" name="id" value="<?= (int)$lk['id'] ?>"><button class="link danger" type="submit">Anular enlace</button></form>
+              <?php endif; ?></td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table></div>
+        <h3 style="margin:14px 0 6px">Movimientos</h3>
+      <?php endif; ?>
       <ul class="if-hist">
         <?php foreach ($events as $ev): ?>
           <li><span class="when"><?= e(date('d/m/Y H:i', (int)$ev['created_at'])) ?></span><strong><?= e(ERP_EVENT_LABELS[$ev['kind']] ?? $ev['kind']) ?></strong><?= $ev['detail'] !== '' ? ' — ' . e($ev['detail']) : '' ?><span class="muted"><?= $ev['username'] !== '' ? ' · ' . e($ev['username']) : '' ?></span></li>

@@ -44,6 +44,16 @@ try {
         case 'sitemap.xml':
             page_sitemap();
             break;
+        case 'factura':
+            // Enlace seguro a una factura enviada por correo (B3b): /factura/<código>; cualquier otra cosa, 404
+            if (count($segs) !== 2) {
+                not_found();
+                break;
+            }
+            require_once __DIR__ . '/app/auth.php';
+            require_once __DIR__ . '/app/erp.php';
+            page_invoice_link($segs[1]);
+            break;
         case 'robots.txt':
             header('Content-Type: text/plain; charset=utf-8');
             if (setting('noindex') === '1') {

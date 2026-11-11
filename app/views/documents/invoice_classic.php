@@ -4,6 +4,7 @@
  * $payLabel, $map, $nb, $d (diseño: color, font_css, logo_h, margin_mm, cols, title, stamp, footer), $co (empresa).
  * Para otro diseño, copiar este archivo como invoice_<nombre>.php y poner doc_template = <nombre>.
  */
+$public = !empty($public); // enlace público enviado por correo: sin nada del panel
 $annulled = (int)$inv['annulled'] === 1;
 $credit = (int)$inv['total_cents'] < 0;
 $fmtPct = fn($p) => $p === null ? '—' : rtrim(rtrim(number_format((float)$p, 1, ',', ''), '0'), ',') . ' %';
@@ -77,6 +78,10 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 </head>
 <body>
 <div class="toolbar">
+  <?php if ($public): ?>
+  <div class="grp"><strong><?= e($co['legal'] !== '' ? $co['legal'] : site_name()) ?></strong></div>
+  <div class="grp"><button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button></div>
+  <?php else: ?>
   <div class="grp">
     <a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$inv['inv_number']))) ?>">← Formulario</a>
     <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['prev']) . '/ver')) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
@@ -87,6 +92,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <a href="<?= e(url('/admin/ventas')) ?>">Ventas</a>
     <button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button>
   </div>
+  <?php endif; ?>
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
 <div class="page"><article class="sheet">
@@ -124,7 +130,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
         <?php foreach ($custAddr as $line): ?><p><?= e($line) ?></p><?php endforeach; ?>
       <?php endif; ?>
     </div>
-    <?php if ($cust && !$isRetail): ?>
+    <?php if ($cust && !$isRetail && !$public): ?>
       <div style="text-align:right"><p>Código <strong><?= e($cust['cust_code']) ?></strong></p><p class="toolbar-hide"><a href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver ficha del cliente</a></p></div>
     <?php endif; ?>
   </section>
@@ -138,7 +144,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <?php foreach ($lines as $l): $code = (string)$l['article_code']; $inf = $map[mb_strtolower($code)] ?? null; ?>
       <tr<?= (int)$l['qty_milli'] < 0 ? ' class="off"' : '' ?>>
         <?php foreach ($cols as $c): ?>
-          <?php if ($c === 'code'): ?><td><?php if ($inf): ?><a href="<?= e(url('/admin/articulo/' . (int)$inf['id'])) ?>" style="color:inherit"><?= e($code) ?></a><?php else: ?><?= e($code) ?><?php endif; ?></td>
+          <?php if ($c === 'code'): ?><td><?php if ($inf && !$public): ?><a href="<?= e(url('/admin/articulo/' . (int)$inf['id'])) ?>" style="color:inherit"><?= e($code) ?></a><?php else: ?><?= e($code) ?><?php endif; ?></td>
           <?php elseif ($c === 'desc'): ?><td><?= e($l['title']) ?></td>
           <?php elseif ($c === 'size'): ?><td><?= e($sizeTxt($l)) ?></td>
           <?php elseif ($c === 'color'): ?><td><?= e($colorTxt($l)) ?></td>
