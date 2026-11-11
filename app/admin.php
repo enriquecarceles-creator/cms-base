@@ -301,9 +301,19 @@ function admin_home(): void
 /* ---------- Lista de artículos: filtros y vuelta a la lista ---------- */
 
 
+/** Artículos por página en la lista del panel. */
+const ADMIN_PER_PAGE = 50;
+
+/** Columnas por las que se puede ordenar la lista (lista cerrada: nunca se pega texto del usuario en el SQL). */
+const ADMIN_SORTS = ['ref', 'nombre', 'familia', 'precio', 'stock', 'visible', 'modificado'];
+
+/** Borrar más de estos artículos de una vez pide escribir el número para confirmar. */
+const ADMIN_BULK_TYPE_OVER = 50;
+
 /**
  * Filtros válidos de la lista de artículos (lo demás se descarta).
  * c = familia (incluye sus subfamilias) · q = nombre o referencia · visible = 1|0 · foto = 1|0 · precio = 1|0
+ * orden = columna (ADMIN_SORTS) · dir = asc|desc · pag = página (desde 1)
  */
 function admin_list_query(array $src): array
 {
@@ -319,6 +329,15 @@ function admin_list_query(array $src): array
         if (isset($src[$k]) && in_array((string)$src[$k], ['0', '1'], true)) {
             $out[$k] = (string)$src[$k];
         }
+    }
+    if (in_array((string)($src['orden'] ?? ''), ADMIN_SORTS, true)) {
+        $out['orden'] = (string)$src['orden'];
+        if (($src['dir'] ?? '') === 'desc') {
+            $out['dir'] = 'desc';
+        }
+    }
+    if ((int)($src['pag'] ?? 0) > 1) {
+        $out['pag'] = (int)$src['pag'];
     }
     return $out;
 }
@@ -351,7 +370,23 @@ function admin_price_field(): ?array
     return $any;
 }
 
-/** Condiciones SQL de los filtros de la lista: [sql, argumentos]. */
+/** Campo del stock: el que se llama «Stock»; si no, el primer número interno; o null. */
+function admin_stock_field(): ?array
+{
+    foreach (fields_all() as $f) {
+        if ($f['slug'] === 'stock' || import_norm_simple($f['name']) === 'stock') {
+            return $f;
+        }
+    }
+    foreach (fields_all() as $f) {
+        if ($f['kind'] === 'number' && !$f['is_public']) {
+            return $f;
+        }
+    }
+    return null;
+}
+
+/** Condiciones SQL de los filtros de la lista: [sql, argumentos]. Necesita los alias p, c (familia) y pc (familia padre). */
 function admin_list_where(array $f): array
 {
     $sql = '';
@@ -379,26 +414,209 @@ function admin_list_where(array $f): array
     return [$sql, $args];
 }
 
+/**
+ * ORDER BY de la lista. Precio y stock se ordenan como número (CAST … AS DECIMAL, igual en SQLite,
+ * MariaDB y SQL Server) solo si el campo es de tipo precio o número; los vacíos van siempre al final.
+ */
+function admin_list_order(array $f, ?array $pf, ?array $sf): string
+{
+    $d = ($f['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';
+    $num = fn(string $alias, ?array $field) => $field && in_array($field['kind'], ['price', 'number'], true)
+        ? "CASE WHEN $alias.value IS NULL THEN 1 ELSE 0 END, CAST($alias.value AS DECIMAL(14,4)) $d, p.name, p.id"
+        : "CASE WHEN $alias.value IS NULL THEN 1 ELSE 0 END, $alias.value $d, p.name, p.id";
+    return match ($f['orden'] ?? '') {
+        'ref' => "CASE WHEN p.ref = '' THEN 1 ELSE 0 END, p.ref $d, p.id",
+        'nombre' => "p.name $d, p.id",
+        'familia' => "COALESCE(pc.name, c.name) $d, CASE WHEN pc.id IS NULL THEN 0 ELSE 1 END, c.name $d, p.name, p.id",
+        'precio' => $pf ? $num('pr', $pf) : PCAT_ORDER,
+        'stock' => $sf ? $num('sk', $sf) : PCAT_ORDER,
+        'visible' => "p.visible $d, p.name, p.id",
+        'modificado' => "p.updated_at $d, p.id $d",
+        default => PCAT_ORDER,
+    };
+}
+
+/** Ids de los artículos que cumplen unos filtros (para las acciones sobre «todos los del filtro»). */
+function admin_list_ids(array $filters): array
+{
+    [$where, $args] = admin_list_where($filters);
+    $st = db()->prepare('SELECT p.id FROM products p ' . PCAT_JOIN . ' WHERE 1=1' . $where);
+    $st->execute($args);
+    return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/** Ids enviados en el formulario, solo los que existen de verdad. */
+function admin_existing_ids(array $raw): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $raw), fn($i) => $i > 0)));
+    $out = [];
+    foreach (array_chunk($ids, 500) as $chunk) {
+        $st = db()->prepare('SELECT id FROM products WHERE id IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')');
+        $st->execute($chunk);
+        $out = array_merge($out, array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)));
+    }
+    return $out;
+}
+
+/** Ocultar, mostrar o cambiar de familia varios artículos (por tandas de 500, en una transacción). Devuelve cuántos. */
+function admin_bulk_update(array $ids, string $op, int $target): int
+{
+    $db = db();
+    $now = date('Y-m-d H:i:s');
+    [$set, $arg] = match ($op) {
+        'hide' => ['visible = 0', []],
+        'show' => ['visible = 1', []],
+        'move' => ['category_id = ?', [$target]],
+    };
+    $n = 0;
+    $db->beginTransaction();
+    try {
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $st = $db->prepare('UPDATE products SET ' . $set . ', updated_at = ? WHERE id IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')');
+            $st->execute(array_merge($arg, [$now], $chunk));
+            $n += $st->rowCount();
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    return $n;
+}
+
+/**
+ * Acciones en bloque (POST action=bulk): op = hide|show|move|delete; scope = sel (marcados) | all (todos los del filtro).
+ * «Todos los del filtro» y borrar siempre pasan antes por una página de confirmación con el número de artículos;
+ * borrar más de ADMIN_BULK_TYPE_OVER pide escribir ese número. Al terminar se vuelve a la lista tal cual estaba.
+ */
+function admin_products_bulk(array $back): void
+{
+    $op = (string)($_POST['op'] ?? '');
+    $scope = ($_POST['scope'] ?? '') === 'all' ? 'all' : 'sel';
+    $target = (int)($_POST['target'] ?? 0);
+    $listUrl = admin_list_url($back);
+    if (!in_array($op, ['hide', 'show', 'move', 'delete'], true)) {
+        flash('Elige qué hacer con los artículos.', 'err');
+        redirect($listUrl);
+    }
+    if ($op === 'move' && !in_array($target, array_map('intval', array_column(admin_category_options(), 'id')), true)) {
+        flash('Elige a qué ' . term('family', true) . ' moverlos.', 'err');
+        redirect($listUrl);
+    }
+    $ids = $scope === 'all' ? admin_list_ids($back) : admin_existing_ids((array)($_POST['ids'] ?? []));
+    $n = count($ids);
+    if (!$n) {
+        flash($scope === 'all' ? 'No hay artículos con ese filtro.' : 'No has marcado ningún artículo.', 'err');
+        redirect($listUrl);
+    }
+    $needConfirm = $scope === 'all' || $op === 'delete';
+    $needType = $op === 'delete' && $n > ADMIN_BULK_TYPE_OVER;
+    $confirmed = ($_POST['confirm'] ?? '') === '1';
+    if ($confirmed && $needType && trim((string)($_POST['typed'] ?? '')) !== (string)$n) {
+        flash('El número escrito no coincide con ' . $n . ' (puede que la lista haya cambiado). No se ha borrado nada.', 'err');
+        $confirmed = false;
+    }
+    if ($confirmed && $scope === 'all' && (int)($_POST['expected'] ?? -1) !== $n) {
+        flash('Mientras confirmabas ha cambiado el número de artículos (ahora son ' . $n . '). Revísalo antes de seguir.', 'err');
+        $confirmed = false;
+    }
+    if ($needConfirm && !$confirmed) {
+        $st = db()->prepare('SELECT name, ref FROM products WHERE id IN (' . implode(',', array_fill(0, min(10, $n), '?')) . ') ORDER BY name');
+        $st->execute(array_slice($ids, 0, 10));
+        $targetName = '';
+        foreach (admin_category_options() as $c) {
+            if ((int)$c['id'] === $target) {
+                $targetName = $c['name'];
+            }
+        }
+        admin_render('bulk_confirm', [
+            'op' => $op, 'scope' => $scope, 'n' => $n, 'ids' => $scope === 'sel' ? $ids : [], 'target' => $target,
+            'targetName' => $targetName, 'sample' => $st->fetchAll(), 'needType' => $needType, 'back' => $back,
+            'crumb' => 'Confirmar', 'title' => 'Confirmar',
+        ]);
+        return;
+    }
+    if ($op === 'delete') {
+        [$del, $gone, $kept] = delete_products($ids);
+        flash($del . ' artículo' . ($del === 1 ? '' : 's') . ' borrado' . ($del === 1 ? '' : 's') . '. ' . $gone . ' foto' . ($gone === 1 ? '' : 's') . ' borrada' . ($gone === 1 ? '' : 's') . ' de uploads/'
+            . ($kept ? '; ' . $kept . ' se conserva' . ($kept === 1 ? '' : 'n') . ' porque se usa' . ($kept === 1 ? '' : 'n') . ' en otro sitio' : '') . '.');
+    } else {
+        $done = admin_bulk_update($ids, $op, $target);
+        $verb = ['hide' => 'ocultado', 'show' => 'mostrado', 'move' => 'movido'][$op];
+        flash($done . ' artículo' . ($done === 1 ? '' : 's') . ' ' . $verb . ($done === 1 ? '' : 's') . ($op === 'move' ? ' a «' . (admin_category_name($target)) . '»' : '') . '.');
+    }
+    redirect($listUrl);
+}
+
+/** Nombre de una familia (con su padre: «Familia › Subfamilia»). */
+function admin_category_name(int $id): string
+{
+    foreach (admin_category_options() as $c) {
+        if ((int)$c['id'] === $id) {
+            return (string)$c['name'];
+        }
+    }
+    return '';
+}
+
 function admin_products(): void
 {
     $db = db();
     $filters = admin_list_query($_GET);
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
+        $back = admin_back();
+        if (($_POST['action'] ?? '') === 'bulk') {
+            admin_products_bulk($back);
+            return;
+        }
         if (($_POST['action'] ?? '') === 'toggle') {
             $db->prepare('UPDATE products SET visible = 1 - visible, updated_at = ? WHERE id = ?')
                 ->execute([date('Y-m-d H:i:s'), (int)($_POST['id'] ?? 0)]);
             flash('Visibilidad actualizada.');
         }
-        redirect(admin_list_url(admin_back()));
+        redirect(admin_list_url($back));
     }
-    $cats = admin_category_options();
+    $pf = admin_price_field();
+    $sf = admin_stock_field();
     [$where, $args] = admin_list_where($filters);
-    $st = $db->prepare('SELECT p.*, ' . PCAT_FIELDS . ' FROM products p ' . PCAT_JOIN . ' WHERE 1=1' . $where . ' ORDER BY ' . PCAT_ORDER);
+
+    // 1) Cuántos hay con este filtro
+    $st = $db->prepare('SELECT COUNT(*) FROM products p ' . PCAT_JOIN . ' WHERE 1=1' . $where);
     $st->execute($args);
+    $total = (int)$st->fetchColumn();
+    $pages = max(1, (int)ceil($total / ADMIN_PER_PAGE));
+    $page = min((int)($filters['pag'] ?? 1), $pages);
+    if ($page > 1) {
+        $filters['pag'] = $page;
+    } else {
+        unset($filters['pag']);
+    }
+
+    // 2) Los 50 de esta página, con su familia, precio y stock (una sola consulta)
+    $joins = '';
+    $cols = '';
+    $jargs = [];
+    if ($pf) {
+        $joins .= ' LEFT JOIN product_fields pr ON pr.product_id = p.id AND pr.field_id = ?';
+        $cols .= ', pr.value AS price';
+        $jargs[] = $pf['id'];
+    }
+    if ($sf) {
+        $joins .= ' LEFT JOIN product_fields sk ON sk.product_id = p.id AND sk.field_id = ?';
+        $cols .= ', sk.value AS stock';
+        $jargs[] = $sf['id'];
+    }
+    $st = $db->prepare('SELECT p.id, p.ref, p.name, p.image, p.visible, p.updated_at, p.category_id, ' . PCAT_FIELDS . $cols
+        . ' FROM products p ' . PCAT_JOIN . $joins . ' WHERE 1=1' . $where
+        . ' ORDER BY ' . admin_list_order($filters, $pf, $sf)
+        . ' LIMIT ' . ADMIN_PER_PAGE . ($page > 1 ? ' OFFSET ' . (($page - 1) * ADMIN_PER_PAGE) : ''));
+    $st->execute(array_merge($jargs, $args));
+
     admin_render('products', [
-        'rows' => $st->fetchAll(), 'cats' => $cats, 'c' => (int)($filters['c'] ?? 0), 'q' => (string)($filters['q'] ?? ''),
-        'filters' => $filters,
+        'rows' => $st->fetchAll(), 'cats' => admin_category_options(), 'filters' => $filters,
+        'c' => (int)($filters['c'] ?? 0), 'q' => (string)($filters['q'] ?? ''),
+        'total' => $total, 'page' => $page, 'pages' => $pages, 'pf' => $pf, 'sf' => $sf,
         'back' => http_build_query($filters),
         'title' => 'Artículos',
     ]);
@@ -435,8 +653,7 @@ function admin_product(string $id): void
         }
         csrf_check();
         if (($_POST['action'] ?? '') === 'delete' && $p) {
-            delete_product_files((int)$p['id']);
-            $db->prepare('DELETE FROM products WHERE id = ?')->execute([$p['id']]);
+            delete_products([(int)$p['id']]); // sus fotos solo se borran si no las usa nadie más
             flash('Artículo «' . $p['name'] . '» eliminado.');
             redirect(admin_list_url($back));
         }

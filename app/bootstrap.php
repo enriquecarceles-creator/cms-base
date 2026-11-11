@@ -704,11 +704,79 @@ function sync_gallery(int $productId): void
     db()->prepare('UPDATE products SET image = ? WHERE id = ?')->execute([$rows[0]['file'] ?? null, $productId]);
 }
 
-function delete_product_files(int $productId): void
+/** ¿Algo sigue usando este archivo de uploads/? (fotos de artículos, portadas y banners de familias, slider, ajustes) */
+function upload_in_use(string $file): bool
 {
-    foreach (gallery_for($productId) as $g) {
-        delete_image($g['file']);
+    $db = db();
+    foreach ([
+        'SELECT COUNT(*) FROM product_images WHERE file = ?',
+        'SELECT COUNT(*) FROM products WHERE image = ?',
+        'SELECT COUNT(*) FROM categories WHERE cover = ? OR banner = ?',
+        'SELECT COUNT(*) FROM slides WHERE file = ?',
+        'SELECT COUNT(*) FROM settings WHERE value = ?',
+    ] as $sql) {
+        $st = $db->prepare($sql);
+        $st->execute(array_fill(0, substr_count($sql, '?'), $file));
+        if ((int)$st->fetchColumn() > 0) {
+            return true;
+        }
     }
+    return false;
+}
+
+/**
+ * Borra artículos (con sus valores de campos y sus fotos). Los archivos de uploads/ solo se borran
+ * si ya no los usa nadie más (otro artículo, una familia, el slider, el logotipo…).
+ * @return array{0: int, 1: int, 2: int} [artículos borrados, fotos borradas, fotos conservadas porque se usan en otro sitio]
+ */
+function delete_products(array $ids): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($i) => $i > 0)));
+    if (!$ids) {
+        return [0, 0, 0];
+    }
+    $db = db();
+    $files = [];
+    $deleted = 0;
+    $db->beginTransaction();
+    try {
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $in = implode(',', array_fill(0, count($chunk), '?'));
+            $st = $db->prepare('SELECT file FROM product_images WHERE product_id IN (' . $in . ')');
+            $st->execute($chunk);
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $f) {
+                $files[(string)$f] = true;
+            }
+            $st = $db->prepare('SELECT image FROM products WHERE id IN (' . $in . ') AND image IS NOT NULL');
+            $st->execute($chunk);
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $f) {
+                $files[(string)$f] = true;
+            }
+            $db->prepare('DELETE FROM product_fields WHERE product_id IN (' . $in . ')')->execute($chunk);
+            $db->prepare('DELETE FROM product_images WHERE product_id IN (' . $in . ')')->execute($chunk);
+            $st = $db->prepare('DELETE FROM products WHERE id IN (' . $in . ')');
+            $st->execute($chunk);
+            $deleted += $st->rowCount();
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    // Archivos: después de borrar las filas, para saber si alguien más los usa
+    $gone = $kept = 0;
+    foreach (array_keys($files) as $f) {
+        if ($f === '') {
+            continue;
+        }
+        if (upload_in_use($f)) {
+            $kept++;
+        } else {
+            delete_image($f);
+            $gone++;
+        }
+    }
+    return [$deleted, $gone, $kept];
 }
 
 require_once __DIR__ . '/photos.php';

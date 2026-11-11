@@ -253,3 +253,41 @@ fieldset.multi label.check{font-weight:400}
 .t-thumb{width:56px}
 .t-thumb img{display:block;width:40px;height:40px;object-fit:contain;background:var(--hover);border-radius:6px}
 .t-date{white-space:nowrap;color:var(--steel)}
+
+/* ===== Lista de artículos ===== */
+.lf{align-items:center}
+.lf label{display:block}
+.lf select{width:auto;max-width:220px}
+.lf-q{flex:1 1 220px}
+.lf-q input{width:100%}
+.lf-clear{font-size:.88rem;color:var(--steel)}
+.bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:0 0 10px}
+.bulk select{width:auto;max-width:240px;padding:6px 10px;font-size:.9rem}
+.bulk-scope{display:flex;flex-wrap:wrap;gap:4px 14px;border:0;padding:0;margin:0}
+.bulk-scope label.check{font-weight:400;font-size:.9rem}
+.tbl-wrap{width:100%;overflow-x:auto;border-radius:14px}
+.tbl.list{min-width:760px}
+.tbl.list th,.tbl.list td{padding:8px 10px}
+.tbl.list th a{color:var(--steel);text-decoration:none;white-space:nowrap}
+.tbl.list th a:hover{color:var(--ink)}
+.tbl.list th[aria-sort="ascending"] a,.tbl.list th[aria-sort="descending"] a{color:var(--ink)}
+.arr{color:var(--gold)}
+.t-check{width:34px}
+.t-check input{width:18px;height:18px;margin:0}
+.t-name a{color:var(--ink);text-decoration:none}
+.t-name a:hover{text-decoration:underline;text-decoration-color:var(--gold)}
+.t-ref{white-space:nowrap;color:var(--steel);font-variant-numeric:tabular-nums}
+.t-num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tbl.list tbody tr:hover td{background:#fcfbf9}
+.pager{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin:14px 0}
+.pager-l{display:flex;flex-wrap:wrap;gap:4px}
+.pager-l a,.pager-l .cur,.pager-l .gap{min-width:36px;text-align:center;padding:6px 10px;border-radius:8px;text-decoration:none;font-size:.9rem}
+.pager-l a{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.pager-l a:hover{border-color:var(--gold)}
+.pager-l .cur{background:var(--ink);color:#fff}
+.pager-l .gap{color:var(--steel)}
+.confirm{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;max-width:760px}
+.confirm.danger-box{border-color:#e7cbc7}
+.confirm .form{border:0;padding:0}
+.btn.danger-solid{background:var(--err)}
+.btn.danger-solid:hover{background:#86291f}
