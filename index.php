@@ -54,7 +54,10 @@ try {
             admin_dispatch($segs);
             break;
         default:
-            not_found();
+            // Páginas propias (Web → Páginas): /<dirección>
+            if (count($segs) !== 1 || !page_custom($segs[0])) {
+                not_found();
+            }
     }
 } catch (Throwable $ex) {
     error_log((string)$ex);

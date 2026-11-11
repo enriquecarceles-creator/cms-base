@@ -56,6 +56,7 @@ $isContact = str_contains($path, '/contacto');
       <?php if ($soc): ?><br><?php foreach ($soc as $n => $u): ?><a href="<?= e($u) ?>" target="_blank" rel="noopener"><?= e($n) ?></a> <?php endforeach; ?><?php endif; ?>
     </div>
   </div>
+  <?php if ($fp = pages_visible()): ?><nav class="wrap foot-pages" aria-label="Información legal"><?php foreach ($fp as $pg): ?><a href="<?= e(url('/' . $pg['slug'])) ?>"><?= e($pg['title']) ?></a><?php endforeach; ?></nav><?php endif; ?>
   <?php if ($bn = brand_banner()): ?><div class="wrap foot-eu"><img src="<?= e($bn) ?>" alt="<?= e(setting('footer_banner_alt')) ?>" height="103" loading="lazy"></div><?php endif; ?>
 </footer>
 </body>

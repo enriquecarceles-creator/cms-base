@@ -789,6 +789,7 @@ function upload_in_use(string $file): bool
         'SELECT COUNT(*) FROM categories WHERE cover = ? OR banner = ?',
         'SELECT COUNT(*) FROM slides WHERE file = ?',
         'SELECT COUNT(*) FROM settings WHERE value = ?',
+        'SELECT COUNT(*) FROM pages WHERE hero = ?',
     ] as $sql) {
         $st = $db->prepare($sql);
         $st->execute(array_fill(0, substr_count($sql, '?'), $file));
@@ -796,7 +797,10 @@ function upload_in_use(string $file): bool
             return true;
         }
     }
-    return false;
+    // Fotos puestas dentro del texto de una página
+    $st = $db->prepare('SELECT COUNT(*) FROM pages WHERE body LIKE ?');
+    $st->execute(['%/uploads/' . $file . '%']);
+    return (int)$st->fetchColumn() > 0;
 }
 
 /**
@@ -857,6 +861,7 @@ function delete_products(array $ids): array
 require_once __DIR__ . '/photos.php';
 require_once __DIR__ . '/ftp.php';
 require_once __DIR__ . '/fields.php';
+require_once __DIR__ . '/cms_pages.php';
 
 
 /** Boceto técnico en líneas a partir de «alto x ancho» (mm). Formas: cilindrica, rectangular, conica. null si faltan medidas. */

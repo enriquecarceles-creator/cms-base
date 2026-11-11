@@ -38,7 +38,7 @@ function admin_dispatch(array $segs): void
         redirect('/admin/login');
     }
     require_login();
-    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
+    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
@@ -73,6 +73,9 @@ function admin_dispatch(array $segs): void
             break;
         case 'pagina-inicio':
             admin_home_page();
+            break;
+        case 'paginas':
+            admin_pages((string)($segs[2] ?? ''));
             break;
         case 'pagina-catalogo':
             admin_catalog_page();
@@ -171,6 +174,7 @@ function admin_menu(): array
             ['Empresa', '/admin/empresa', ['empresa'], true],
             ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio', 'slider'], true],
             ['Página del catálogo', '/admin/pagina-catalogo', ['pagina-catalogo'], true],
+            ['Páginas', '/admin/paginas', ['paginas'], true],
             ['Configuración', '/admin/configuracion', ['configuracion'], true],
             ['Campos', '/admin/campos', ['campos'], true],
             ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
@@ -1230,6 +1234,185 @@ function admin_config(): void
         'noindex' => setting('noindex') === '1',
         'title' => 'Configuración',
     ]);
+}
+
+/* ---------- Web → Páginas (páginas propias en /<dirección>) ---------- */
+
+/**
+ * /admin/paginas (lista) · /admin/paginas/nueva (plantillas o en blanco) · /admin/paginas/<id> (editar).
+ * Solo administradores (se comprueba en admin_dispatch). Todo POST lleva CSRF.
+ */
+function admin_pages(string $sub): void
+{
+    $db = db();
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        $a = (string)($_POST['action'] ?? '');
+        if ($a === 'toggle') {
+            $db->prepare('UPDATE pages SET visible = 1 - visible, updated_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s'), (int)($_POST['id'] ?? 0)]);
+            flash('Visibilidad actualizada.');
+            redirect('/admin/paginas');
+        }
+        if ($a === 'delete') {
+            admin_page_delete((int)($_POST['id'] ?? 0));
+            return;
+        }
+        if ($a === 'template') {
+            $t = page_templates()[(string)($_POST['tpl'] ?? '')] ?? null;
+            if (!$t) {
+                flash('Plantilla desconocida.', 'err');
+                redirect('/admin/paginas/nueva');
+            }
+            $slug = unique_slug('pages', $t[2]);
+            if (page_slug_error($slug) !== null) { // reservada o coincide con un archivo: no debería pasar con estos nombres
+                flash('No se puede crear la plantilla: ' . page_slug_error($slug), 'err');
+                redirect('/admin/paginas/nueva');
+            }
+            $now = date('Y-m-d H:i:s');
+            $max = (int)$db->query('SELECT COALESCE(MAX(sort), 0) + 10 FROM pages')->fetchColumn();
+            $db->prepare('INSERT INTO pages (title, slug, body, visible, sort, created_at, updated_at) VALUES (?,?,?,0,?,?,?)')
+                ->execute([$t[1], $slug, $t[3], $max, $now, $now]);
+            flash('Plantilla «' . $t[0] . '» creada como borrador oculto. Revísala, completa lo que ponga [completar] y borra el aviso antes de publicarla.');
+            redirect('/admin/paginas/' . (int)$db->lastInsertId());
+        }
+    }
+    if ($sub === '') {
+        $rows = $db->query('SELECT id, title, slug, body, visible, sort, updated_at FROM pages ORDER BY sort, title')->fetchAll();
+        admin_render('pages_list', ['rows' => $rows, 'title' => 'Páginas']);
+        return;
+    }
+    if ($sub === 'nueva') {
+        $have = array_column($db->query('SELECT slug FROM pages')->fetchAll(), 'slug');
+        $tpls = array_filter(page_templates(), fn($t) => !in_array($t[2], $have, true));
+        if ($tpls && empty($_GET['en-blanco']) && ($_POST['action'] ?? '') !== 'save') {
+            admin_render('page_new', ['tpls' => $tpls, 'first' => !$have, 'crumb' => 'Nueva', 'title' => 'Nueva página']);
+            return;
+        }
+        admin_page_form(null);
+        return;
+    }
+    $st = $db->prepare('SELECT * FROM pages WHERE id = ?');
+    $st->execute([(int)$sub]);
+    $page = $st->fetch();
+    if (!$page || !ctype_digit($sub)) {
+        not_found();
+        return;
+    }
+    admin_page_form($page);
+}
+
+/** Crear o editar una página. */
+function admin_page_form(?array $page): void
+{
+    $db = db();
+    $isNew = $page === null;
+    $f = $page ?? ['id' => 0, 'title' => '', 'slug' => '', 'body' => '', 'hero' => null, 'seo_title' => '', 'seo_desc' => '', 'visible' => 0, 'sort' => 0];
+    $errors = [];
+    $lost = 0;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save') {
+        if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+            flash('Las fotos pesan demasiado de una vez para el servidor.', 'err');
+            redirect('/admin/paginas/' . ($isNew ? 'nueva' : (int)$f['id']));
+        }
+        $f['title'] = mb_substr(trim(preg_replace('/\s+/u', ' ', (string)($_POST['title'] ?? ''))), 0, 150); // se escapa al mostrarlo
+        $f['body'] = mb_substr(trim(str_replace(["\r\n", "\r"], "\n", (string)($_POST['body'] ?? ''))), 0, PAGE_BODY_MAX);
+        $f['seo_title'] = mb_substr(trim(preg_replace('/\s+/u', ' ', (string)($_POST['seo_title'] ?? ''))), 0, 160);
+        $f['seo_desc'] = mb_substr(trim(preg_replace('/\s+/u', ' ', (string)($_POST['seo_desc'] ?? ''))), 0, 255); // VARCHAR(255) en MariaDB y SQL Server
+        $f['visible'] = empty($_POST['visible']) ? 0 : 1;
+        $f['sort'] = (int)($_POST['sort'] ?? 0);
+        if ($f['title'] === '') {
+            $errors[] = 'El título es obligatorio.';
+        }
+        $slugIn = trim((string)($_POST['slug'] ?? ''));
+        $f['slug'] = slugify($slugIn !== '' ? $slugIn : $f['title']);
+        if ($slugIn === '' && $f['title'] !== '') { // automática: si está repetida se le añade -2, -3…
+            $f['slug'] = unique_slug('pages', $f['slug'], (int)$f['id']);
+        }
+        if ($f['title'] !== '' || $slugIn !== '') {
+            if (($e = page_slug_error($f['slug'], (int)$f['id'])) !== null) {
+                $errors[] = $e;
+            }
+        }
+        if ($errors) {
+            foreach (normalize_files($_FILES['images'] ?? null) as $file) {
+                $lost += ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE ? 0 : 1;
+            }
+            if (!empty($_FILES['hero']['name']) && ($_FILES['hero']['error'] ?? 4) !== UPLOAD_ERR_NO_FILE) {
+                $lost++;
+            }
+        } else {
+            $oldHero = (string)($f['hero'] ?? '');
+            try {
+                if (!empty($_POST['hero_remove'])) {
+                    $f['hero'] = null;
+                } elseif (!empty($_FILES['hero']['name']) && ($_FILES['hero']['error'] ?? 4) !== UPLOAD_ERR_NO_FILE) {
+                    $f['hero'] = save_image($_FILES['hero'], 2000, false);
+                }
+            } catch (RuntimeException $e) {
+                flash('Imagen de cabecera: ' . $e->getMessage(), 'err');
+            }
+            // Fotos subidas: se guardan y se añaden al final del texto (con la descripción por rellenar)
+            foreach (normalize_files($_FILES['images'] ?? null) as $file) {
+                if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                    continue;
+                }
+                try {
+                    $f['body'] = rtrim($f['body']) . "\n\n![Describe la imagen](/uploads/" . save_image($file, 1600, false) . ')';
+                } catch (RuntimeException $e) {
+                    flash((($file['name'] ?? '') !== '' ? $file['name'] . ': ' : '') . $e->getMessage(), 'err');
+                }
+            }
+            $f['body'] = trim($f['body']);
+            $now = date('Y-m-d H:i:s');
+            if ($isNew) {
+                $db->prepare('INSERT INTO pages (title, slug, body, hero, seo_title, seo_desc, visible, sort, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$f['title'], $f['slug'], $f['body'], $f['hero'], $f['seo_title'], $f['seo_desc'], $f['visible'], $f['sort'], $now, $now]);
+                $id = (int)$db->lastInsertId();
+            } else {
+                $id = (int)$f['id'];
+                $db->prepare('UPDATE pages SET title = ?, slug = ?, body = ?, hero = ?, seo_title = ?, seo_desc = ?, visible = ?, sort = ?, updated_at = ? WHERE id = ?')
+                    ->execute([$f['title'], $f['slug'], $f['body'], $f['hero'], $f['seo_title'], $f['seo_desc'], $f['visible'], $f['sort'], $now, $id]);
+            }
+            if ($oldHero !== '' && $oldHero !== (string)$f['hero'] && !upload_in_use($oldHero)) {
+                delete_image($oldHero);
+            }
+            flash($isNew ? 'Página «' . $f['title'] . '» creada.' : 'Página guardada.');
+            if ($f['visible'] && str_contains($f['body'], PAGE_REVIEW_MARK)) {
+                flash('Esta página es pública pero todavía contiene el aviso «' . PAGE_REVIEW_MARK . '». Revisa el texto y borra ese párrafo.', 'err');
+            }
+            redirect('/admin/paginas/' . $id);
+        }
+    }
+    admin_render('page_form', [
+        'f' => $f, 'isNew' => $isNew, 'errors' => $errors, 'lostFiles' => $lost,
+        'crumb' => $isNew ? 'Nueva' : 'Editar «' . $f['title'] . '»', 'title' => $isNew ? 'Nueva página' : 'Editar página',
+    ]);
+}
+
+/** Borrar una página: primero una pantalla de confirmación (sin JavaScript), después se borra con sus fotos si nadie más las usa. */
+function admin_page_delete(int $id): void
+{
+    $st = db()->prepare('SELECT * FROM pages WHERE id = ?');
+    $st->execute([$id]);
+    $p = $st->fetch();
+    if (!$p) {
+        flash('Esa página ya no existe.', 'err');
+        redirect('/admin/paginas');
+    }
+    if (($_POST['confirm'] ?? '') !== '1') {
+        admin_render('page_confirm', ['p' => $p, 'crumb' => 'Borrar', 'title' => 'Borrar página']);
+        return;
+    }
+    db()->prepare('DELETE FROM pages WHERE id = ?')->execute([$id]);
+    $gone = 0;
+    foreach (page_files($p) as $file) {
+        if (!upload_in_use($file)) {
+            delete_image($file);
+            $gone++;
+        }
+    }
+    flash('Página «' . $p['title'] . '» borrada' . ($gone ? ' (y ' . $gone . ' foto' . ($gone === 1 ? '' : 's') . ' de uploads/)' : '') . '.');
+    redirect('/admin/paginas');
 }
 
 /* ---------- Campos libres del catálogo ---------- */

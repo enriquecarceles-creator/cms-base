@@ -51,6 +51,38 @@ function page_home(): void
     ]);
 }
 
+/**
+ * Página propia en /<slug>. Devuelve false si no existe. Las ocultas solo las ve el personal con sesión
+ * (como borrador, con noindex); para los visitantes son un 404.
+ */
+function page_custom(string $slug): bool
+{
+    if (!preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug)) { // solo direcciones en minúscula (MariaDB no distingue mayúsculas al comparar)
+        return false;
+    }
+    $st = db()->prepare('SELECT * FROM pages WHERE slug = ?');
+    $st->execute([$slug]);
+    $p = $st->fetch();
+    if (!$p || $p['slug'] !== $slug) {
+        return false;
+    }
+    $draft = !(int)$p['visible'];
+    if ($draft && !staff_logged_in()) {
+        return false;
+    }
+    if ($draft) {
+        header('Cache-Control: no-store');
+    }
+    $plain = md_plain((string)$p['body']);
+    render('page', [
+        'p' => $p, 'draft' => $draft, 'html' => md_render((string)$p['body']),
+        'title' => ($p['seo_title'] !== '' ? $p['seo_title'] : $p['title']) . ' · ' . site_name(),
+        'desc' => $p['seo_desc'] !== '' ? $p['seo_desc'] : $plain,
+        'noindex' => $draft,
+    ]);
+    return true;
+}
+
 function page_catalog(?string $slug): void
 {
     if ($slug === 'completo' && feature('pdf')) {
@@ -238,6 +270,9 @@ function page_sitemap(): void
     header('Content-Type: application/xml; charset=utf-8');
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     $urls = [url('/'), url('/catalogo'), url('/contacto')];
+    foreach (pages_visible() as $pg) {
+        $urls[] = url('/' . $pg['slug']);
+    }
     foreach (db()->query('SELECT slug FROM categories')->fetchAll() as $c) {
         $urls[] = url('/catalogo/' . $c['slug']);
     }

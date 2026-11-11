@@ -37,6 +37,23 @@ const SCHEMA_PROFILES_DDL = "
     );
 ";
 
+/** v16: páginas propias (/<slug>; ver app/cms_pages.php). El texto va en Markdown limitado, nunca HTML. */
+const SCHEMA_PAGES_DDL = "
+    CREATE TABLE pages (
+        id {ID},
+        title {S} NOT NULL,
+        slug {K} NOT NULL UNIQUE,
+        body {T} NOT NULL DEFAULT '',
+        hero {S} NULL,
+        seo_title {S} NOT NULL DEFAULT '',
+        seo_desc {S} NOT NULL DEFAULT '',
+        visible {I} NOT NULL DEFAULT 1,
+        sort {I} NOT NULL DEFAULT 0,
+        created_at {S} NOT NULL,
+        updated_at {S} NOT NULL
+    );
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -115,7 +132,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -140,6 +157,11 @@ function migrate_schema(CmsPdo $pdo): void
     }
     if ($ver < 15 && !in_array('import_profiles', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_PROFILES_DDL, $pdo->drv) as $st) {
+            $pdo->rawExec($st);
+        }
+    }
+    if ($ver < 16 && !in_array('pages', db_tables($pdo), true)) {
+        foreach (db_ddl(SCHEMA_PAGES_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
         }
     }

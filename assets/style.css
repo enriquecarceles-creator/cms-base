@@ -465,3 +465,20 @@ html{scrollbar-gutter:stable}
 .cat-pager{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;margin:28px 0 8px}
 .cat-pager a,.cat-pager span{min-width:40px;text-align:center;padding:8px 12px;border-radius:8px;text-decoration:none;border:1px solid var(--line)}
 .cat-pager .cur{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* Páginas propias (Web → Páginas) */
+.page-hero{height:clamp(160px,26vw,340px);background:center/cover no-repeat}
+.page-draft{margin:0;padding:10px 18px;background:#fdf3e1;color:#8a5a00;text-align:center;font-size:.92rem}
+.page-doc{max-width:780px}
+.page-doc h1{margin-bottom:.6em}
+.doc h2{font-size:1.35rem;margin:1.8em 0 .5em;font-weight:500}
+.doc h3{font-size:1.1rem;margin:1.5em 0 .4em;font-weight:600}
+.doc p,.doc ul,.doc ol{margin:0 0 1em}
+.doc ul,.doc ol{padding-left:1.4em}
+.doc li{margin:.2em 0}
+.doc img{max-width:100%;height:auto;border-radius:8px;display:block;margin:1em 0}
+.doc blockquote{margin:1em 0;padding:.6em 1em;border-left:3px solid var(--gold);background:var(--soft,#f7f6f3);color:var(--steel)}
+.doc blockquote p{margin:0}
+.doc a{color:var(--ink)}
+.foot-pages{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;padding-block:14px;font-size:.88rem;border-top:1px solid var(--line)}
+.foot-pages a{color:var(--steel)}
