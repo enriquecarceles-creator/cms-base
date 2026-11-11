@@ -364,7 +364,7 @@ function import_analyze(string $input, string $catalogPath = ''): array
         throw $lastErr;
     }
     if (!$catPages) {
-        throw new RuntimeException('No he encontrado familias de producto en ' . $origin . '. Indica la página que enlaza a todas las familias (por ejemplo /tienda).');
+        throw new RuntimeException('No he encontrado ' . term('families', true) . ' de producto en ' . $origin . '. Indica la página que enlaza a ' . tg('todas las', 'todos los') . ' ' . term('families', true) . ' (por ejemplo /tienda).');
     }
 
     $dbcats = db()->query('SELECT id, name, slug FROM categories WHERE parent_id IS NULL')->fetchAll();
@@ -496,7 +496,7 @@ return [
     'help' => 'Analiza las páginas de tu web actual y copia fotos, descripciones y medidas. Úsalo si no puedes exportar el CSV. Más lento y menos exacto.',
     'fields' => [
         ['name' => 'base', 'type' => 'url', 'label' => 'Dirección de la web', 'placeholder' => 'https://tu-web-antigua.com', 'required' => true],
-        ['name' => 'path', 'type' => 'text', 'label' => 'Opcional: página que enlaza a todas las familias', 'placeholder' => '/tienda',
+        ['name' => 'path', 'type' => 'text', 'label' => 'Opcional: página que enlaza a ' . tg('todas las', 'todos los') . ' ' . term('families', true), 'placeholder' => '/tienda',
             'help' => 'Si no la indicas, se prueba con /catalogo, /tienda, /shop y la portada.'],
     ],
     'analyze' => 'wpweb_analyze',

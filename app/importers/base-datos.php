@@ -389,7 +389,7 @@ function dbimp_analyze(array $in): array
     $name = $in['names']['db'] ?: basename($file);
     $lname = strtolower($name);
     if (filesize($file) > DBIMP_MAX_BYTES) {
-        throw new RuntimeException('La base de datos pesa más de 300 MB. Exporta solo las tablas de artículos, familias y fotos.');
+        throw new RuntimeException('La base de datos pesa más de 300 MB. Exporta solo las tablas de artículos, ' . term('families', true) . ' y fotos.');
     }
     $head = (string)file_get_contents($file, false, null, 0, 32);
     @unlink(IMPORT_DB_FILE);
@@ -545,7 +545,7 @@ function dbimp_guess(array $tables, ?string $table): array
             if (preg_match('/(lang|idioma|image|imagen|foto|photo|stock|price|precio|log|order|pedido|cart|user|cliente|customer)/', $n)) {
                 $score -= 500;
             }
-            $cm = import_map_columns($info['cols'], SHEET_COLUMNS);
+            $cm = import_map_columns($info['cols'], sheet_columns());
             $score += isset($cm['name']) ? 300 : 0;
             $score += count($cm) * 20 + min(200, (int)log(max(1, $info['rows'])) * 20);
             if ($score > $bestScore) {
@@ -556,7 +556,7 @@ function dbimp_guess(array $tables, ?string $table): array
         $table = (string)$best;
     }
     $cols = $tables[$table]['cols'];
-    $cm = import_map_columns($cols, SHEET_COLUMNS + ['id' => ['id', 'id producto', 'id_product', 'idarticulo', 'id articulo', 'codigo interno', 'product id']]);
+    $cm = import_map_columns($cols, sheet_columns() + ['id' => ['id', 'id producto', 'id_product', 'idarticulo', 'id articulo', 'codigo interno', 'product id']]);
     $imgCols = function_exists('sheet_image_columns') ? sheet_image_columns($cols) : [];
     $m = ['table' => $table];
     foreach (['id', 'name', 'ref', 'family', 'sub', 'dims', 'desc', 'short', 'visible', 'sort'] as $k) {
@@ -737,7 +737,7 @@ function dbimp_map_form(array $job): string
         . (!empty($job['hidden']) ? '<p class="muted">Por seguridad, estas columnas no se leen nunca: ' . e(implode(', ', $job['hidden'])) . '.</p>' : '')
         . '<fieldset><legend>Qué hacer</legend>'
         . '<label class="check"><input type="radio" name="m[mode]" value="import"' . ($mode === 'import' ? ' checked' : '') . '> <span><b>Importar artículos</b>: crea los nuevos y rellena los huecos de los que ya existen (no cambia nada que ya tenga valor).</span></label>'
-        . '<label class="check"><input type="radio" name="m[mode]" value="update"' . ($mode === 'update' ? ' checked' : '') . '> <span><b>Actualizar precios y stock</b>: busca cada artículo por su <b>referencia</b> y cambia solo los campos marcados, aunque ya tengan valor. No crea ni borra artículos, ni toca nombre, descripción, familia ni fotos.</span></label>'
+        . '<label class="check"><input type="radio" name="m[mode]" value="update"' . ($mode === 'update' ? ' checked' : '') . '> <span><b>Actualizar precios y stock</b>: busca cada artículo por su <b>referencia</b> y cambia solo los campos marcados, aunque ya tengan valor. No crea ni borra artículos, ni toca nombre, descripción, ' . e(term('family', true)) . ' ni fotos.</span></label>'
         . '<div class="upd-opts"><small>Solo para «Actualizar»: campos que se actualizan</small>'
         . ($updBoxes !== '' ? $updBoxes : '<small>No hay campos del catálogo. Créalos en Web → Campos.</small>')
         . '<label class="check"><input type="checkbox" name="m[upd_visible]" value="1"' . (($m['upd_visible'] ?? '') === '1' ? ' checked' : '') . '> <span>Actualizar también la visibilidad' . ($visCol !== '' ? ' (' . e($visCol) . ')' : ' <small class="muted">(sin columna de visible)</small>') . '</span></label>'
@@ -758,14 +758,14 @@ function dbimp_map_form(array $job): string
         . '<label>Nombres para esas columnas <input name="m[extra_labels]" value="' . e((string)($m['extra_labels'] ?? '')) . '" placeholder="Tallas, Color"><small>Separados por comas, en el mismo orden. Si lo dejas vacío se usa el nombre de la columna.</small></label>'
         . '<label class="check"><input type="checkbox" name="m[caps]" value="1"' . (($m['caps'] ?? '') === '1' ? ' checked' : '') . '> <span>Pasar los nombres escritos TODO EN MAYÚSCULAS a minúsculas («CHANCLA DE PLAYA» → «Chancla de playa»)</span></label>'
         . (fields_all() ? '<h2>Campos del catálogo</h2><div class="two">' . implode('', array_map(fn($cf) => $f('cf_' . $cf['id'], $cf['name'] . ($cf['is_public'] ? '' : ' (interno)'), FIELD_KINDS[$cf['kind']][0] . ($cf['unit'] !== '' ? ' · ' . $cf['unit'] : '')), fields_all())) . '</div>' : '')
-        . '<h2>3. Familia</h2>'
-        . '<div class="two">' . $f('family', 'Columna de la familia', 'El nombre de la familia o su número (id).') . $f('sub', 'Columna de la subfamilia') . '</div>'
-        . '<fieldset><legend>Si la familia es un número que apunta a otra tabla</legend>'
-        . '<div class="two"><label>Tabla de familias ' . $sel('fam_table', $tabOpts, (string)$m['fam_table']) . '</label>'
+        . '<h2>3. ' . e(term('family')) . '</h2>'
+        . '<div class="two">' . $f('family', 'Columna ' . tg('de la', 'del') . ' ' . term('family', true), 'El nombre ' . tg('de la', 'del') . ' ' . term('family', true) . ' o su número (id).') . $f('sub', 'Columna ' . tg('de la', 'del') . ' ' . term('sub', true)) . '</div>'
+        . '<fieldset><legend>Si ' . e(tg('la', 'el')) . ' ' . e(term('family', true)) . ' es un número que apunta a otra tabla</legend>'
+        . '<div class="two"><label>Tabla de ' . e(term('families', true)) . ' ' . $sel('fam_table', $tabOpts, (string)$m['fam_table']) . '</label>'
         . '<label>Su columna id ' . $sel('fam_id', $allCols((string)$m['fam_table']), (string)$m['fam_id']) . '</label></div>'
         . '<div class="two"><label>Su columna con el nombre ' . $sel('fam_name', $allCols((string)$m['fam_table']), (string)$m['fam_name']) . '</label>'
-        . '<label>Columna de la familia padre (opcional) ' . $sel('fam_parent', $allCols((string)$m['fam_table']), (string)$m['fam_parent']) . '<small>Si las familias tienen subfamilias en la misma tabla.</small></label></div>'
-        . '<small>Si cambias la tabla de familias, pulsa «Ver sus columnas» para elegir las columnas.</small></fieldset>'
+        . '<label>Columna ' . e(tg('de la', 'del')) . ' ' . e(term('family', true)) . ' padre (opcional) ' . $sel('fam_parent', $allCols((string)$m['fam_table']), (string)$m['fam_parent']) . '<small>Si ' . e(tg('las', 'los')) . ' ' . e(term('families', true)) . ' tienen ' . e(term('subs', true)) . ' en la misma tabla.</small></label></div>'
+        . '<small>Si cambias la tabla de ' . e(term('families', true)) . ', pulsa «Ver sus columnas» para elegir las columnas.</small></fieldset>'
         . '<h2>4. Fotos</h2>'
         . '<div class="two">' . $f('img', 'Columna con la foto', 'Dirección (https://…) o nombre de archivo. Varias separadas por | o ;') . ''
         . '<label>Dirección base de las fotos <input name="m[img_base]" value="' . e((string)$m['img_base']) . '" placeholder="https://mi-web-antigua.com/fotos/"><small>Si la base de datos guarda solo el nombre del archivo (silla.jpg) y las fotos están publicadas en una web.</small></label></div>'
@@ -1070,7 +1070,7 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
         return $job;
     }
     if ($noFam) {
-        $warnings[] = $noFam . ' artículo(s) sin familia: no se importarán. Revisa la columna de familia.';
+        $warnings[] = $noFam . ' artículo(s) sin ' . term('family', true) . ': no se importarán. Revisa la columna de ' . term('family', true) . '.';
     }
     $pfZip?->close();
     if ($pfSrc) {

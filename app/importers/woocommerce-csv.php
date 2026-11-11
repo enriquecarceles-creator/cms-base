@@ -251,7 +251,7 @@ return [
     'label' => 'WordPress / WooCommerce (CSV)',
     'order' => 10,
     'recommended' => true,
-    'help' => 'En WordPress: Productos → Exportar → «Generar CSV». Crea las familias y subfamilias que falten y los artículos con sus fotos (se descargan de tu web actual, que debe seguir online).',
+    'help' => 'En WordPress: Productos → Exportar → «Generar CSV». Crea ' . tg('las', 'los') . ' ' . term('families', true) . ' y ' . term('subs', true) . ' que falten y los artículos con sus fotos (se descargan de tu web actual, que debe seguir online).',
     'fields' => [
         ['name' => 'csv', 'type' => 'file', 'label' => 'Archivo CSV de productos', 'accept' => '.csv,text/csv', 'required' => true],
         ['name' => 'xml', 'type' => 'file', 'label' => 'Opcional: XML de medios', 'accept' => '.xml,text/xml',

@@ -16,7 +16,7 @@ $pdfIcon = '<svg class="pdf-ico" viewBox="0 0 32 32" width="22" height="22" aria
     <button class="btn pf-pdf" type="button" onclick="printWhenReady()"><?= $pdfIcon ?> Descargar PDF</button>
   </div>
   <h1>Catálogo en PDF</h1>
-  <p class="muted">Elige qué familias incluir y pulsa «Aplicar». Después, «Descargar PDF» y elige «Guardar como PDF» en la ventana de impresión (activa «Gráficos de fondo» para conservar el color).</p>
+  <p class="muted">Elige qué <?= e(term('families', true)) ?> incluir y pulsa «Aplicar». Después, «Descargar PDF» y elige «Guardar como PDF» en la ventana de impresión (activa «Gráficos de fondo» para conservar el color).</p>
   <form method="get" class="pf-form">
     <input type="hidden" name="go" value="1">
     <div class="pf-fams">

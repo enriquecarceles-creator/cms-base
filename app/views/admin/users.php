@@ -1,6 +1,6 @@
 <div class="head"><h1>Usuarios</h1></div>
 <?php foreach ($errors as $er): ?><p class="flash err"><?= e($er) ?></p><?php endforeach; ?>
-<p><small><strong>Administrador</strong>: acceso a todo (usuarios, empresa, representantes, slider, artículos…). <strong>Gestión de catálogo</strong>: artículos, familias, fotos e importar, sin acceso a lo demás.</small></p>
+<p><small><strong>Administrador</strong>: acceso a todo (usuarios, empresa, representantes, slider, artículos…). <strong>Gestión de catálogo</strong>: artículos, <?= e(term('families', true)) ?>, fotos e importar, sin acceso a lo demás.</small></p>
 <table class="tbl">
   <thead><tr><th>Usuario</th><th>Rol</th><th>Correo (recuperación)</th><th>Contraseña</th><th></th></tr></thead>
   <tbody>

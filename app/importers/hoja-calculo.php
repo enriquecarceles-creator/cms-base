@@ -21,6 +21,19 @@ const SHEET_COLUMNS = [
     'group' => ['handle', 'id producto', 'product id', 'agrupar'],
 ];
 
+/** SHEET_COLUMNS más los nombres del catálogo configurados (p. ej. «Categoría»), si no estaban ya. */
+function sheet_columns(): array
+{
+    $cols = SHEET_COLUMNS;
+    foreach (['family' => 'family', 'sub' => 'sub'] as $k => $t) {
+        $alias = import_norm(term($t));
+        if (!in_array($alias, array_map('import_norm', $cols[$k]), true)) {
+            $cols[$k][] = $alias;
+        }
+    }
+    return $cols;
+}
+
 /** Columnas de fotos: «Fotos», «Imagen 2», «Image Src», «URL imagen»… (puede haber varias). */
 function sheet_image_columns(array $head): array
 {
@@ -37,7 +50,7 @@ function sheet_image_columns(array $head): array
 function sheet_analyze(array $in): array
 {
     [$head, $rows] = import_read_csv((string)$in['files']['csv']);
-    $col = import_map_columns($head, SHEET_COLUMNS);
+    $col = import_map_columns($head, sheet_columns());
     $imgCols = sheet_image_columns($head);
     // Columnas que corresponden a campos del catálogo (Precio, Tallas, Color…)
     $fieldCols = [];
@@ -53,7 +66,7 @@ function sheet_analyze(array $in): array
     }
     $warnings = [];
     $foundTxt = [];
-    foreach (['family' => 'familia', 'sub' => 'subfamilia', 'ref' => 'referencia', 'dims' => 'medidas', 'desc' => 'descripción', 'visible' => 'visible'] as $k => $label) {
+    foreach (['family' => term('family', true), 'sub' => term('sub', true), 'ref' => 'referencia', 'dims' => 'medidas', 'desc' => 'descripción', 'visible' => 'visible'] as $k => $label) {
         if (isset($col[$k])) {
             $foundTxt[] = $label . ' = «' . $head[$col[$k]] . '»';
         }
@@ -162,9 +175,9 @@ function sheet_analyze(array $in): array
         $warnings[] = 'Columnas reconocidas: ' . implode('; ', $foundTxt) . '.';
     }
     if (!isset($col['family'])) {
-        $warnings[] = 'No hay columna «Familia»: los artículos nuevos no se pueden crear (solo se completan los que ya existen). Añade la columna y vuelve a analizar.';
+        $warnings[] = 'No hay columna «' . term('family') . '»: los artículos nuevos no se pueden crear (solo se completan los que ya existen). Añade la columna y vuelve a analizar.';
     } elseif ($noFamily) {
-        $warnings[] = $noFamily . ' artículo(s) sin familia: no se importarán.';
+        $warnings[] = $noFamily . ' artículo(s) sin ' . term('family', true) . ': no se importarán.';
     }
     if ($missingFiles) {
         $warnings[] = count($missingFiles) . ' foto(s) no están en el ZIP' . ($zipMap ? '' : ' (no has subido ningún ZIP)') . ': '
@@ -186,7 +199,7 @@ function sheet_analyze(array $in): array
 function sheet_template(): string
 {
     $rows = [
-        ['Nombre', 'Familia', 'Subfamilia', 'Referencia', 'Medidas', 'Descripción', 'Fotos', 'Visible', 'Orden'],
+        ['Nombre', term('family'), term('sub'), 'Referencia', 'Medidas', 'Descripción', 'Fotos', 'Visible', 'Orden'],
         ['Silla plegable', 'Sillas', 'Plegables', 'S-001', '80 x 45 cm', 'Silla de acero con asiento de madera.', 'silla-plegable-1.jpg | silla-plegable-2.jpg', 'sí', '10'],
         ['Mesa redonda', 'Mesas', '', 'M-010', '75 x 120 cm', 'Mesa de comedor para 6 personas.', 'https://mi-web-antigua.com/fotos/mesa.jpg', 'sí', '20'],
     ];
@@ -210,7 +223,7 @@ return [
     'id' => 'hoja-calculo',
     'label' => 'Hoja de cálculo u otra aplicación (CSV)',
     'order' => 20,
-    'help' => 'Excel, Google Sheets, Shopify, PrestaShop, un ERP… Guarda la hoja como CSV. Columnas que se reconocen: Nombre (obligatoria), Familia, Subfamilia, Referencia, Medidas, Descripción, Fotos, Visible y Orden (también en inglés: Name, Category, SKU, Description, Image Src…), y una columna por cada campo del catálogo con su mismo nombre (Precio, Tallas, Color…). En «Familia» puedes escribir «Sillas > Plegables».',
+    'help' => 'Excel, Google Sheets, Shopify, PrestaShop, un ERP… Guarda la hoja como CSV. Columnas que se reconocen: Nombre (obligatoria), ' . term('family') . ', ' . term('sub') . ', Referencia, Medidas, Descripción, Fotos, Visible y Orden (también en inglés: Name, Category, SKU, Description, Image Src…), y una columna por cada campo del catálogo con su mismo nombre (Precio, Tallas, Color…). En «' . term('family') . '» puedes escribir «Sillas > Plegables».',
     'template' => 'sheet_template',
     'fields' => [
         ['name' => 'csv', 'type' => 'file', 'label' => 'Archivo CSV', 'accept' => '.csv,.txt,text/csv', 'required' => true],

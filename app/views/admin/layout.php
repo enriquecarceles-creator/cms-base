@@ -5,7 +5,7 @@ $has = fn(string ...$k) => (bool)array_filter($k, fn($x) => str_contains($path, 
 $sections = [
   'articulos' => ['Artículos', '/admin', [
       ['Listado', '/admin', null, false],
-      ['Familias', '/admin/categorias', ['categorias', 'portada'], false],
+      [term('families'), '/admin/categorias', ['categorias', 'portada'], false],
       ['Fotos', '/admin/fotos', ['fotos'], false],
   ]],
   'importar' => ['Importar', '/admin/importar', [

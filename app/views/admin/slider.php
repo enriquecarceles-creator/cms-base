@@ -24,7 +24,7 @@
   <label>Texto (opcional) <textarea name="text" rows="2" maxlength="300"></textarea></label>
   <div class="two">
     <label>Texto del botón (opcional) <input name="btn" maxlength="40" placeholder="Ver novedades"></label>
-    <label>Enlace del botón <input name="link" maxlength="300" placeholder="/catalogo/nombre-de-familia"></label>
+    <label>Enlace del botón <input name="link" maxlength="300" placeholder="/catalogo/nombre-de-<?= e(slugify(term('family'))) ?>"></label>
   </div>
   <div class="buttons"><button class="btn" type="submit">Añadir</button></div>
 </form>
@@ -41,7 +41,7 @@
         <textarea name="text" rows="2" placeholder="Texto" maxlength="300"><?= e($s['text']) ?></textarea>
         <div class="two">
           <input name="btn" value="<?= e($s['btn']) ?>" placeholder="Texto del botón" maxlength="40">
-          <input name="link" value="<?= e($s['link']) ?>" placeholder="/catalogo/nombre-de-familia" maxlength="300">
+          <input name="link" value="<?= e($s['link']) ?>" placeholder="/catalogo/nombre-de-<?= e(slugify(term('family'))) ?>" maxlength="300">
         </div>
         <label class="check"><span>Orden</span> <input type="number" name="sort" value="<?= (int)$s['sort'] ?>" style="width:90px"></label>
         <label class="check"><span>Cambiar imagen</span> <input type="file" name="image" accept="image/*"></label>

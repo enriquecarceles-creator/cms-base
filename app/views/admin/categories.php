@@ -1,10 +1,10 @@
-<div class="head"><h1>Familias</h1></div>
-<p class="hint">Las familias son los grupos del catálogo (por ejemplo «Sillas», «Mesas»…) y cada una puede tener <strong>subfamilias</strong> (por ejemplo Sillas › Plegables). Solo se puede borrar una familia si no tiene artículos ni subfamilias.</p>
+<div class="head"><h1><?= e(term('families')) ?></h1></div>
+<p class="hint"><?= e(tg('Las', 'Los')) ?> <?= e(term('families', true)) ?> son los grupos del catálogo (por ejemplo «Sillas», «Mesas»…) y cada <?= e(tg('una', 'uno')) ?> puede tener <strong><?= e(term('subs', true)) ?></strong> (por ejemplo Sillas › Plegables). Solo se puede borrar <?= e(tg('una', 'un')) ?> <?= e(term('family', true)) ?> si no tiene artículos ni <?= e(term('subs', true)) ?>.</p>
 
 <?php
 function cat_parent_select(array $roots, int $self, ?int $current): string
 {
-    $o = '<option value="0"' . (!$current ? ' selected' : '') . '>— Ninguna (familia principal)</option>';
+    $o = '<option value="0"' . (!$current ? ' selected' : '') . '>— ' . e(tg('Ninguna', 'Ninguno')) . ' (' . e(term('family', true)) . ' principal)</option>';
     foreach ($roots as $r) {
         if ((int)$r['id'] === $self) { continue; }
         $o .= '<option value="' . (int)$r['id'] . '"' . ($current === (int)$r['id'] ? ' selected' : '') . '>' . e($r['name']) . '</option>';
@@ -17,7 +17,7 @@ function cat_parent_select(array $roots, int $self, ?int $current): string
     <form method="post" class="row edit" style="<?= $sub ? 'margin-left:22px' : '' ?>">
       <?= csrf_field() ?>
       <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-      <label class="grow"><?= $sub ? '↳ Subfamilia' : 'Nombre' ?> <input name="name" value="<?= e($r['name']) ?>" required maxlength="80"></label>
+      <label class="grow"><?= $sub ? '↳ ' . e(term('sub')) : 'Nombre' ?> <input name="name" value="<?= e($r['name']) ?>" required maxlength="80"></label>
       <?php if ($r['nkids'] > 0): ?>
         <input type="hidden" name="parent_id" value="0">
       <?php else: ?>
@@ -32,7 +32,7 @@ function cat_parent_select(array $roots, int $self, ?int $current): string
   <?php endforeach; ?>
 </div>
 
-<h2>Añadir familia o subfamilia</h2>
+<h2>Añadir <?= e(term('family', true)) ?> o <?= e(term('sub', true)) ?></h2>
 <form method="post" class="row edit">
   <?= csrf_field() ?>
   <label class="grow">Nombre <input name="name" required maxlength="80" placeholder="Ej.: Latas decorativas"></label>

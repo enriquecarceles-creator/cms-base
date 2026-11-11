@@ -6,7 +6,7 @@
   <div class="catindex-head">
     <div>
       <p class="kicker">Catálogo</p>
-      <h1><?= e(setting('catalog_title', 'Nuestras familias')) ?></h1>
+      <h1><?= e(setting('catalog_title', tg('Nuestras', 'Nuestros') . ' ' . term('families', true))) ?></h1>
     </div>
     <form class="search" method="get" action="<?= e(url('/catalogo')) ?>" role="search">
       <input type="search" name="q" value="" placeholder="Nombre o referencia" aria-label="Buscar">
@@ -36,7 +36,7 @@
   </div>
 
   <div class="toolbar">
-    <nav class="chips" aria-label="Familias">
+    <nav class="chips" aria-label="<?= e(term('families')) ?>">
       <a href="<?= e(url('/catalogo')) ?>"<?= !$current ? ' class="on"' : '' ?>>Todo</a>
       <?php foreach ($cats as $c): ?>
         <a href="<?= e(url('/catalogo/' . $c['slug'])) ?>"<?= $current && ($current['id'] === $c['id'] || $current['parent_id'] === $c['id']) ? ' class="on"' : '' ?>><?= e($c['name']) ?></a>
@@ -69,7 +69,7 @@
   <?php endif; ?>
 
   <?php if (!$groups && !$subs): ?>
-    <p class="empty"><?= $q !== '' ? 'No hay artículos que coincidan con «' . e($q) . '».' : 'Todavía no hay artículos en esta familia.' ?></p>
+    <p class="empty"><?= $q !== '' ? 'No hay artículos que coincidan con «' . e($q) . '».' : 'Todavía no hay artículos en ' . tg('esta', 'este') . ' ' . e(term('family', true)) . '.' ?></p>
   <?php endif; ?>
 
   <?php foreach ($groups as $slug => $g): ?>

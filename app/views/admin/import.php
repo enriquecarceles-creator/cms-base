@@ -3,7 +3,7 @@
 <?php $status = $job['status'] ?? ''; ?>
 
 <?php if (!$job): ?>
-  <p class="hint">Trae artículos, familias, textos y fotos desde otra web o aplicación. Primero se <strong>analiza</strong> y verás un resumen para elegir qué importar.
+  <p class="hint">Trae artículos, <?= e(term('families', true)) ?>, textos y fotos desde otra web o aplicación. Primero se <strong>analiza</strong> y verás un resumen para elegir qué importar.
   Nada se sobrescribe: solo se crean artículos nuevos, se añaden fotos y se rellenan los campos que estén vacíos. Se puede repetir sin duplicar.
   Para poner al día precios y stock desde un programa de gestión, usa «Base de datos» y elige «Actualizar precios y stock» en el paso de columnas.</p>
   <?php if ($ftpZip): ?><p class="flash ok">Hay un ZIP de fotos subido por FTP: <code><?= e(basename($ftpZip)) ?></code>. Se usará si no subes otro.</p><?php endif; ?>
@@ -45,7 +45,7 @@
     $u = $job['upd']; $fa = fields_all(); $n = count($job['items']);
     $fmt = fn(int $fid, string $v) => $v === '' ? '—' : (isset($fa[$fid]) ? field_format($fa[$fid], $v) : $v);
 ?>
-  <p class="hint">Actualizar desde <strong><?= e($job['origin']) ?></strong>. Cada artículo se busca por su referencia. Solo se cambian los campos de abajo; el nombre, la descripción, la familia y las fotos no se tocan. No se crea ni se borra ningún artículo.</p>
+  <p class="hint">Actualizar desde <strong><?= e($job['origin']) ?></strong>. Cada artículo se busca por su referencia. Solo se cambian los campos de abajo; el nombre, la descripción, <?= e(tg('la', 'el')) ?> <?= e(term('family', true)) ?> y las fotos no se tocan. No se crea ni se borra ningún artículo.</p>
   <?php foreach ($job['warnings'] as $w): ?><p class="flash err"><?= e($w) ?></p><?php endforeach; ?>
   <ul class="summary">
     <li><b><?= $n ?></b> artículo<?= $n === 1 ? '' : 's' ?> cambia<?= $n === 1 ? '' : 'n' ?></li>
@@ -104,12 +104,12 @@
       <li><b><?= $st['new'] ?></b> artículos nuevos<?= $st['hidden'] ? ' (' . $st['hidden'] . ' ocultos, como en el origen)' : '' ?></li>
       <li><b><?= $st['upd'] ?></b> ya existen (solo se rellenan sus huecos)</li>
       <li><b><?= $st['img'] ?></b> fotos</li>
-      <?php if ($st['skip']): ?><li class="bad"><b><?= $st['skip'] ?></b> sin familia (no se importan)</li><?php endif; ?>
+      <?php if ($st['skip']): ?><li class="bad"><b><?= $st['skip'] ?></b> sin <?= e(term('family', true)) ?> (no se importan)</li><?php endif; ?>
     </ul>
-    <?php if ($fams): ?><p class="muted"><b>Familias:</b> <?= e(implode(' · ', array_map(fn($k, $v) => $k . ' (' . $v . ')', array_keys($fams), $fams))) ?></p><?php endif; ?>
+    <?php if ($fams): ?><p class="muted"><b><?= e(term('families')) ?>:</b> <?= e(implode(' · ', array_map(fn($k, $v) => $k . ' (' . $v . ')', array_keys($fams), $fams))) ?></p><?php endif; ?>
     <h2>Muestra (100 de <?= count($job['items']) ?>)</h2>
     <div class="dbprev"><table>
-      <tr><th>Nombre</th><th>Familia</th><th>Ref.</th><th>Medidas</th><?php foreach (fields_all() as $cf): ?><th><?= e($cf['name']) ?></th><?php endforeach; ?><th>Fotos</th><th>Descripción</th></tr>
+      <tr><th>Nombre</th><th><?= e(term('family')) ?></th><th>Ref.</th><th>Medidas</th><?php foreach (fields_all() as $cf): ?><th><?= e($cf['name']) ?></th><?php endforeach; ?><th>Fotos</th><th>Descripción</th></tr>
       <?php foreach (array_slice($job['items'], 0, 100) as $it): ?>
         <tr<?= isset($it['visible']) && !$it['visible'] ? ' style="opacity:.55"' : '' ?>><td><?= e($it['name']) ?><?= $it['pid'] ? ' <i>(ya existe)</i>' : '' ?></td><td><?= e($it['cat_name']) ?></td><td><?= e($it['ref']) ?></td><td><?= e($it['dims']) ?></td><?php foreach (fields_all() as $cf): ?><td><?= isset($it['fields'][$cf['id']]) ? e(field_format($cf, (string)$it['fields'][$cf['id']])) : '' ?></td><?php endforeach; ?><td><?= count($it['images']) ?></td><td><?= e(mb_strimwidth(str_replace("\n", ' · ', $it['desc']), 0, 80, '…')) ?></td></tr>
       <?php endforeach; ?>
@@ -140,7 +140,7 @@
           <span><?= e($it['name']) ?>
             <?php if ($it['pid']): ?><em>· ya existe en el panel</em>
             <?php elseif ($it['cat_id'] || !empty($it['cat_path'])): ?><em>· artículo nuevo<?= $it['cat_name'] !== '' ? ' en «' . e($it['cat_name']) . '»' : '' ?><?= isset($it['visible']) && !$it['visible'] ? ' (oculto, como en la web antigua)' : '' ?></em>
-            <?php else: ?><em>· no se encuentra su familia: no se puede importar</em><?php endif; ?>
+            <?php else: ?><em>· no se encuentra su <?= e(term('family', true)) ?>: no se puede importar</em><?php endif; ?>
           </span>
         </label>
 

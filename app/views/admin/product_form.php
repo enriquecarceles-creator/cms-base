@@ -8,7 +8,7 @@
 <form method="post" enctype="multipart/form-data" class="form">
   <?= csrf_field() ?>
   <div class="two">
-    <label>Familia
+    <label><?= e(term('family')) . "\n" /* PHP se come el salto tras ?> */ ?>
       <select name="category_id" required>
         <?php foreach ($cats as $cat): ?>
           <option value="<?= (int)$cat['id'] ?>"<?= (int)$f['category_id'] === (int)$cat['id'] ? ' selected' : '' ?>><?= e($cat['name']) ?></option>
@@ -24,7 +24,7 @@
   </label><?php endif; ?>
   <div class="two">
     <label>Medidas <input name="dimensions" value="<?= e($f['dimensions']) ?>" maxlength="80" placeholder="Ej.: 440 x 215 mm"></label>
-    <label>Orden <input type="number" name="sort" value="<?= (int)$f['sort'] ?>" step="1"><small>Menor número = sale antes dentro de su familia.</small></label>
+    <label>Orden <input type="number" name="sort" value="<?= (int)$f['sort'] ?>" step="1"><small>Menor número = sale antes dentro de su <?= e(term('family', true)) ?>.</small></label>
   </div>
   <label>Descripción (opcional)
     <textarea name="description" rows="5" placeholder="Materiales, usos, colores disponibles, cantidades mínimas…"><?= e($f['description']) ?></textarea>
@@ -51,12 +51,12 @@
           <div class="gitem">
             <img src="<?= e(img_url($g['file'], true)) ?>" alt="Foto <?= $i + 1 ?>" width="120" height="120" loading="lazy">
             <label class="check"><input type="radio" name="cover" value="<?= (int)$g['id'] ?>"<?= $i === 0 ? ' checked' : '' ?>> Portada</label>
-            <label class="check"><input type="radio" name="famcover" value="<?= e($g['file']) ?>"> Mostrar en la familia</label>
+            <label class="check"><input type="radio" name="famcover" value="<?= e($g['file']) ?>"> Mostrar en <?= e(tg('la', 'el')) ?> <?= e(term('family', true)) ?></label>
             <label class="check"><input type="checkbox" name="remove[]" value="<?= (int)$g['id'] ?>"> Quitar</label>
           </div>
         <?php endforeach; ?>
       </div>
-      <small>La portada es la foto que sale en el catálogo. «Mostrar en la familia» pone esa foto como la de su subfamilia en la página de la familia (cuando la familia tiene subfamilias). Marca «Quitar» en las que sobren y pulsa Guardar.</small>
+      <small>La portada es la foto que sale en el catálogo. «Mostrar en <?= e(tg('la', 'el')) ?> <?= e(term('family', true)) ?>» pone esa foto como la de su <?= e(term('sub', true)) ?> en la página <?= e(tg('de la', 'del')) ?> <?= e(term('family', true)) ?> (cuando <?= e(tg('la', 'el')) ?> <?= e(term('family', true)) ?> tiene <?= e(term('subs', true)) ?>). Marca «Quitar» en las que sobren y pulsa Guardar.</small>
     <?php endif; ?>
     <label><?= $gallery ? 'Añadir más fotos' : 'Subir fotos' ?>
       <input type="file" name="images[]" multiple accept="image/jpeg,image/png,image/webp">

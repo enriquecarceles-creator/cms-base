@@ -28,7 +28,7 @@
       <dl class="specs">
         <?php if ($p['ref'] !== ''): ?><dt>Referencia</dt><dd><?= e($p['ref']) ?></dd><?php endif; ?>
         <?php if ($p['dimensions'] !== ''): ?><dt>Medidas</dt><dd><?= e($p['dimensions']) ?></dd><?php endif; ?>
-        <dt>Familia</dt><dd><?= e($p['cat_name']) ?></dd>
+        <dt><?= e(term('family')) ?></dt><dd><?= e($p['cat_name']) ?></dd>
         <?php foreach (product_public_fields((int)$p['id']) as [$cf, $cv]): if ($cf['kind'] === 'textarea') continue; ?>
           <dt><?= e($cf['name']) ?></dt>
           <dd<?= $cf['kind'] === 'price' ? ' class="price"' : '' ?>><?php if ($cf['kind'] === 'url'): ?><a href="<?= e($cv) ?>" target="_blank" rel="noopener">Ver ↗</a><?php else: ?><?= e(field_format($cf, $cv)) ?><?php endif; ?></dd>

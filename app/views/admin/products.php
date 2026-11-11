@@ -4,8 +4,8 @@
 </div>
 
 <form class="filters" method="get" action="<?= e(url('/admin')) ?>">
-  <select name="c" onchange="this.form.submit()" aria-label="Familia">
-    <option value="0">Todas las familias</option>
+  <select name="c" onchange="this.form.submit()" aria-label="<?= e(term('family')) ?>">
+    <option value="0"><?= e(tg('Todas las', 'Todos los')) ?> <?= e(term('families', true)) ?></option>
     <?php foreach ($cats as $cat): ?>
       <option value="<?= (int)$cat['id'] ?>"<?= $c === (int)$cat['id'] ? ' selected' : '' ?>><?= e($cat['name']) ?></option>
     <?php endforeach; ?>

@@ -227,7 +227,7 @@ function admin_product(string $id): void
             $errors[] = 'El nombre es obligatorio.';
         }
         if (!in_array($form['category_id'], array_column($cats, 'id'), true)) {
-            $errors[] = 'Elige una familia.';
+            $errors[] = 'Elige ' . tg('una', 'un') . ' ' . term('family', true) . '.';
         }
         if (!$errors) {
             $now = date('Y-m-d H:i:s');
@@ -326,25 +326,25 @@ function admin_categories(): void
             $n = $db->prepare('SELECT (SELECT COUNT(*) FROM products WHERE category_id = ?) + (SELECT COUNT(*) FROM categories WHERE parent_id = ?)');
             $n->execute([$id, $id]);
             if ((int)$n->fetchColumn() > 0) {
-                flash('No se puede borrar si tiene artículos o subfamilias. Muévelos o bórralos antes.', 'err');
+                flash('No se puede borrar si tiene artículos o ' . term('subs', true) . '. Muévelos o bórralos antes.', 'err');
             } else {
                 $db->prepare('DELETE FROM categories WHERE id = ?')->execute([$id]);
-                flash('Eliminada.');
+                flash(tg('Eliminada.', 'Eliminado.'));
             }
         } elseif ($name === '') {
             flash('El nombre no puede estar vacío.', 'err');
         } elseif ($action === 'add') {
             $slug = unique_slug('categories', slugify(($parent ? (string)$db->query('SELECT slug FROM categories WHERE id = ' . $parent)->fetchColumn() . ' ' : '') . $name));
             $db->prepare('INSERT INTO categories (name, slug, sort, parent_id) VALUES (?,?,?,?)')->execute([$name, $slug, $sort, $parent ?: null]);
-            flash(($parent ? 'Subfamilia «' : 'Familia «') . $name . '» creada.');
+            flash(($parent ? term('sub') : term('family')) . ' «' . $name . '» ' . tg('creada', 'creado') . '.');
         } elseif ($action === 'save') {
             $kids = $db->prepare('SELECT COUNT(*) FROM categories WHERE parent_id = ?');
             $kids->execute([$id]);
             if ($parent && (int)$kids->fetchColumn() > 0) {
-                flash('Esta familia tiene subfamilias, así que no puede colgar de otra.', 'err');
+                flash(tg('Esta', 'Este') . ' ' . term('family', true) . ' tiene ' . term('subs', true) . ', así que no puede colgar de ' . tg('otra', 'otro') . '.', 'err');
             } else {
                 $db->prepare('UPDATE categories SET name = ?, sort = ?, parent_id = ? WHERE id = ?')->execute([$name, $sort, $parent ?: null, $id]);
-                flash('Actualizada.');
+                flash(tg('Actualizada.', 'Actualizado.'));
             }
         }
         redirect('/admin/categorias');
@@ -354,7 +354,7 @@ function admin_categories(): void
         FROM categories c LEFT JOIN categories pc ON pc.id = c.parent_id
         ORDER BY COALESCE(pc.sort, c.sort), COALESCE(pc.name, c.name), CASE WHEN pc.id IS NULL THEN 0 ELSE 1 END, c.sort, c.name')->fetchAll();
     $roots = array_values(array_filter($rows, fn($r) => !$r['parent_id']));
-    admin_render('categories', ['rows' => $rows, 'roots' => $roots, 'title' => 'Familias']);
+    admin_render('categories', ['rows' => $rows, 'roots' => $roots, 'title' => term('families')]);
 }
 
 /** Elegir, entre las fotos ya subidas, la que sale en la tarjeta de una familia o subfamilia. */
@@ -388,7 +388,7 @@ function admin_cover(int $id): void
                     delete_image($cat['cover']);
                 }
                 $db->prepare('UPDATE categories SET cover = ? WHERE id = ?')->execute([$new, $id]);
-                flash('Foto de la familia guardada.');
+                flash('Foto ' . tg('de la', 'del') . ' ' . term('family', true) . ' guardada.');
                 redirect('/admin/categorias');
             }
         } catch (RuntimeException $e) {
@@ -408,7 +408,7 @@ function admin_cover(int $id): void
             }
         }
         $db->prepare('UPDATE categories SET cover = ? WHERE id = ?')->execute([$file, $id]);
-        flash($file === '' ? 'Portada automática (la primera foto de la familia).' : 'Portada guardada.');
+        flash($file === '' ? 'Portada automática (la primera foto ' . tg('de la', 'del') . ' ' . term('family', true) . ').' : 'Portada guardada.');
         redirect('/admin/categorias');
     }
     $st = $db->prepare('SELECT i.file, p.name FROM product_images i JOIN products p ON p.id = i.product_id
@@ -589,11 +589,23 @@ function admin_company(): void
 
 const CONFIG_TEXTS = [
     'home_hello' => ['Saludo de la portada', 'Bienvenido a', 'Va delante del nombre de la empresa.'],
-    'catalog_title' => ['Título del índice del catálogo', 'Nuestras familias', ''],
+    'catalog_title' => ['Título del índice del catálogo', '', ''], // por defecto: catalog_title_default()
     'cta_title' => ['Llamada final de la portada: título', '¿Hablamos?', ''],
     'cta_text' => ['Llamada final de la portada: texto', 'Pídenos información, precios o presupuesto.', ''],
     'reps_title' => ['Título de la lista de representantes', 'Representantes por zonas', ''],
 ];
+
+/** Título del índice del catálogo si no se ha escrito otro: «Nuestras familias» (con los nombres configurados). */
+function catalog_title_default(): string
+{
+    return tg('Nuestras', 'Nuestros') . ' ' . term('families', true);
+}
+
+/** Valor por defecto de un texto fijo. */
+function config_text_default(string $k): string
+{
+    return $k === 'catalog_title' ? catalog_title_default() : (CONFIG_TEXTS[$k][1] ?? '');
+}
 
 function admin_config(): void
 {
@@ -611,6 +623,11 @@ function admin_config(): void
         foreach (CONFIG_TEXTS as $k => $_) {
             save_setting($k, mb_substr(trim((string)($_POST[$k] ?? '')), 0, 200));
         }
+        // Nombres del catálogo (vacío = el de siempre)
+        foreach (TERM_DEFAULTS as $k => $_) {
+            save_setting('term_' . $k, mb_substr(trim(strip_tags((string)($_POST['term_' . $k] ?? ''))), 0, 40));
+        }
+        save_setting('term_gender', ($_POST['term_gender'] ?? '') === 'm' ? 'm' : 'f');
         flash('Configuración guardada.');
         redirect('/admin/configuracion');
     }
@@ -618,6 +635,10 @@ function admin_config(): void
     foreach (CONFIG_TEXTS as $k => $_) {
         $v[$k] = db_setting($k);
     }
+    foreach (TERM_DEFAULTS as $k => $_) {
+        $v['term_' . $k] = db_setting('term_' . $k);
+    }
+    $v['term_gender'] = db_setting('term_gender') === 'm' ? 'm' : 'f';
     admin_render('config', [
         'v' => $v,
         'mods' => array_filter(array_keys(FEATURES), 'feature'),

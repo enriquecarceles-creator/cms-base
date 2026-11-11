@@ -47,7 +47,7 @@ $cards = array_pad($v['home_cards'], 4, ['', '']);
   <label>LinkedIn (enlace) <input name="linkedin" value="<?= e($v['linkedin']) ?>" placeholder="https://"></label>
 
   <h2>Página de inicio</h2>
-  <?php $img('hero', 'Imagen de fondo de la portada (opcional)', $v['hero_image'], 'Foto ancha, mejor oscura. Sin imagen se usa un fondo oscuro con tus fotos de familias.'); ?>
+  <?php $img('hero', 'Imagen de fondo de la portada (opcional)', $v['hero_image'], 'Foto ancha, mejor oscura. Sin imagen se usa un fondo oscuro con tus fotos de ' . term('families', true) . '.'); ?>
   <label>Frase de bienvenida <input name="home_lead" value="<?= e($v['home_lead']) ?>" placeholder="Qué hace la empresa, en una frase"></label>
   <label>«Quiénes somos»: título <input name="home_title" value="<?= e($v['home_title']) ?>"></label>
   <label>«Quiénes somos»: texto <textarea name="home_text" rows="4"><?= e($v['home_text']) ?></textarea></label>
@@ -61,7 +61,7 @@ $cards = array_pad($v['home_cards'], 4, ['', '']);
     <?php endforeach; ?>
   </fieldset>
   <div class="two">
-    <label>Título de la lista de familias <input name="home_chips_title" value="<?= e($v['home_chips_title']) ?>" placeholder="Nuestros productos"></label>
+    <label>Título de la lista de <?= e(term('families', true)) ?> <input name="home_chips_title" value="<?= e($v['home_chips_title']) ?>" placeholder="Nuestros productos"></label>
     <label>Descripción para Google (inicio) <input name="home_desc" value="<?= e($v['home_desc']) ?>" maxlength="160"></label>
   </div>
 
@@ -75,14 +75,14 @@ $cards = array_pad($v['home_cards'], 4, ['', '']);
 <h2>Copia de seguridad</h2>
 <form method="post" action="<?= e(url('/admin/copia')) ?>" class="form">
   <?= csrf_field() ?>
-  <p class="muted" style="margin:0">Descarga un ZIP con la base de datos (artículos, familias, usuarios, textos) y todas las fotos. Hazlo antes de actualizar la web.</p>
+  <p class="muted" style="margin:0">Descarga un ZIP con la base de datos (artículos, <?= e(term('families', true)) ?>, usuarios, textos) y todas las fotos. Hazlo antes de actualizar la web.</p>
   <div class="buttons"><button class="btn ghost" type="submit">Descargar copia de seguridad</button></div>
 </form>
 <?php if (ALLOW_RESET): ?>
 <h2>Empezar de cero</h2>
-<form method="post" action="<?= e(url('/admin/reiniciar')) ?>" class="form" onsubmit="return confirm('Se borrarán artículos, familias, fotos, slider y representantes. ¿Continuar?')">
+<form method="post" action="<?= e(url('/admin/reiniciar')) ?>" class="form" onsubmit="return confirm('Se borrarán artículos, <?= e(addslashes(term('families', true))) ?>, fotos, slider y representantes. ¿Continuar?')">
   <?= csrf_field() ?>
-  <p class="muted" style="margin:0">Vacía el catálogo (artículos, familias, fotos, slider y representantes). Se conservan los usuarios y los datos de esta página. Antes se guarda una copia en <code>data/backups/</code>.</p>
+  <p class="muted" style="margin:0">Vacía el catálogo (artículos, <?= e(term('families', true)) ?>, fotos, slider y representantes). Se conservan los usuarios y los datos de esta página. Antes se guarda una copia en <code>data/backups/</code>.</p>
   <label>Escribe el nombre comercial («<?= e(site_name()) ?>») para confirmar <input name="confirm" autocomplete="off" required></label>
   <label>Tu contraseña <input type="password" name="password" autocomplete="current-password" required></label>
   <div class="buttons"><button class="btn danger-btn" type="submit">Vaciar el catálogo</button></div>

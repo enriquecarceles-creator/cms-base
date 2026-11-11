@@ -133,6 +133,41 @@ function setting(string $key, string $default = ''): string
     return (isset($all[$key]) && $all[$key] !== '') ? $all[$key] : $default;
 }
 
+/* ---------- Nombres de la jerarquía del catálogo (Web → Configuración) ---------- */
+
+/** Nombres por defecto: clave => valor (se guardan en settings como term_<clave>; el género en term_gender: f/m). */
+const TERM_DEFAULTS = [
+    'family' => 'Familia',
+    'families' => 'Familias',
+    'sub' => 'Subfamilia',
+    'subs' => 'Subfamilias',
+];
+
+/**
+ * Nombre visible de un nivel del catálogo: term('family') → «Familia»; term('families', true) → «familias»
+ * (en mitad de una frase solo se pasa a minúscula la primera letra). Solo para textos que se ven:
+ * las direcciones (/catalogo/…) y los nombres internos (categories, family…) no cambian.
+ */
+function term(string $k, bool $lower = false): string
+{
+    $v = setting('term_' . $k, TERM_DEFAULTS[$k] ?? $k);
+    return $lower ? mb_strtolower(mb_substr($v, 0, 1)) . mb_substr($v, 1) : $v;
+}
+
+/** Palabra según el género de esos nombres: tg('una', 'un'), tg('creada', 'creado')… (femenino por defecto). */
+function tg(string $fem, string $masc): string
+{
+    return setting('term_gender', 'f') === 'm' ? $masc : $fem;
+}
+
+/** Módulos con su explicación (la de «Fila a escala» usa los nombres del catálogo). */
+function features_help(): array
+{
+    $all = FEATURES;
+    $all['lineup'][1] = 'En ' . tg('una', 'un') . ' ' . term('family', true) . ' con ' . term('subs', true) . ', ' . tg('las', 'los') . ' muestra en fila con su tamaño real relativo (según las medidas).';
+    return $all;
+}
+
 /** ¿Hay ya un administrador? (si no, la web está sin instalar) */
 function is_installed(): bool
 {
@@ -247,7 +282,7 @@ function catalog_nav(?array $current): string
     unset($list);
     $curId = $current ? (int)$current['id'] : 0;
     $curParent = $current ? (int)($current['parent_id'] ?? 0) : 0;
-    $h = '<nav class="cat-nav" aria-label="Familias"><p class="cat-nav-t">Familias</p><ul>';
+    $h = '<nav class="cat-nav" aria-label="' . e(term('families')) . '"><p class="cat-nav-t">' . e(term('families')) . '</p><ul>';
     $h .= '<li><a href="' . e(url('/catalogo')) . '"' . (!$current ? ' class="on"' : '') . '>Todo el catálogo</a></li>';
     foreach ($roots as $r) {
         $id = (int)$r['id'];

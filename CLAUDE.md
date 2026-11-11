@@ -14,7 +14,7 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 - `index.php` — router de la web pública y del panel (`/admin/...`). En el hosting se llega a él por `.htaccess` (vale en la raíz o en subcarpeta sin cambiar nada).
 - `router.php` — **solo para probar en local** con `php -S` (imita el `.htaccess`; en el hosting no hace nada).
 - `instalar.php` — asistente de 6 pasos: servidor → base de datos → web nueva o restaurar copia → empresa (datos, logotipo, color, país) → opciones (módulos, campos del catálogo, prefijo, zona horaria, noindex) → administrador. Se borra solo al terminar.
-- `app/bootstrap.php` — configuración común, `db()`, `setting()`, `feature()`, `tel_href()`, `url()`, `COUNTRIES`, `FEATURES`, imágenes, **sesión, CSRF y acceso** (ver sección 4).
+- `app/bootstrap.php` — configuración común, `db()`, `setting()`, `feature()`, `term()` / `tg()` (nombres del catálogo y su género), `tel_href()`, `url()`, `COUNTRIES`, `FEATURES` (con `features_help()`), imágenes, **sesión, CSRF y acceso** (ver sección 4).
 - `app/db.php` — conexión a los tres motores. `CmsPdo` traduce al vuelo el SQL escrito «al estilo SQLite» (`db_sql()`): `||` → CONCAT, `LIMIT n` → TOP en SQL Server, quita `COLLATE NOCASE`, cita `key`/`file`. También `db_put_setting()`, `db_tables()`, `db_columns()`, `db_copy_all()`, `db_export_sqlite()`.
 - `app/schema.php` — esquema único con marcadores que `db_ddl()` convierte a cada motor, y migraciones (`SCHEMA_VERSION`, ahora 15). Marcadores: `{ID}` autonumérico · `{S}` texto corto (255) · `{K}` texto con índice único (VARCHAR(191) en MariaDB) · `{T}` texto largo · `{I}` entero · `{BIG}` entero grande · `{Q:nombre}` nombre reservado.
 - `app/fields.php` — campos libres del catálogo (tablas `custom_fields` y `product_fields`); panel en Web → Campos.
@@ -50,7 +50,9 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 
 ## 5. Configuración por empresa (sin código)
 - Web → Empresa: identidad, contacto, logotipo, color, textos de portada, copia de seguridad.
-- Web → Configuración: módulos activables (`mod_reps`, `mod_slider`, `mod_pdf`, `mod_sketch`, `mod_lineup`, `mod_map`), prefijo telefónico, zona horaria, `noindex`, textos fijos.
+- Web → Configuración: módulos activables (`mod_reps`, `mod_slider`, `mod_pdf`, `mod_sketch`, `mod_lineup`, `mod_map`), prefijo telefónico, zona horaria, `noindex`, textos fijos y **nombres del catálogo** (`term_family`, `term_families`, `term_sub`, `term_subs`, `term_gender` f/m; por defecto Familia/Familias/Subfamilia/Subfamilias, femenino).
+- Textos visibles con «familia»: siempre con `term('family'|'families'|'sub'|'subs', )` y las palabras que concuerdan con `tg('una', 'un')`, `tg('de la', 'del')`… (web, panel, importadores, PDF y mensajes). Las direcciones (`/catalogo/…`, `/admin/categorias`) y los nombres internos (`categories`, `family`, alias de columnas del importador) no cambian. Con los valores por defecto la web queda idéntica a como era. Detrás de `<?= … ?>` PHP se come el salto de línea: si importa, añade `. "
+"`.
 - Web → Campos: campos libres (texto, texto largo, número, precio, lista, lista múltiple, sí/no, enlace), públicos o internos.
 - Nada específico de una empresa en el código: todo va a `settings` o a los campos.
 
@@ -87,7 +89,7 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - Pendiente: perfiles para el origen CSV y para los módulos `customers` / `sales` (Fase C).
 
 **Fase B — Catálogo avanzado**
-- Nombres de la jerarquía configurables en Web → Configuración (Familia/Subfamilia, Categoría/Subcategoría…).
+- ~~Nombres de la jerarquía configurables~~ (hecho: ver sección 5).
 - Filtros por campos públicos (Tallas, Color…) en el catálogo.
 - Campos públicos en el catálogo PDF (`/catalogo/completo`), nunca los internos.
 
