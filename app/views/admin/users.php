@@ -8,6 +8,10 @@
     <tr>
       <td><?= e($u['username']) ?><?= (int)$u['id'] === $me ? ' <small>(tú)</small>' : '' ?>
         <br><small class="muted">Último acceso: <?= (int)$u['last_login_at'] > 0 ? e(date('d/m/Y H:i', (int)$u['last_login_at'])) : 'ninguno' ?></small>
+        <?php if ((int)$u['totp_enabled'] === 1): ?>
+          <br><small class="muted">Doble verificación activada</small>
+          <?php if ((int)$u['id'] !== $me): ?><form method="post" class="inline" onsubmit="return confirm('¿Quitar la doble verificación a este usuario? Podrá entrar solo con la contraseña hasta que la vuelva a activar.')"><?= csrf_field() ?><input type="hidden" name="action" value="totp_off"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="link danger" type="submit">Quitar</button></form><?php endif; ?>
+        <?php endif; ?>
         <?php if ((int)$u['locked_until'] > time()): ?>
           <br><small class="review-flag">Bloqueado por intentos fallidos hasta las <?= e(date('H:i', (int)$u['locked_until'])) ?></small>
           <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="unlock"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="link" type="submit">Desbloquear</button></form>

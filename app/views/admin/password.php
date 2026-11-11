@@ -39,3 +39,39 @@
     <small class="muted"> Útil si pierdes un móvil u ordenador: borra todos menos este (el que estás usando ahora); si alguien entra desde otro, recibirás el aviso.</small>
   </form>
 </div>
+
+<h2 id="doble">Doble verificación</h2>
+<div class="form">
+  <?php if ($tf['codes']): ?>
+    <div class="flash ok" style="margin:0">
+      <strong>Códigos de recuperación.</strong> Guárdalos ahora en un sitio seguro (gestor de contraseñas o papel): <strong>no se volverán a mostrar</strong>. Cada uno vale una sola vez y sirve si pierdes el móvil.
+      <ul class="codes"><?php foreach ($tf['codes'] as $c): ?><li><code><?= e($c) ?></code></li><?php endforeach; ?></ul>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($tf['enabled']): ?>
+    <p style="margin:0"><strong>Activada.</strong> Al entrar, después de la contraseña, se pide el código de tu app. Te quedan <strong><?= (int)$tf['left'] ?></strong> código<?= $tf['left'] === 1 ? '' : 's' ?> de recuperación.<?= $tf['left'] <= 2 ? ' <strong>Pide códigos nuevos pronto.</strong>' : '' ?></p>
+    <form method="post" autocomplete="off">
+      <?= csrf_field() ?>
+      <label>Tu contraseña actual <input type="password" name="current" required autocomplete="current-password"></label>
+      <label>Código de la app (o de recuperación) <input name="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="20" spellcheck="false"></label>
+      <div class="buttons">
+        <button class="btn ghost" type="submit" name="action" value="totp_newcodes">Códigos de recuperación nuevos</button>
+        <button class="btn ghost" type="submit" name="action" value="totp_disable" onclick="return confirm('¿Desactivar la doble verificación?')">Desactivar</button>
+      </div>
+    </form>
+  <?php elseif ($tf['setup'] !== ''): ?>
+    <p style="margin:0"><strong>Paso 1.</strong> En tu app de autenticación (Google Authenticator, Microsoft Authenticator, Aegis…) añade una cuenta nueva con «Introducir clave de configuración» y escribe esta clave (tipo «basada en tiempo»):</p>
+    <p class="totp-key"><code><?= e($tf['pretty']) ?></code></p>
+    <p class="muted" style="margin:0">Desde el móvil también puedes <a href="<?= e($tf['uri']) ?>">abrir este enlace</a> para que la app la añada sola.</p>
+    <form method="post" autocomplete="off">
+      <?= csrf_field() ?><input type="hidden" name="action" value="totp_enable">
+      <label><strong>Paso 2.</strong> Escribe el código de 6 dígitos que muestra la app <input name="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="10" spellcheck="false" placeholder="123456"></label>
+      <div class="buttons"><button class="btn" type="submit">Comprobar y activar</button>
+        <button class="btn ghost" type="submit" name="action" value="totp_cancel" formnovalidate>Cancelar</button></div>
+    </form>
+  <?php else: ?>
+    <p style="margin:0">Opcional. Añade un segundo paso al entrar: además de la contraseña, un código de 6 dígitos que cambia cada 30 segundos en una app de tu móvil. Así, aunque alguien conozca tu contraseña, no puede entrar.</p>
+    <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="totp_start"><button class="btn" type="submit">Activar</button></form>
+  <?php endif; ?>
+</div>

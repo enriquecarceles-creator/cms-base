@@ -22,7 +22,7 @@ const DB_ENGINES = [
 ];
 
 /** Tablas de la aplicación en orden de dependencias (padres antes que hijas). */
-const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'settings', 'categories', 'products',
+const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'user_recovery_codes', 'settings', 'categories', 'products',
     'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages'];
 
 /** PDO que traduce el SQL al motor de destino. */

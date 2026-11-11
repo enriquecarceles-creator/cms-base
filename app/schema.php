@@ -75,6 +75,22 @@ const SCHEMA_USER_SECURITY_COLUMNS = [
     'last_login_at' => '{BIG} NOT NULL DEFAULT 0',
 ];
 
+/** v18: doble verificación TOTP (ver app/auth.php): columnas de users y códigos de recuperación de un solo uso. */
+const SCHEMA_USER_TOTP_COLUMNS = [
+    'totp_secret' => "{S} NOT NULL DEFAULT ''",
+    'totp_enabled' => '{I} NOT NULL DEFAULT 0',
+    'totp_last_step' => '{BIG} NOT NULL DEFAULT 0',
+];
+const SCHEMA_RECOVERY_DDL = "
+    CREATE TABLE user_recovery_codes (
+        id {ID},
+        user_id {I} NOT NULL,
+        code_hash {S} NOT NULL,
+        used_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_recovery_user ON user_recovery_codes(user_id);
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -86,7 +102,10 @@ const SCHEMA_DDL = "
         failed_attempts {I} NOT NULL DEFAULT 0,
         last_failed_at {BIG} NOT NULL DEFAULT 0,
         locked_until {BIG} NOT NULL DEFAULT 0,
-        last_login_at {BIG} NOT NULL DEFAULT 0
+        last_login_at {BIG} NOT NULL DEFAULT 0,
+        totp_secret {S} NOT NULL DEFAULT '',
+        totp_enabled {I} NOT NULL DEFAULT 0,
+        totp_last_step {BIG} NOT NULL DEFAULT 0
     );
     CREATE TABLE login_attempts (
         id {ID},
@@ -157,7 +176,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -199,6 +218,19 @@ function migrate_schema(CmsPdo $pdo): void
         }
         if (!in_array('login_devices', db_tables($pdo), true)) {
             foreach (db_ddl(SCHEMA_DEVICES_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
+        }
+    }
+    if ($ver < 18) {
+        $have = db_columns($pdo, 'users');
+        foreach (SCHEMA_USER_TOTP_COLUMNS as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'users', $col, $def);
+            }
+        }
+        if (!in_array('user_recovery_codes', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_RECOVERY_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
             }
         }

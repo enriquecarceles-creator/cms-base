@@ -23,6 +23,10 @@ function admin_dispatch(array $segs): void
         admin_login();
         return;
     }
+    if ($page === 'verificar') {
+        admin_login_code();
+        return;
+    }
     if ($page === 'olvido') {
         admin_forgot();
         return;
@@ -215,6 +219,7 @@ function admin_segment(bool $full = false): string
 
 function admin_login(): void
 {
+    auth_ftp_disable_totp(); // data/sin-2fa.txt (recuperación por FTP)
     $errors = [];
     $db = db();
     $ip = $_SERVER['REMOTE_ADDR'] ?? '0';
@@ -240,6 +245,13 @@ function admin_login(): void
                 password_hash($pass, PASSWORD_DEFAULT);
                 $ok = false;
             }
+            if ($ok && !auth_locked($user) && (int)$user['totp_enabled'] === 1) {
+                // Contraseña bien, pero falta el código: todavía NO hay sesión (uid); solo un paso pendiente de 5 minutos.
+                session_regenerate_id(true);
+                $_SESSION['pending_uid'] = (int)$user['id'];
+                $_SESSION['pending_at'] = time();
+                redirect('/admin/verificar');
+            }
             if ($ok && !auth_locked($user)) {
                 $db->prepare('DELETE FROM login_attempts WHERE ip = ?')->execute([$ip]);
                 session_regenerate_id(true);
@@ -257,6 +269,57 @@ function admin_login(): void
         $errors[] = 'Demasiados intentos. Espera 15 minutos y vuelve a probar.';
     }
     render('admin/login', ['flashes' => take_flash(), 'errors' => $errors, 'title' => 'Acceso · Panel ' . site_name()], 'admin/layout_bare');
+}
+
+/** Segundo paso del acceso: código de la app (6 dígitos) o de recuperación. Sin esto no se crea la sesión. */
+function admin_login_code(): void
+{
+    $db = db();
+    $uid = (int)($_SESSION['pending_uid'] ?? 0);
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0';
+    $user = null;
+    if ($uid > 0 && time() - (int)($_SESSION['pending_at'] ?? 0) <= TOTP_PENDING_SECS) {
+        $st = $db->prepare('SELECT * FROM users WHERE id = ?');
+        $st->execute([$uid]);
+        $user = $st->fetch() ?: null;
+    }
+    if (!$user || (int)$user['totp_enabled'] !== 1 || auth_locked($user)) {
+        unset($_SESSION['pending_uid'], $_SESSION['pending_at']);
+        flash($user ? AUTH_GENERIC_ERROR : 'La verificación ha caducado. Vuelve a entrar.', 'err');
+        redirect('/admin/login');
+    }
+    $errors = [];
+    $db->prepare('DELETE FROM login_attempts WHERE ts < ?')->execute([time() - 900]);
+    $cnt = $db->prepare('SELECT COUNT(*) FROM login_attempts WHERE ip = ?');
+    $cnt->execute([$ip]);
+    $locked = (int)$cnt->fetchColumn() >= 8;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        if ($locked) {
+            $errors[] = 'Demasiados intentos. Espera 15 minutos y vuelve a probar.';
+        } elseif (auth_verify_second_factor($user, (string)($_POST['code'] ?? ''))) {
+            $db->prepare('DELETE FROM login_attempts WHERE ip = ?')->execute([$ip]);
+            session_regenerate_id(true);
+            unset($_SESSION['pending_uid'], $_SESSION['pending_at']);
+            $_SESSION['uid'] = (int)$user['id'];
+            auth_after_login($user);
+            redirect('/admin');
+        } else {
+            $db->prepare('INSERT INTO login_attempts (ip, ts) VALUES (?, ?)')->execute([$ip, time()]);
+            auth_register_failure((int)$user['id']); // los códigos fallidos cuentan para el mismo bloqueo por usuario (5 → 15 min)
+            $st = $db->prepare('SELECT locked_until FROM users WHERE id = ?');
+            $st->execute([$uid]);
+            if (auth_locked(['locked_until' => $st->fetchColumn()])) {
+                unset($_SESSION['pending_uid'], $_SESSION['pending_at']);
+                flash(AUTH_GENERIC_ERROR, 'err');
+                redirect('/admin/login');
+            }
+            $errors[] = 'Código incorrecto. Si fallas varias veces seguidas, el acceso se bloquea unos minutos.';
+        }
+    } elseif ($locked) {
+        $errors[] = 'Demasiados intentos. Espera 15 minutos y vuelve a probar.';
+    }
+    render('admin/login_code', ['errors' => $errors, 'title' => 'Verificación · Panel ' . site_name()], 'admin/layout_bare');
 }
 
 /* ---------- Artículos ---------- */
@@ -1732,9 +1795,12 @@ function admin_password(): void
 {
     $errors = [];
     $db = db();
-    $me = $db->prepare('SELECT username, email FROM users WHERE id = ?');
+    $me = $db->prepare('SELECT id, username, email, totp_enabled FROM users WHERE id = ?');
     $me->execute([(int)$_SESSION['uid']]);
-    $me = $me->fetch() ?: ['username' => '', 'email' => ''];
+    $me = $me->fetch() ?: ['id' => 0, 'username' => '', 'email' => '', 'totp_enabled' => 0];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && str_starts_with((string)($_POST['action'] ?? ''), 'totp_')) {
+        admin_totp_post($me, $errors);
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'forget_sites') {
         csrf_check();
         $n = auth_forget_sites((int)$_SESSION['uid']);
@@ -1751,7 +1817,7 @@ function admin_password(): void
             flash('Correo guardado. Es el que se usa para recuperar la contraseña.');
             redirect('/admin/clave');
         }
-    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && !str_starts_with((string)($_POST['action'] ?? ''), 'totp_')) {
         csrf_check();
         $st = $db->prepare('SELECT * FROM users WHERE id = ?');
         $st->execute([(int)$_SESSION['uid']]);
@@ -1773,7 +1839,68 @@ function admin_password(): void
             redirect('/admin');
         }
     }
-    admin_render('password', ['errors' => $errors, 'me' => $me, 'sites' => auth_sites((int)$_SESSION['uid']), 'siteNow' => auth_current_site(), 'title' => 'Mi cuenta']);
+    $setup = (string)($_SESSION['totp_setup'] ?? '');
+    $codes = $_SESSION['totp_codes'] ?? null; // se muestran una sola vez
+    unset($_SESSION['totp_codes']);
+    admin_render('password', ['errors' => $errors, 'me' => $me, 'tf' => [
+        'enabled' => (int)$me['totp_enabled'] === 1, 'left' => auth_recovery_left((int)$me['id']),
+        'setup' => $setup, 'pretty' => $setup !== '' ? totp_pretty($setup) : '', 'uri' => $setup !== '' ? totp_uri($setup, (string)$me['username']) : '',
+        'codes' => is_array($codes) ? $codes : null,
+    ], 'sites' => auth_sites((int)$_SESSION['uid']), 'siteNow' => auth_current_site(), 'title' => 'Mi cuenta']);
+}
+
+
+/** Doble verificación en «Mi cuenta»: empezar, confirmar con un código, desactivar o pedir códigos de recuperación nuevos. */
+function admin_totp_post(array $me, array &$errors): void
+{
+    csrf_check();
+    $db = db();
+    $uid = (int)$me['id'];
+    $act = (string)($_POST['action'] ?? '');
+    $enabled = (int)$me['totp_enabled'] === 1;
+    if ($act === 'totp_start' && !$enabled) {
+        $_SESSION['totp_setup'] = totp_new_secret(); // hasta confirmar con un código, NO se guarda en la base de datos
+        redirect('/admin/clave#doble');
+    }
+    if ($act === 'totp_cancel') {
+        unset($_SESSION['totp_setup']);
+        redirect('/admin/clave#doble');
+    }
+    if ($act === 'totp_enable' && !$enabled) {
+        $secret = (string)($_SESSION['totp_setup'] ?? '');
+        $step = $secret !== '' ? totp_check($secret, (string)($_POST['code'] ?? '')) : null;
+        if ($step === null) {
+            $errors[] = $secret === '' ? 'Pulsa «Activar» para empezar de nuevo.' : 'El código no es correcto. Comprueba que has copiado bien la clave y que la hora del móvil es la correcta.';
+            return;
+        }
+        $db->prepare('UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_last_step = ? WHERE id = ?')->execute([$secret, $step, $uid]);
+        $codes = auth_new_recovery_codes();
+        auth_save_recovery_codes($uid, $codes);
+        unset($_SESSION['totp_setup']);
+        $_SESSION['totp_codes'] = $codes;
+        flash('Doble verificación activada. Guarda ahora los códigos de recuperación.');
+        redirect('/admin/clave#doble');
+    }
+    if (($act === 'totp_disable' || $act === 'totp_newcodes') && $enabled) {
+        $st = $db->prepare('SELECT * FROM users WHERE id = ?');
+        $st->execute([$uid]);
+        $user = $st->fetch();
+        if (!$user || !password_verify((string)($_POST['current'] ?? ''), (string)$user['pass_hash']) || !auth_verify_second_factor($user, (string)($_POST['code'] ?? ''))) {
+            auth_register_failure($uid);
+            $errors[] = 'La contraseña o el código no son correctos.';
+            return;
+        }
+        if ($act === 'totp_disable') {
+            auth_totp_disable($uid);
+            flash('Doble verificación desactivada.');
+        } else {
+            $codes = auth_new_recovery_codes();
+            auth_save_recovery_codes($uid, $codes);
+            $_SESSION['totp_codes'] = $codes;
+            flash('Códigos de recuperación nuevos. Los anteriores ya no valen.');
+        }
+        redirect('/admin/clave#doble');
+    }
 }
 
 
@@ -1858,6 +1985,10 @@ function admin_users(): void
                 flash('Contraseña de «' . $target['username'] . '» cambiada.');
                 redirect('/admin/usuarios');
             }
+        } elseif ($target && $act === 'totp_off' && $id !== $me) {
+            auth_totp_disable($id);
+            flash('Doble verificación de «' . $target['username'] . '» desactivada.');
+            redirect('/admin/usuarios');
         } elseif ($target && $act === 'unlock') {
             auth_unlock($id);
             flash('Usuario «' . $target['username'] . '» desbloqueado.');
@@ -1869,6 +2000,7 @@ function admin_users(): void
                 $errors[] = 'Debe quedar al menos un administrador.';
             } else {
                 $db->prepare('DELETE FROM login_devices WHERE user_id = ?')->execute([$id]);
+                $db->prepare('DELETE FROM user_recovery_codes WHERE user_id = ?')->execute([$id]);
                 $db->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
                 flash('Usuario borrado.');
                 redirect('/admin/usuarios');
@@ -1876,7 +2008,7 @@ function admin_users(): void
         }
     }
     admin_render('users', [
-        'users' => $db->query('SELECT id, username, role, email, locked_until, last_login_at FROM users ORDER BY username COLLATE NOCASE')->fetchAll(),
+        'users' => $db->query('SELECT id, username, role, email, locked_until, last_login_at, totp_enabled FROM users ORDER BY username COLLATE NOCASE')->fetchAll(),
         'errors' => $errors, 'form' => $form, 'me' => $me, 'title' => 'Usuarios',
     ]);
 }
@@ -1980,15 +2112,14 @@ function backup_make(string $dest): bool
             @set_time_limit(300);
             db_export_sqlite($tmpDb);
         }
+        auth_scrub_backup($tmpDb); // la copia no lleva las claves de doble verificación
         $zip->addFile($tmpDb, 'data/site.sqlite');
     } catch (Throwable $e) {
         error_log((string)$e);
-        if (db()->drv !== 'sqlite') {
-            $zip->close();
-            @unlink($tmpDb);
-            return false;
-        }
-        $zip->addFile(DB_SQLITE_FILE, 'data/site.sqlite');
+        $zip->close();
+        @unlink($tmpDb);
+        @unlink($dest);
+        return false; // mejor sin copia que una copia con las claves
     }
     $root = ROOT . '/uploads';
     if (is_dir($root)) {
