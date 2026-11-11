@@ -247,17 +247,17 @@ function field_input(array $f, string $v): string
     $label = e($f['name']) . ($f['unit'] !== '' && $f['kind'] !== 'price' ? ' <small>(' . e($f['unit']) . ')</small>' : '') . ($f['is_public'] ? '' : ' <small class="muted">· interno</small>');
     switch ($f['kind']) {
         case 'textarea':
-            return '<label>' . $label . ' <textarea name="' . $name . '" rows="3">' . e($v) . '</textarea></label>';
+            return '<label><span class="lbl">' . $label . '</span> <textarea name="' . $name . '" rows="3">' . e($v) . '</textarea></label>';
         case 'number':
         case 'price':
             $shown = $v === '' ? '' : str_replace('.', ',', $v);
-            return '<label>' . $label . ' <input name="' . $name . '" value="' . e($shown) . '" inputmode="decimal"' . ($f['kind'] === 'price' ? ' placeholder="0,00 ' . e($f['unit'] ?: '€') . '"' : '') . '></label>';
+            return '<label><span class="lbl">' . $label . '</span> <input name="' . $name . '" value="' . e($shown) . '" inputmode="decimal"' . ($f['kind'] === 'price' ? ' placeholder="0,00 ' . e($f['unit'] ?: '€') . '"' : '') . '></label>';
         case 'bool':
             return '<label class="check"><input type="hidden" name="' . $name . '" value=""><input type="checkbox" name="' . $name . '" value="1"' . ($v === '1' ? ' checked' : '') . '> ' . $label . '</label>';
         case 'url':
-            return '<label>' . $label . ' <input type="url" name="' . $name . '" value="' . e($v) . '" placeholder="https://…"></label>';
+            return '<label><span class="lbl">' . $label . '</span> <input type="url" name="' . $name . '" value="' . e($v) . '" placeholder="https://…"></label>';
         case 'select':
-            $h = '<label>' . $label . ' <select name="' . $name . '"><option value="">—</option>';
+            $h = '<label><span class="lbl">' . $label . '</span> <select name="' . $name . '"><option value="">—</option>';
             $choices = field_choices($f);
             if ($v !== '' && !in_array($v, $choices, true)) {
                 $choices[] = $v;
@@ -275,7 +275,7 @@ function field_input(array $f, string $v): string
             }
             return $h . ($choices ? '' : '<small>Escribe las opciones en Web → Campos.</small>') . '</fieldset>';
         default:
-            return '<label>' . $label . ' <input name="' . $name . '" value="' . e($v) . '" maxlength="5000"></label>';
+            return '<label><span class="lbl">' . $label . '</span> <input name="' . $name . '" value="' . e($v) . '" maxlength="5000"></label>';
     }
 }
 

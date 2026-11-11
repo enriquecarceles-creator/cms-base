@@ -291,3 +291,32 @@ fieldset.multi label.check{font-weight:400}
 .confirm .form{border:0;padding:0}
 .btn.danger-solid{background:var(--err)}
 .btn.danger-solid:hover{background:#86291f}
+
+/* ===== Formulario de artículo por secciones ===== */
+/* Los campos que reciben el foco no quedan debajo de la barra fija de guardar */
+html:has(.pform){scroll-padding-bottom:96px}
+.pform{max-width:1100px;padding-bottom:0}
+.ptabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:-4px 0 4px}
+.ptabs a{padding:8px 14px;color:var(--steel);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-size:.93rem}
+.ptabs a:hover{color:var(--ink)}
+.ptabs a[aria-current="true"]{color:var(--ink);border-bottom-color:var(--gold);font-weight:600}
+.ptabs a:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+.psec{display:flex;flex-direction:column;gap:14px;padding:6px 0 10px}
+.psec[hidden]{display:none}
+.pform:not(.tabbed) .psec + .psec{border-top:1px dashed var(--line);padding-top:18px}
+.psec > h2{margin:0;font-size:1.05rem}
+.pform.tabbed .psec > h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.savebar{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:6px -18px 0;padding:12px 18px;background:var(--surface);border-top:1px solid var(--line);border-radius:0 0 14px 14px;box-shadow:0 -6px 16px rgba(0,0,0,.05)}
+.savebar-back{font-size:.9rem;color:var(--steel)}
+.savebar-state{margin-left:auto;font-size:.88rem;color:var(--warn);font-weight:600}
+.pform.dirty .savebar{border-top-color:var(--gold)}
+@media (max-width:600px){html:has(.pform){scroll-padding-bottom:150px}.savebar{gap:8px}.savebar .btn{padding:9px 16px}.savebar-state{margin-left:0;width:100%}}
+
+/* Arreglos de botones: «font: … inherit» no es válido (se ignoraba y los <button> salían con letra pequeña),
+   y .btn pisaba el fondo blanco de los botones de peligro */
+.btn{font-family:inherit;font-size:.95rem;line-height:1.2;font-weight:500}
+.btn.small{font-size:.86rem}
+.btn.danger-btn{background:#fff;color:var(--err);border:1px solid #e7cbc7}
+.btn.danger-btn:hover{background:var(--err-bg)}
+.form label > .lbl small{font-weight:400;margin-left:4px}
+.t-thumb a{text-decoration:none;display:block}

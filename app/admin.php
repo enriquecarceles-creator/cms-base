@@ -730,8 +730,16 @@ function admin_product(string $id): void
             redirect(admin_list_url($back ?: ['c' => (int)$form['category_id']]));
         }
     }
+    // Si el guardado falló, las fotos elegidas se pierden (el navegador no recuerda el archivo): avisarlo
+    $lostFiles = 0;
+    if ($errors) {
+        foreach (normalize_files($_FILES['images'] ?? null) as $file) {
+            $lostFiles += ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE ? 0 : 1;
+        }
+    }
     admin_render('product_form', [
         'p' => $p, 'f' => $form, 'cats' => $cats, 'errors' => $errors, 'isNew' => $isNew,
+        'lostFiles' => $lostFiles,
         'gallery' => $p ? gallery_for((int)$p['id']) : [],
         'back' => $back,
         'crumb' => $isNew ? 'Nuevo artículo' : 'Editar «' . $p['name'] . '»',
