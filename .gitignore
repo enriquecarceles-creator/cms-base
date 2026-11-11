@@ -4,6 +4,10 @@ data/*.sqlite-*
 data/db.php
 data/mail.php
 data/import/
+# Todo lo que el programa genera dentro de data/ (cachés boxes/gaps/sigs.json, trabajos, copias, ajustes):
+# solo se versiona data/.htaccess
+data/*
+!data/.htaccess
 
 # Fotos subidas (se conservan .htaccess e index.html)
 uploads/*
