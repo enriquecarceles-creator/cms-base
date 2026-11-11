@@ -446,3 +446,20 @@ html:has(.savebar){scroll-padding-bottom:96px}
   .cf-card,.stat,.cf-inv{break-inside:avoid;box-shadow:none}
   .cf-inv>summary::before{display:none}
 }
+
+/* Ventas */
+.down{color:var(--err)}
+.up{color:var(--ok)}
+.mbar{width:26%;min-width:120px}
+.mbar span{display:block;height:8px;border-radius:4px;margin:2px 0}
+.mb-pos{background:var(--gold)}
+.mb-neg{background:var(--err)}
+.rank{list-style:none;margin:0;padding:0}
+.rank li{display:grid;grid-template-columns:5.5em 1fr 8em;gap:8px;align-items:center;padding:4px 0;font-size:.92rem}
+.rk-l{overflow-wrap:anywhere}
+.rk-b{display:block;height:10px;background:var(--soft,#f1efe9);border-radius:5px;overflow:hidden}
+.rk-b span{display:block;height:100%;background:var(--gold)}
+.rk-v{text-align:right;white-space:nowrap}
+.pay-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 14px}
+.pay-grid label{display:flex;flex-direction:column;gap:3px;font-size:.88rem}
+.serie{border:1px solid var(--line);border-radius:10px;padding:8px 12px}

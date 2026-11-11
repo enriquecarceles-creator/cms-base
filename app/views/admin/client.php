@@ -23,7 +23,7 @@ $ended = (int)$c['ended_day'] > 0;
       <?php if ($ended): ?><span class="tag tag-off">De baja</span><?php elseif ((int)$c['blocked'] === 1): ?><span class="tag tag-off">Bloqueado</span><?php else: ?><span class="tag tag-ok">Activo</span><?php endif; ?>
       <?php if ($isRetail): ?><span class="tag">Contado</span><?php endif; ?>
       <?php if ((int)$c['tariff'] > 0): ?><span class="tag">Tarifa <?= (int)$c['tariff'] ?></span><?php endif; ?>
-      <?php if ($c['pay_code'] !== ''): ?><span class="tag">F. pago <?= e($c['pay_code']) ?></span><?php endif; ?>
+      <?php if ($c['pay_code'] !== ''): ?><span class="tag"><?= e(erp_pay_label($c["pay_code"])) ?></span><?php endif; ?>
     </p>
   </div>
   <div class="cf-actions">
@@ -231,7 +231,7 @@ $ended = (int)$c['ended_day'] > 0;
       <h2>Datos comerciales</h2>
       <dl class="kv kv-1">
         <div><dt>Tarifa</dt><dd><?= (int)$c['tariff'] > 0 ? (int)$c['tariff'] : '—' ?></dd></div>
-        <div><dt>Forma de pago (código NCS)</dt><dd><?= e($c['pay_code'] !== '' ? $c['pay_code'] : '—') ?></dd></div>
+        <div><dt>Forma de pago</dt><dd><?= e($c['pay_code'] !== '' ? erp_pay_label($c['pay_code']) : '—') ?></dd></div>
         <div><dt>Descuento</dt><dd><?= (int)$c['disc_bp'] > 0 ? e(rtrim(rtrim(number_format($c['disc_bp'] / 100, 2, ',', ''), '0'), ',')) . ' %' : '—' ?></dd></div>
         <div><dt>Alta en NCS</dt><dd><?= e(erp_day((int)$c['created_day'])) ?></dd></div>
         <?php if ($ended): ?><div><dt>Baja</dt><dd><?= e(erp_day((int)$c['ended_day'])) ?></dd></div><?php endif; ?>

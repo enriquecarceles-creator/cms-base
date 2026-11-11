@@ -78,4 +78,22 @@ $st = $job['status'] ?? '';
     <label>Código del cliente de los tickets de mostrador <input name="retail" value="<?= e($retail) ?>" maxlength="40" placeholder="vacío = ninguno"><small>Se oculta en la lista de Clientes. Lo propone el análisis, pero aquí se puede cambiar.</small></label>
     <div class="buttons"><button class="btn ghost" type="submit">Guardar</button></div>
   </form>
+
+  <h2 id="documentos">Documentos (factura)</h2>
+  <form method="post" class="form">
+    <?= csrf_field() ?><input type="hidden" name="action" value="docs">
+    <fieldset class="serie"><legend>Serie de las facturas</legend>
+      <label class="check"><input type="radio" name="serie_mode" value="letras"<?= setting('erp_serie_mode', 'letras') === 'letras' ? ' checked' : '' ?>> <span>Las letras con que empieza el número (p. ej. <code>A00012</code> → serie A)</span></label>
+      <label class="check"><input type="radio" name="serie_mode" value="n"<?= setting('erp_serie_mode', 'letras') === 'n' ? ' checked' : '' ?>> <span>Los primeros <input type="number" name="serie_n" min="1" max="6" value="<?= (int)setting('erp_serie_n', '1') ?>" style="width:4.5em"> caracteres del número</span></label>
+      <label class="check"><input type="radio" name="serie_mode" value="ninguna"<?= setting('erp_serie_mode', 'letras') === 'ninguna' ? ' checked' : '' ?>> <span>No mostrar serie</span></label>
+      <small class="muted">NCS no guarda la serie como dato aparte: se deduce del número.</small>
+    </fieldset>
+    <?php if ($payCodes): ?>
+      <p style="margin:8px 0 4px"><strong>Formas de pago</strong> <span class="muted">(NCS solo guarda el código; pon aquí el nombre que quieras ver en la factura y la ficha)</span></p>
+      <div class="pay-grid">
+        <?php foreach ($payCodes as $code): ?><label><span>Código <strong><?= e($code) ?></strong></span><input name="pay[<?= e($code) ?>]" value="<?= e($payNames[$code] ?? '') ?>" maxlength="40" placeholder="p. ej. Transferencia"></label><?php endforeach; ?>
+      </div>
+    <?php else: ?><p class="muted">Aparecerán aquí los códigos de forma de pago cuando se sincronicen facturas y clientes.</p><?php endif; ?>
+    <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
+  </form>
 <?php endif; ?>

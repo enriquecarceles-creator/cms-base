@@ -15,6 +15,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/mdb.php';
 require_once __DIR__ . '/erp_client.php';
+require_once __DIR__ . '/documents.php';
+require_once __DIR__ . '/erp_sales.php';
 
 const ERP_STAGE = DATA_DIR . '/erp_stage.sqlite';
 const ERP_JOB = DATA_DIR . '/erp_job.json';
@@ -143,6 +145,17 @@ function erp_map_invoice(array $h): array
         $base += (float)($h["BASE$i"] ?? 0);
         $vat += (float)($h["CUOTA$i"] ?? 0);
     }
+    // Desglose por tipo de IVA (índices 0 a 9). El porcentaje de cada índice NO está en FHISTORI: se calcula por factura (CUOTA/BASE).
+    $vatRows = [];
+    for ($i = 0; $i < 10; $i++) {
+        $bs = erp_cents($h["BASE$i"] ?? 0);
+        $cu = erp_cents($h["CUOTA$i"] ?? 0);
+        $rc = erp_cents($h["RECARGO$i"] ?? 0);
+        $rt = erp_cents($h["RETENCION$i"] ?? 0);
+        if ($bs !== 0 || $cu !== 0 || $rc !== 0 || $rt !== 0) {
+            $vatRows[] = ['i' => $i, 'pct' => $bs !== 0 ? round($cu / $bs * 100) : null, 'base' => $bs, 'cuota' => $cu, 'rec' => $rc, 'ret' => $rt];
+        }
+    }
     $day = erp_day_from($h['FECHA'] ?? '');
     return [
         'inv_number' => erp_txt($h['FACTURA'] ?? '', 191),
@@ -159,6 +172,8 @@ function erp_map_invoice(array $h): array
         'pay_code' => erp_txt($h['FPAGO2'] ?? '', 20),
         'annulled' => (int)($h['ANULADA'] ?? 0) !== 0 ? 1 : 0,
         'rectifies' => erp_txt($h['FRECTIFI'] ?? '', 40),
+        'iva_incl' => (int)($h['IVAINCLUIDO'] ?? 0) !== 0 ? 1 : 0,
+        'vat_json' => json_encode($vatRows),
     ];
 }
 
@@ -587,6 +602,21 @@ function admin_erp_sync(): void
             flash('Cliente de contado guardado.');
             redirect('/admin/erp');
         }
+        if ($act === 'docs') { // serie de las facturas y nombres de las formas de pago
+            $mode = (string)($_POST['serie_mode'] ?? 'letras');
+            save_setting('erp_serie_mode', in_array($mode, ['letras', 'ninguna', 'n'], true) ? $mode : 'letras');
+            save_setting('erp_serie_n', (string)max(1, min(6, (int)($_POST['serie_n'] ?? 1))));
+            $names = [];
+            foreach (erp_pay_codes() as $code) { // solo los códigos que existen
+                $nm = mb_substr(trim(strip_tags((string)(((array)($_POST['pay'] ?? []))[$code] ?? ''))), 0, 40);
+                if ($nm !== '') {
+                    $names[$code] = $nm;
+                }
+            }
+            save_setting('erp_pay_names', (string)json_encode($names, JSON_UNESCAPED_UNICODE));
+            flash('Ajustes de documentos guardados.');
+            redirect('/admin/erp#documentos');
+        }
         if ($act === 'start' && $job && ($job['status'] ?? '') === 'plan') {
             save_setting('erp_retail_customer', erp_txt($_POST['retail'] ?? '', 40));
             $job['status'] = 'run';
@@ -625,8 +655,23 @@ function admin_erp_sync(): void
     $last = json_decode(db_setting('erp_last_sync'), true);
     admin_render('erp_sync', [
         'job' => $job, 'last' => is_array($last) ? $last : null, 'ftp' => erp_ftp_sources(), 'retail' => erp_retail_code(),
-        'refresh' => $refresh, 'totals' => erp_totals(), 'title' => 'Sincronizar con NCS',
+        'refresh' => $refresh, 'totals' => erp_totals(), 'payCodes' => erp_pay_codes(), 'payNames' => erp_pay_names(), 'title' => 'Sincronizar con NCS',
     ]);
+}
+
+/** Códigos de forma de pago que aparecen en facturas y clientes (para ponerles nombre). */
+function erp_pay_codes(): array
+{
+    $db = db();
+    $out = [];
+    foreach (['SELECT DISTINCT pay_code FROM erp_invoices WHERE pay_code <> \'\'', 'SELECT DISTINCT pay_code FROM erp_customers WHERE pay_code <> \'\''] as $q) {
+        foreach ($db->query($q)->fetchAll(PDO::FETCH_COLUMN) as $c) {
+            $out[(string)$c] = true;
+        }
+    }
+    $codes = array_map('strval', array_keys($out));
+    sort($codes, SORT_NATURAL);
+    return $codes;
 }
 
 /** Recuentos de lo que hay guardado. */
@@ -737,30 +782,4 @@ function erp_article_links(array $codes): array
         }
     }
     return $res;
-}
-
-/* ---------- Pantalla: factura con sus líneas ---------- */
-
-function admin_invoice(string $num): void
-{
-    if (!erp_guard()) {
-        return;
-    }
-    $db = db();
-    $st = $db->prepare('SELECT * FROM erp_invoices WHERE inv_number = ?');
-    $st->execute([$num]);
-    $inv = $st->fetch();
-    if (!$inv) {
-        not_found();
-        return;
-    }
-    $st = $db->prepare('SELECT * FROM erp_invoice_lines WHERE invoice_id = ? ORDER BY line_no, id');
-    $st->execute([(int)$inv['id']]);
-    $lines = $st->fetchAll();
-    $st = $db->prepare('SELECT cust_code, name FROM erp_customers WHERE cust_code = ?');
-    $st->execute([$inv['cust_code']]);
-    admin_render('invoice', [
-        'inv' => $inv, 'lines' => $lines, 'cust' => $st->fetch() ?: null, 'links' => erp_article_links(array_column($lines, 'article_code')),
-        'crumb' => 'Factura ' . $inv['inv_number'], 'title' => 'Factura',
-    ]);
 }

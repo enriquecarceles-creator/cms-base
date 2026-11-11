@@ -124,10 +124,12 @@ function admin_dispatch(array $segs): void
             admin_clients((string)($segs[2] ?? ''));
             break;
         case 'ventas':
-            if ((string)($segs[2] ?? '') === '') {
-                redirect('/admin/clientes'); // la lista de ventas llega en la entrega B
+            $sub = (string)($segs[2] ?? '');
+            if ($sub === '' || isset(ERP_SALES_TABS[$sub])) {
+                admin_sales($sub);
+            } else {
+                admin_invoice($sub);
             }
-            admin_invoice((string)$segs[2]);
             break;
         case 'erp':
             admin_erp_sync();
@@ -212,7 +214,8 @@ function admin_menu(): array
             ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
         ]],
         'erp' => ['Clientes y Ventas', 'users', [
-            ['Clientes', '/admin/clientes', ['clientes', 'ventas'], false],
+            ['Clientes', '/admin/clientes', ['clientes'], false],
+            ['Ventas', '/admin/ventas', ['ventas'], false],
             ['Sincronizar con NCS', '/admin/erp', ['erp'], false],
         ]],
         'users' => ['Usuarios', 'users', [['Usuarios', '/admin/usuarios', ['usuarios'], true]]],

@@ -152,10 +152,10 @@ function db(): CmsPdo
     return $pdo;
 }
 
-function setting(string $key, string $default = ''): string
+function setting(string $key, string $default = '', bool $refresh = false): string
 {
     static $all = null;
-    if ($all === null) {
+    if ($all === null || $refresh) { // $refresh: volver a leer (tras save_setting en la misma petición, p. ej. en las pruebas)
         $all = db()->query('SELECT key, value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR);
     }
     return (isset($all[$key]) && $all[$key] !== '') ? $all[$key] : $default;

@@ -139,7 +139,18 @@ $now['erp'] = [
     'lineas_color' => $one('SELECT COUNT(*) FROM erp_invoice_lines WHERE color_no > 0'),
     'lineas_color_texto' => $one("SELECT COUNT(*) FROM erp_invoice_lines WHERE color_no > 0 AND color_txt <> ''"),
     'cliente_contado' => $res['retail_suggest'] !== '' ? 'propuesto' : 'ninguno',
+    'facturas_iva_incluido' => $one('SELECT COUNT(*) FROM erp_invoices WHERE iva_incl = 1'),
 ];
+// Desglose de IVA guardado (vat_json): Σ(base+cuota+recargo−retención) debe dar el total de cada factura (céntimos, ±2)
+$vatOk = 0;
+foreach ($db->query('SELECT total_cents, vat_json FROM erp_invoices')->fetchAll() as $r) {
+    $s = 0;
+    foreach ((array)json_decode((string)$r['vat_json'], true) as $row) {
+        $s += (int)$row['base'] + (int)$row['cuota'] + (int)$row['rec'] - (int)$row['ret'];
+    }
+    $vatOk += abs($s - (int)$r['total_cents']) <= 2 ? 1 : 0;
+}
+$now['erp']['iva_desglose_cuadra'] = $vatOk;
 
 // IVA de las facturas: qué índices se usan, a qué porcentaje corresponden (CUOTA/BASE) y si las sumas cuadran con TOTAL
 $ivaOk = 0;
@@ -250,7 +261,7 @@ foreach (['folders' => 'carpetas', 'exact' => 'emparejadas exactas', 'loose' => 
 /* 5. Sincronización del ERP */
 $section('Sincronización del ERP (base temporal)');
 $check('sin errores y termina', empty($job['error']) && $guard <= 200);
-foreach (['clientes', 'facturas', 'lineas', 'total_cents', 'facturas_negativas', 'lineas_talla', 'lineas_talla_texto', 'lineas_color', 'lineas_color_texto', 'cliente_contado', 'iva_total_cuadra', 'iva_indices_usados', 'iva_porcentaje_por_indice'] as $k) {
+foreach (['clientes', 'facturas', 'lineas', 'total_cents', 'facturas_negativas', 'lineas_talla', 'lineas_talla_texto', 'lineas_color', 'lineas_color_texto', 'cliente_contado', 'iva_total_cuadra', 'iva_indices_usados', 'iva_porcentaje_por_indice', 'facturas_iva_incluido', 'iva_desglose_cuadra'] as $k) {
     $check("ERP · $k", $now['erp'][$k] === ($exp['erp'][$k] ?? null), json_encode($now['erp'][$k]) . ' (esperado ' . json_encode($exp['erp'][$k] ?? '?') . ')');
 }
 $check('el plan contaba lo mismo que se guardó', $res['counts']['cust']['new'] === $now['erp']['clientes'] && $res['counts']['inv']['new'] === $now['erp']['facturas'] && $res['counts']['lines'] === $now['erp']['lineas']);
@@ -259,6 +270,36 @@ $res2 = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '
 $c2 = $res2['counts'];
 $check('segunda pasada: todo «sin cambios» (idempotente)', $c2['cust']['new'] + $c2['cust']['changed'] === 0 && $c2['inv']['new'] + $c2['inv']['changed'] === 0, "clientes {$c2['cust']['same']} · facturas {$c2['inv']['same']}");
 erp_job_clear();
+
+/* 5b. Factura como documento: serie, nombres de pago y la plantilla se pinta con todo su contenido */
+$section('Factura como documento');
+$check('serie por defecto = letras iniciales del número', erp_serie('A00012') === 'A' && erp_serie('000123') === '' && erp_serie('V00001') === 'V');
+save_setting('erp_serie_mode', 'n');
+save_setting('erp_serie_n', '2');
+setting('', '', true);
+$check('serie parametrizable: primeros N caracteres', erp_serie('A1B23') === 'A1');
+save_setting('erp_serie_mode', 'ninguna');
+setting('', '', true);
+$check('serie parametrizable: ninguna', erp_serie('A00012') === '');
+save_setting('erp_serie_mode', 'letras');
+save_setting('erp_pay_names', json_encode(['03' => 'Transferencia']));
+setting('', '', true);
+$check('nombre de forma de pago editable', erp_pay_label('03') === 'Transferencia (03)' && erp_pay_label('77') === 'F. pago 77' && erp_pay_label('') === '');
+$ds = doc_settings();
+$check('ajustes de diseño con valores por defecto válidos', $ds['template'] === 'classic' && preg_match('/^#[0-9a-f]{6}$/i', $ds['color']) === 1 && count($ds['cols']) === 9 && $ds['margin_mm'] === 15);
+$pick = $db->query("SELECT inv_number FROM erp_invoices WHERE vat_json LIKE '%\"rec\":%' AND vat_json NOT LIKE '%\"rec\":0%' ORDER BY id LIMIT 1")->fetchColumn();
+$pickNeg = $db->query('SELECT inv_number FROM erp_invoices WHERE total_cents < 0 ORDER BY id LIMIT 1')->fetchColumn();
+$db->prepare('UPDATE erp_invoices SET annulled = 1 WHERE inv_number = ?')->execute([$pickNeg]);
+foreach ([[$pick, 'con recargo', false], [$pickNeg, 'negativa y anulada', true]] as [$num, $label, $stamp]) {
+    $vars = erp_invoice_doc_vars((string)$num);
+    ob_start();
+    render('documents/invoice_classic', $vars, null);
+    $html = (string)ob_get_clean();
+    $okTotal = str_contains($html, '>' . erp_money((int)$vars['inv']['total_cents']) . '<');
+    $okLines = substr_count($html, 'class="num"') >= count($vars['lines']);
+    $check("documento «{$label}»: total, líneas, sello y pie legal", $okTotal && $okLines && str_contains($html, 'class="stamp"') === $stamp && str_contains($html, 'Copia informativa'));
+}
+$db->prepare('UPDATE erp_invoices SET annulled = 0 WHERE inv_number = ?')->execute([$pickNeg]);
 
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');

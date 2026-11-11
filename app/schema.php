@@ -137,6 +137,8 @@ const SCHEMA_ERP_DDL = "
         pay_code {S} NOT NULL DEFAULT '',
         annulled {I} NOT NULL DEFAULT 0,
         rectifies {S} NOT NULL DEFAULT '',
+        iva_incl {I} NOT NULL DEFAULT 0,
+        vat_json {T} NULL,
         row_hash {S} NOT NULL,
         synced_at {BIG} NOT NULL DEFAULT 0
     );
@@ -177,6 +179,11 @@ const SCHEMA_ERP_DDL = "
 const SCHEMA_ERP_V20_COLUMNS = [
     'size_txt' => "{S} NOT NULL DEFAULT ''",
     'color_txt' => "{S} NOT NULL DEFAULT ''",
+];
+/** v21: IVA incluido y desglose por tipo (JSON: [{i, pct, base, cuota, rec, ret}] en céntimos) para la factura como documento. */
+const SCHEMA_ERP_V21_COLUMNS = [
+    'iva_incl' => '{I} NOT NULL DEFAULT 0',
+    'vat_json' => '{T} NULL',
 ];
 const SCHEMA_ERP_NOTES_DDL = "
     CREATE TABLE erp_notes (
@@ -349,6 +356,14 @@ function migrate_schema(CmsPdo $pdo): void
         if (!in_array('erp_notes', db_tables($pdo), true)) {
             foreach (db_ddl(SCHEMA_ERP_NOTES_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
+            }
+        }
+    }
+    if ($ver < 21 && in_array('erp_invoices', db_tables($pdo), true)) {
+        $have = db_columns($pdo, 'erp_invoices');
+        foreach (SCHEMA_ERP_V21_COLUMNS as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'erp_invoices', $col, $def);
             }
         }
     }
