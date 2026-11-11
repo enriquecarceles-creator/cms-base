@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/erp.php';
+require_once __DIR__ . '/history.php';
+require_once __DIR__ . '/export.php';
+require_once __DIR__ . '/import_wizard.php';
 
 function admin_dispatch(array $segs): void
 {
@@ -61,7 +64,7 @@ function admin_dispatch(array $segs): void
         exit;
     }
     if ($role === 'erp') { // el rol ERP solo ve Clientes, Ventas, Sincronizar y su cuenta
-        if ($page === '' || !in_array($page, [...ERP_PAGES, 'clave'], true)) {
+        if ($page === '' || !in_array($page, [...ERP_PAGES, ...ERP_SHARED_PAGES, 'clave'], true)) {
             redirect('/admin/clientes');
         }
     } elseif ($role !== 'admin' && in_array($page, ERP_PAGES, true)) {
@@ -152,6 +155,19 @@ function admin_dispatch(array $segs): void
             $tab = (string)($segs[2] ?? 'meses');
             admin_sales(isset(ERP_REPORT_TABS[$tab]) ? $tab : 'meses');
             break;
+        case 'sincronizacion':
+            admin_sync_status();
+            break;
+        case 'perfiles':
+            require_once __DIR__ . '/profiles.php';
+            admin_profiles((string)($segs[2] ?? ''));
+            break;
+        case 'historial':
+            admin_history();
+            break;
+        case 'exportar':
+            admin_export();
+            break;
         case 'erp':
             admin_erp_sync();
             break;
@@ -238,10 +254,11 @@ function admin_menu(): array
             ['Fotos', '/admin/fotos', ['fotos'], 'catalog'],
         ]],
         'data' => ['Datos', 'import', [
-            ['Importar artículos', '/admin/importar', ['importar'], 'catalog'],
-            ['Fotos por carpeta', '/admin/importar/carpetas', ['importar/carpetas'], 'catalog'],
-            ['Fotos por FTP', '/admin/ftp', ['ftp'], 'catalog'],
-            ['Sincronización', '/admin/erp', ['erp'], 'erp'],
+            ['Importar', '/admin/importar', ['importar', 'importar/carpetas', 'ftp'], 'all'],
+            ['Sincronización', '/admin/sincronizacion', ['sincronizacion', 'erp'], 'erp'],
+            ['Perfiles', '/admin/perfiles', ['perfiles'], 'catalog'],
+            ['Historial', '/admin/historial', ['historial'], 'all'],
+            ['Exportar', '/admin/exportar', ['exportar'], 'all'],
         ]],
         'web' => ['Web', 'web', [
             ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio'], 'admin'],
@@ -1766,6 +1783,10 @@ function admin_import(string $sub = ''): void
 {
     require_once __DIR__ . '/import.php';
     $sources = import_sources();
+    if (current_role() === 'erp' && ($_SERVER['REQUEST_METHOD'] !== 'GET' || $sub !== '' || array_intersect(array_keys($_GET), ['plantilla', 'foto', 'ftpfoto']))) {
+        flash('Tu usuario solo puede traer clientes y ventas desde aquí.', 'err'); // el rol ERP no importa artículos ni fotos
+        redirect('/admin/importar');
+    }
     if ($sub !== '' && !isset(IMPORT_OWN_PAGES[$sub])) {
         not_found();
         return;
@@ -1817,6 +1838,17 @@ function admin_import(string $sub = ''): void
                     import_save($new);
                 }
             } elseif ($action === 'reset') {
+                if ($job && ($job['status'] ?? '') === 'running') { // cancelar a medias: queda anotado
+                    $c = $u = $p = 0;
+                    foreach ($job['items'] ?? [] as $it) {
+                        $c += empty($it['created']) ? 0 : 1;
+                        $u += empty($it['updated']) ? 0 : 1;
+                        foreach ($it['images'] ?? [] as $im) {
+                            $p += ($im['state'] ?? '') === 'ok' ? 1 : 0;
+                        }
+                    }
+                    import_history($job, 'cancelado', $c, $u, $p);
+                }
                 import_clear();
             }
         } catch (RuntimeException $e) {
@@ -1835,13 +1867,30 @@ function admin_import(string $sub = ''): void
         }
         $job = import_load();
     }
+    $que = '';
+    if (!$job && $sub === '') { // asistente: ¿qué quieres traer? → ¿de dónde?
+        $que = (string)($_GET['que'] ?? '');
+        if (admin_import_wizard($que)) {
+            return;
+        }
+        $ncs = import_detect_ncs();
+        $sources = array_filter($sources, fn($s) => in_array($que, import_source_kinds($s), true));
+        foreach ($sources as $sid => &$s) {
+            if ($sid === 'base-datos' && import_ncs_hint($que, $ncs)) {
+                $s['recommended'] = true;
+                $s['help'] = 'Se han encontrado archivos de NCS en data/importar/: esta es la forma de traerlos. ' . $s['help'];
+            }
+        }
+        unset($s);
+    }
     admin_render('import', [
         'job' => $job,
+        'que' => $que,
         'sources' => $only ? array_intersect_key($sources, [$only => 1]) : array_diff_key($sources, array_flip(IMPORT_OWN_PAGES)),
         'only' => $only,
         'ftpZip' => import_zip_input(null),
         'refresh' => $job && ($job['status'] ?? '') === 'running',
-        'title' => $only ? 'Fotos por carpeta' : 'Importar',
+        'title' => $only ? 'Fotos por carpeta' : ($que === 'precios' ? 'Importar precios y stock' : 'Importar artículos'),
     ]);
 }
 
@@ -1985,7 +2034,9 @@ function admin_totp_post(array $me, array &$errors): void
 const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'Gestión de catálogo', 'erp' => 'ERP (clientes y ventas)'];
 
 /** Secciones del ERP (clientes y ventas de NCS): solo rol «erp» y administradores. */
-const ERP_PAGES = ['clientes', 'ventas', 'informes', 'erp'];
+const ERP_PAGES = ['clientes', 'ventas', 'informes', 'erp', 'sincronizacion'];
+/** Páginas que usan a la vez el rol erp y la gestión de catálogo (cada una enseña solo lo que le toca a cada rol). */
+const ERP_SHARED_PAGES = ['importar', 'historial', 'exportar'];
 
 function admin_users(): void
 {

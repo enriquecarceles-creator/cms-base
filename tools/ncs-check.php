@@ -345,6 +345,107 @@ $res3 = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '
 erp_job_clear();
 $check('sincronizar de nuevo no toca el estado propio (cobros, notas, historial)', $one('SELECT COUNT(*) FROM erp_invoice_state') === $cand && $res3['counts']['inv']['new'] + $res3['counts']['inv']['changed'] === 0);
 
+/* 5d. Datos: Historial, Exportar y Perfiles (con los datos reales; nada de esto se imprime) */
+$section('Datos: Historial, Exportar y Perfiles');
+require_once $tmp . '/app/import.php';
+require_once $tmp . '/app/history.php';
+require_once $tmp . '/app/export.php';
+require_once $tmp . '/app/profiles.php';
+$h0 = $one('SELECT COUNT(*) FROM data_history');
+history_add('importacion', 'articulos', 'Prueba', 'ok', '3 nuevos', 'batería');
+$check('historial: anota con usuario, tipo y resultado', $one("SELECT COUNT(*) FROM data_history WHERE username = 'batería' AND kind = 'importacion' AND what = 'articulos' AND result = 'ok'") === 1);
+$ins = $db->prepare('INSERT INTO data_history (created_at, user_id, username, kind, what, origin, result, detail) VALUES (?,?,?,?,?,?,?,?)');
+$db->beginTransaction();
+for ($i = 0; $i < 1100; $i++) {
+    $ins->execute([time(), 0, 'x', 'importacion', 'articulos', 'o', 'ok', 'd']);
+}
+$db->commit();
+history_add('importacion', 'articulos', 'Prueba', 'ok', 'recorte');
+for ($i = 0; $i < 60; $i++) { // el recorte se hace cada 50 filas
+    history_add('importacion', 'articulos', 'Prueba', 'ok', 'recorte', 'x');
+}
+$check('historial: no pasa de ~1.000 filas (se recorta)', $one('SELECT COUNT(*) FROM data_history') <= HISTORY_KEEP + 50);
+$check('historial: cada rol ve solo lo suyo', history_whats_for('admin') === null && history_whats_for('erp') === ['clientes', 'ventas', 'clientes_ventas', 'cobros'] && !in_array('clientes', history_whats_for('catalogo'), true));
+[$k, $w] = import_history_kind(['source' => 'fotos-carpetas']);
+[$k2, $w2] = import_history_kind(['source' => 'base-datos', 'mode' => 'update']);
+$check('historial: tipo de cada importación (fotos / precios / artículos)', [$k, $w] === ['fotos', 'fotos'] && [$k2, $w2] === ['importacion', 'precios'] && import_history_kind(['source' => 'hoja-calculo']) === ['importacion', 'articulos']);
+$db->exec("DELETE FROM data_history WHERE kind = 'sincronizacion'");
+erp_finish(['counts' => ['cust' => ['new' => 3, 'changed' => 1], 'inv' => ['new' => 7, 'changed' => 2]], 'ftp_files' => []]);
+$check('historial: la sincronización manual se anota con números', $one("SELECT COUNT(*) FROM data_history WHERE kind = 'sincronizacion' AND what = 'clientes_ventas' AND result = 'ok' AND detail LIKE 'clientes: 3 nuevos, 1 cambiados%'") === 1);
+$check('historial: sin datos personales en ninguna fila', $one("SELECT COUNT(*) FROM data_history WHERE detail LIKE '%@%' OR origin LIKE '%@%'") === 0);
+$db->exec("DELETE FROM data_history");
+
+$cell = fn($r) => array_filter($r, fn($c) => is_string($c) && preg_match('/^[=+\-@\t\r]/', $c) && !preg_match('/^-?[\d.]+(,\d+)?$/', $c)); // un número negativo («-12,50») no es una fórmula
+$rows = [];
+$cnt = 0;
+$put = function (array $r) use (&$rows) { $rows[] = $r; };
+export_customers_write($put, true, $cnt);
+$nCust = $one('SELECT COUNT(*) FROM erp_customers');
+$check('exportar clientes (reales): una fila por cliente y cabecera', $cnt === $nCust && count($rows) === $nCust + 1 && $rows[0][0] === 'Código', "$cnt clientes");
+$bad = 0;
+foreach ($rows as $r) {
+    $bad += count($cell($r));
+}
+$check('exportar clientes: ninguna celda puede ejecutarse como fórmula en Excel', $bad === 0);
+$retail = erp_retail_code();
+$rows2 = [];
+$cnt2 = 0;
+export_customers_write(function (array $r) use (&$rows2) { $rows2[] = $r; }, false, $cnt2);
+$check('exportar clientes: sin el cliente de contado por defecto', $retail === '' || $cnt2 === $nCust - 1, "$cnt2 de $nCust");
+$check('exportar clientes: nunca salen notas internas ni datos bancarios', !preg_match('/nota|iban|banco|mandato|tarjeta/i', implode(';', $rows[0])));
+
+$rows = [];
+$cnt = 0;
+$inv = 0;
+export_sales_write(function (array $r) use (&$rows) { $rows[] = $r; }, [], false, $cnt, $inv);
+$nInv = $one('SELECT COUNT(*) FROM erp_invoices');
+$sumDb = $one('SELECT COALESCE(SUM(total_cents), 0) FROM erp_invoices');
+$sumCsv = 0;
+foreach (array_slice($rows, 1) as $r) {
+    $sumCsv += (int)round((float)str_replace(',', '.', $r[6]) * 100);
+}
+$check('exportar ventas (reales): una fila por factura y el total cuadra al céntimo', $cnt === $nInv && $inv === $nInv && $sumCsv === $sumDb, "$cnt facturas");
+$rows = [];
+$cnt = 0;
+$inv = 0;
+export_sales_write(function (array $r) use (&$rows) { $rows[] = $r; }, [], true, $cnt, $inv);
+$nLines = $one('SELECT COUNT(*) FROM erp_invoice_lines');
+$noLines = $one('SELECT COUNT(*) FROM erp_invoices i WHERE NOT EXISTS (SELECT 1 FROM erp_invoice_lines l WHERE l.invoice_id = i.id)');
+$check('exportar ventas con líneas: una fila por línea (más las facturas sin líneas)', $cnt === $nLines + $noLines && $inv === $nInv, "$cnt filas");
+$bad = 0;
+foreach ($rows as $r) {
+    $bad += count($cell($r));
+}
+$check('exportar ventas: ninguna celda puede ejecutarse como fórmula', $bad === 0);
+$rows = [];
+$cnt = 0;
+export_articles_write(function (array $r) use (&$rows) { $rows[] = $r; }, 0, '', false, $cnt);
+$check('exportar artículos (reales): todos, sin campos internos', $cnt === $one('SELECT COUNT(*) FROM products') && !in_array('Stock (interno)', $rows[0], true));
+$rows = [];
+$cnt = 0;
+export_articles_write(function (array $r) use (&$rows) { $rows[] = $r; }, 0, '', true, $cnt);
+$internal = $one('SELECT COUNT(*) FROM custom_fields WHERE is_public = 0');
+$check('exportar artículos: los campos internos solo con la casilla', $internal === 0 || count($rows[0]) > 5 + $one('SELECT COUNT(*) FROM custom_fields WHERE is_public = 1'));
+
+$sys = (int)$db->query('SELECT id FROM import_profiles WHERE is_system = 1 ORDER BY id LIMIT 1')->fetchColumn();
+$dup = profiles_duplicate($sys);
+$check('perfiles: duplicar uno de sistema crea uno propio con el mismo emparejamiento', $dup > 0 && $one("SELECT is_system FROM import_profiles WHERE id = $dup") === 0
+    && $db->query("SELECT mapping_json FROM import_profiles WHERE id = $dup")->fetchColumn() === $db->query("SELECT mapping_json FROM import_profiles WHERE id = $sys")->fetchColumn());
+profiles_rename($dup, 'Mi perfil de prueba');
+$check('perfiles: renombrar el propio', (string)$db->query("SELECT name FROM import_profiles WHERE id = $dup")->fetchColumn() === 'Mi perfil de prueba');
+$thrown = [];
+foreach ([fn() => profiles_rename($sys, 'Otro'), fn() => profiles_delete($sys), fn() => profiles_rename($dup, IMPORT_SYSTEM_PROFILES[0]['name']), fn() => profiles_rename($dup, '')] as $fn) {
+    try {
+        $fn();
+        $thrown[] = false;
+    } catch (RuntimeException $e) {
+        $thrown[] = true;
+    }
+}
+$check('perfiles: el de sistema no se renombra ni se borra, y no se repiten nombres', $thrown === [true, true, true, true] && $one("SELECT COUNT(*) FROM import_profiles WHERE id = $sys") === 1);
+profiles_delete($dup);
+$check('perfiles: el propio se borra', $one("SELECT COUNT(*) FROM import_profiles WHERE id = $dup") === 0);
+
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();

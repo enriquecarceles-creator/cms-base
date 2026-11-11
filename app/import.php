@@ -50,6 +50,33 @@ function import_sources(): array
     return $all;
 }
 
+/** Tipo y contenido de un trabajo de importación para el Historial: [kind, what]. */
+function import_history_kind(array $job): array
+{
+    if (($job['source'] ?? '') === 'fotos-carpetas') {
+        return ['fotos', 'fotos'];
+    }
+    return ['importacion', ($job['mode'] ?? '') === 'update' ? 'precios' : 'articulos'];
+}
+
+/** Anota una importación terminada o cancelada en Datos → Historial (solo números). */
+function import_history(array $job, string $result, int $created, int $updated, int $photos): void
+{
+    require_once __DIR__ . '/history.php';
+    [$kind, $what] = import_history_kind($job);
+    $parts = [];
+    if ($created > 0) {
+        $parts[] = $created . ' nuevo' . ($created === 1 ? '' : 's');
+    }
+    if ($updated > 0) {
+        $parts[] = $updated . ' actualizado' . ($updated === 1 ? '' : 's');
+    }
+    if ($photos > 0) {
+        $parts[] = $photos . ' foto' . ($photos === 1 ? '' : 's');
+    }
+    history_add($kind, $what, (string)($job['source_label'] ?? $job['origin'] ?? ''), $result, $parts ? implode(', ', $parts) : 'sin cambios');
+}
+
 /** Ejecuta el análisis de un origen con lo enviado en el formulario. */
 function import_analyze_source(string $id, array $post, array $files): array
 {
@@ -823,6 +850,7 @@ function import_run(array &$job, float $deadline): void
         }
     }
     db_put_setting(db(), 'last_import', (string)json_encode($sum, JSON_UNESCAPED_UNICODE));
+    import_history($job, 'ok', $sum['created'], $sum['updated'], $sum['photos']);
     import_files_clear();
     @unlink(IMPORT_DB_FILE);
 }

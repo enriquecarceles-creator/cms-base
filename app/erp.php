@@ -534,6 +534,10 @@ function erp_run(array &$job, float $deadline): bool
 /** Fin: anota el resumen (solo números), borra el archivo de trabajo y los .mdb dejados por FTP. */
 function erp_finish(array $job): void
 {
+    require_once __DIR__ . '/history.php';
+    $c = $job['counts'] ?? [];
+    history_add('sincronizacion', 'clientes_ventas', 'NCS (sincronización manual)', 'ok',
+        'clientes: ' . (int)($c['cust']['new'] ?? 0) . ' nuevos, ' . (int)($c['cust']['changed'] ?? 0) . ' cambiados · facturas: ' . (int)($c['inv']['new'] ?? 0) . ' nuevas, ' . (int)($c['inv']['changed'] ?? 0) . ' cambiadas');
     save_setting('erp_last_sync', (string)json_encode(['at' => time(), 'counts' => $job['counts'] ?? []]));
     foreach (($job['ftp_files'] ?? []) as $f) {
         if (is_string($f) && str_starts_with($f, ERP_FTP_DIR . '/') && is_file($f)) {
@@ -594,6 +598,10 @@ function admin_erp_sync(): void
             redirect('/admin/erp');
         }
         if ($act === 'cancel') {
+            if ($job && ($job['status'] ?? '') === 'run') { // cancelar a medias: queda anotado
+                require_once __DIR__ . '/history.php';
+                history_add('sincronizacion', 'clientes_ventas', 'NCS (sincronización manual)', 'cancelado', 'cancelada durante la importación');
+            }
             erp_job_clear();
             flash('Sincronización cancelada. No se ha cambiado nada.');
             redirect('/admin/erp');
@@ -607,7 +615,10 @@ function admin_erp_sync(): void
             if (db_setting('erp_paid_preload_done') !== '' || empty($_POST['confirm'])) {
                 flash(db_setting('erp_paid_preload_done') !== '' ? 'Los cobros ya se precargaron.' : 'Marca la casilla para confirmar.', 'err');
             } else {
-                flash('Cobros precargados: ' . erp_preload_paid() . ' facturas marcadas como cobradas (la fecha de la venta).');
+                $nPaid = erp_preload_paid();
+                require_once __DIR__ . '/history.php';
+                history_add('sincronizacion', 'cobros', 'Precarga de cobros desde NCS', 'ok', $nPaid . ' facturas marcadas como cobradas');
+                flash('Cobros precargados: ' . $nPaid . ' facturas marcadas como cobradas (la fecha de la venta).');
             }
             redirect('/admin/erp#documentos');
         }
@@ -651,6 +662,11 @@ function admin_erp_sync(): void
                 fclose($lock);
                 flash('Sincronización terminada: clientes ' . ($c['cust']['new'] + $c['cust']['changed']) . ' (' . $c['cust']['new'] . ' nuevos, ' . $c['cust']['changed'] . ' cambiados) y facturas ' . ($c['inv']['new'] + $c['inv']['changed']) . ' (' . $c['inv']['new'] . ' nuevas, ' . $c['inv']['changed'] . ' cambiadas).');
                 redirect('/admin/erp');
+            }
+            if (!empty($job['error']) && empty($job['hist'])) { // error de la sincronización: se anota una sola vez (sin el texto, por si lleva datos)
+                require_once __DIR__ . '/history.php';
+                history_add('sincronizacion', 'clientes_ventas', 'NCS (sincronización manual)', 'error', 'la sincronización se detuvo con un error');
+                $job['hist'] = 1;
             }
             erp_job_save($job);
             flock($lock, LOCK_UN);

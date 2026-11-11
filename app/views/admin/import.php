@@ -1,4 +1,4 @@
-<div class="head"><h1><?= !empty($only) ? 'Fotos por carpeta' : 'Importar artículos' ?></h1></div>
+<div class="head"><h1><?= !empty($only) ? 'Fotos por carpeta' : (($que ?? '') === 'precios' ? 'Importar precios y stock' : 'Importar artículos') ?></h1><?php if (!$job && empty($only) && !empty($que)): ?><a class="btn ghost" href="<?= e(url('/admin/importar')) ?>">‹ Cambiar lo que quiero traer</a><?php endif; ?></div>
 
 <?php $status = $job['status'] ?? ''; ?>
 

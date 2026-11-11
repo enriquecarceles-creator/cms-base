@@ -11,6 +11,7 @@ return [
     'label'       => 'Mi ERP (exportación XML)',  // título en el panel
     'order'       => 40,                          // posición en la lista (menor = antes)
     'recommended' => false,
+    'kinds'       => ['articulos'],               // opcional: qué trae (articulos, precios, fotos); el asistente de Importar lo usa para ofrecerlo solo cuando toca
     'help'        => 'Dónde se exporta el archivo en esa aplicación…',
     'template'    => null,                        // opcional: función que devuelve un CSV de ejemplo
     'fields'      => [                            // campos del formulario

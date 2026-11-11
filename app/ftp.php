@@ -221,6 +221,8 @@ function admin_ftp(): void
         foreach (array_keys($pids) as $pid) {
             sync_gallery((int)$pid);
         }
+        require_once __DIR__ . '/history.php';
+        history_add('fotos', 'fotos', 'Fotos por FTP', 'ok', count($pids) . ' artículo' . (count($pids) === 1 ? '' : 's') . ' limpiado' . (count($pids) === 1 ? '' : 's') . ' de fotos rotas');
         flash(count($pids) . ' artículo(s) limpiados de fotos rotas. Ahora puedes volver a traerlas desde Importar.');
         redirect('/admin/ftp');
     }
@@ -264,6 +266,8 @@ function admin_ftp(): void
         save_setting('ftp_fail', (string)$fail);
         if ($left === 0) {
             save_setting('ftp_auto', '0');
+            require_once __DIR__ . '/history.php';
+            history_add('fotos', 'fotos', 'Fotos por FTP (enlazado automático)', $fail ? 'parcial' : 'ok', $done . ' foto' . ($done === 1 ? '' : 's') . ' enlazada' . ($done === 1 ? '' : 's') . ($fail ? ', ' . $fail . ' con error' : ''));
             flash($done . ' fotos enlazadas.' . ($fail ? ' ' . $fail . ' con error (se renombraron a .error).' : ''), $fail ? 'err' : 'ok');
             redirect('/admin/ftp');
         }
@@ -344,6 +348,8 @@ function admin_ftp(): void
                 $done++;
             }
         }
+        require_once __DIR__ . '/history.php';
+        history_add('fotos', 'fotos', 'Fotos por FTP', $errors ? ($done > 0 ? 'parcial' : 'error') : 'ok', $done . ' foto' . ($done === 1 ? '' : 's') . ' enlazada' . ($done === 1 ? '' : 's') . ($errors ? ', ' . count($errors) . ' con error' : ''));
         flash($done . ' foto' . ($done === 1 ? '' : 's') . ' enlazada' . ($done === 1 ? '' : 's') . '.' . ($errors ? ' Fallos: ' . implode(' · ', array_slice($errors, 0, 5)) : ''), $errors ? 'err' : 'ok');
         redirect('/admin/ftp');
     }

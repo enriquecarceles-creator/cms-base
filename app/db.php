@@ -23,7 +23,7 @@ const DB_ENGINES = [
 
 /** Tablas de la aplicación en orden de dependencias (padres antes que hijas). */
 const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'user_recovery_codes', 'settings', 'categories', 'products',
-    'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages'];
+    'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages', 'data_history'];
 
 /* mail_log (últimos 50 correos, con direcciones) y backup_log (descargas de copias) quedan fuera de DB_TABLES a propósito: no viajan en las copias. */
 

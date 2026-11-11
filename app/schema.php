@@ -300,6 +300,24 @@ const SCHEMA_BACKUP_DDL = "
     );
 ";
 
+/**
+ * Historial de datos (Datos → Historial): cada importación, sincronización y exportación. Sin datos personales: el detalle son
+ * solo números. SÍ viaja en las copias (a diferencia de mail_log y backup_log).
+ */
+const SCHEMA_HISTORY_DDL = "
+    CREATE TABLE data_history (
+        id {ID},
+        created_at {BIG} NOT NULL DEFAULT 0,
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        kind {S} NOT NULL DEFAULT '',
+        what {S} NOT NULL DEFAULT '',
+        origin {S} NOT NULL DEFAULT '',
+        result {S} NOT NULL DEFAULT '',
+        detail {S} NOT NULL DEFAULT ''
+    );
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -385,7 +403,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -481,6 +499,11 @@ function migrate_schema(CmsPdo $pdo): void
             foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
             }
+        }
+    }
+    if ($ver < 26 && !in_array('data_history', db_tables($pdo), true)) {
+        foreach (db_ddl(SCHEMA_HISTORY_DDL, $pdo->drv) as $st) {
+            $pdo->rawExec($st);
         }
     }
     if ($ver < 25 && !in_array('backup_log', db_tables($pdo), true)) {

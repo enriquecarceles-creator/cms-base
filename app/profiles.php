@@ -291,3 +291,122 @@ function profiles_delete(int $id): string
     db()->prepare('DELETE FROM import_profiles WHERE id = ? AND is_system = 0')->execute([$id]);
     return (string)$row['name'];
 }
+
+/* ---------- Datos → Perfiles (/admin/perfiles): lista, ver, renombrar, duplicar y borrar ---------- */
+
+const PROFILE_SOURCE_LABELS = ['mdb' => 'Access (.mdb)', 'sql' => 'SQL / SQLite', 'csv' => 'CSV'];
+const PROFILE_MODULE_LABELS = ['catalog' => 'Artículos', 'customers' => 'Clientes', 'sales' => 'Ventas'];
+
+/** Un perfil por su id (con mapping y rules ya decodificados) o null. */
+function profiles_get(int $id): ?array
+{
+    return profiles_all()[$id] ?? null;
+}
+
+/** ¿El nombre ya lo usa otro perfil propio (distinto de $exceptId) o es el de uno de sistema? Devuelve el motivo o null. */
+function profiles_name_error(string $name, int $exceptId = 0): ?string
+{
+    if ($name === '') {
+        return 'Escribe un nombre para el perfil.';
+    }
+    foreach (IMPORT_SYSTEM_PROFILES as $p) {
+        if (mb_strtolower($p['name']) === mb_strtolower($name)) {
+            return 'Ese nombre es el de un perfil de sistema. Elige otro.';
+        }
+    }
+    $st = db()->prepare('SELECT id, name FROM import_profiles WHERE is_system = 0 AND id <> ?');
+    $st->execute([$exceptId]);
+    foreach ($st->fetchAll() as $r) {
+        if (mb_strtolower((string)$r['name']) === mb_strtolower($name)) {
+            return 'Ya tienes un perfil con ese nombre.';
+        }
+    }
+    return null;
+}
+
+/** Cambia el nombre de un perfil propio. Lanza RuntimeException con el motivo si no se puede. */
+function profiles_rename(int $id, string $name): void
+{
+    $p = profiles_get($id);
+    if (!$p) {
+        throw new RuntimeException('Ese perfil ya no existe.');
+    }
+    if ($p['is_system'] === 1) {
+        throw new RuntimeException('Los perfiles de sistema no se pueden renombrar. Duplícalo y cambia el nombre de la copia.');
+    }
+    $name = mb_substr(trim(preg_replace('/\s+/u', ' ', strip_tags($name)) ?? ''), 0, 120);
+    if ($err = profiles_name_error($name, $id)) {
+        throw new RuntimeException($err);
+    }
+    db()->prepare('UPDATE import_profiles SET name = ? WHERE id = ? AND is_system = 0')->execute([$name, $id]);
+}
+
+/** Copia un perfil (de sistema o propio) como perfil propio nuevo: «Copia de X», «Copia de X (2)»… Devuelve el id nuevo. */
+function profiles_duplicate(int $id): int
+{
+    $db = db();
+    $st = $db->prepare('SELECT * FROM import_profiles WHERE id = ?');
+    $st->execute([$id]);
+    $row = $st->fetch();
+    if (!$row) {
+        throw new RuntimeException('Ese perfil ya no existe.');
+    }
+    $base = mb_substr('Copia de ' . $row['name'], 0, 110);
+    $name = $base;
+    for ($n = 2; profiles_name_error($name) !== null && $n < 100; $n++) {
+        $name = $base . ' (' . $n . ')';
+    }
+    $db->prepare('INSERT INTO import_profiles (name, source_type, target_module, mapping_json, rules_json, is_system, created_at) VALUES (?,?,?,?,?,0,?)')
+        ->execute([$name, $row['source_type'], $row['target_module'], $row['mapping_json'], $row['rules_json'], date('Y-m-d H:i:s')]);
+    $st = $db->prepare('SELECT id FROM import_profiles WHERE is_system = 0 AND name = ?');
+    $st->execute([$name]);
+    return (int)$st->fetchColumn();
+}
+
+/** Controlador de /admin/perfiles[/<id>]. Todo POST lleva CSRF; los perfiles de sistema solo se ven y se duplican. */
+function admin_profiles(string $sub = ''): void
+{
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        $act = (string)($_POST['action'] ?? '');
+        $id = (int)($_POST['id'] ?? 0);
+        try {
+            if ($act === 'duplicate') {
+                $new = profiles_duplicate($id);
+                flash('Perfil duplicado. Ahora puedes cambiarle el nombre.');
+                redirect('/admin/perfiles/' . $new);
+            } elseif ($act === 'rename') {
+                profiles_rename($id, (string)($_POST['name'] ?? ''));
+                flash('Nombre cambiado.');
+                redirect('/admin/perfiles/' . $id);
+            } elseif ($act === 'delete') {
+                if (empty($_POST['confirm'])) {
+                    flash('Marca la casilla para confirmar el borrado.', 'err');
+                    redirect('/admin/perfiles/' . $id . '?borrar=1');
+                }
+                $name = profiles_delete($id);
+                flash('Perfil «' . $name . '» borrado.');
+                redirect('/admin/perfiles');
+            }
+        } catch (RuntimeException $e) {
+            flash($e->getMessage(), 'err');
+            redirect($id > 0 && profiles_get($id) ? '/admin/perfiles/' . $id : '/admin/perfiles');
+        }
+        redirect('/admin/perfiles');
+    }
+    if ($sub !== '') {
+        $p = ctype_digit($sub) ? profiles_get((int)$sub) : null;
+        if (!$p) {
+            not_found();
+            return;
+        }
+        admin_render('profile_view', ['p' => $p, 'confirmDelete' => isset($_GET['borrar']) && $p['is_system'] === 0, 'crumb' => $p['name'], 'title' => 'Perfil']);
+        return;
+    }
+    $rows = profiles_all();
+    $created = [];
+    foreach (db()->query('SELECT id, created_at FROM import_profiles')->fetchAll() as $r) {
+        $created[(int)$r['id']] = (string)$r['created_at'];
+    }
+    admin_render('profiles', ['rows' => $rows, 'created' => $created, 'title' => 'Perfiles']);
+}
