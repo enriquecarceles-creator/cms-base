@@ -320,7 +320,7 @@ function admin_mail(): void
                     flash('No se pudo enviar el correo de prueba. ' . $r['error'], 'err');
                 }
             }
-            redirect('/admin/correo');
+            redirect('/admin/configuracion/correo');
         }
         if ($action === 'save') {
             $f['transport'] = ($_POST['transport'] ?? '') === 'smtp' ? 'smtp' : 'mail';
@@ -379,7 +379,7 @@ function admin_mail(): void
                     save_setting('mail_reply_to', $f['reply_to']);
                     save_setting('mail_notify', implode(', ', $notify));
                     flash('Configuración de correo guardada. Pulsa «Enviar correo de prueba» para comprobarla.');
-                    redirect('/admin/correo');
+                    redirect('/admin/configuracion/correo');
                 } catch (RuntimeException $e) {
                     $errors[] = $e->getMessage();
                 }
@@ -392,6 +392,6 @@ function admin_mail(): void
     admin_render('mail', [
         'f' => $f, 'errors' => $errors, 'hasPass' => (bool)($smtp && $smtp['pass'] !== ''),
         'defaultFrom' => $cfg['from'], 'log' => $log, 'lastError' => mail_last_error(),
-        'myEmail' => (string)$me->fetchColumn(), 'title' => 'Correo',
+        'myEmail' => (string)$me->fetchColumn(), 'cfg' => 'correo', 'title' => 'Correo',
     ]);
 }

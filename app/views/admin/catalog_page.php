@@ -1,6 +1,6 @@
 <?php /* Web → Página del catálogo: título, presentación, artículos por página, orden y qué sale en las tarjetas. */ ?>
 <div class="head"><h1>Página del catálogo</h1><a href="<?= e(url('/catalogo')) ?>" target="_blank" rel="noopener">Ver el catálogo ↗</a></div>
-<p class="hint">Cómo se ve el catálogo en la web. Los nombres de los grupos (<?= e(term('family')) ?> / <?= e(term('sub')) ?>) se cambian en <a href="<?= e(url('/admin/general')) ?>">Configuración</a>.</p>
+<p class="hint">Cómo se ve el catálogo en la web. Los nombres de los grupos (<?= e(term('family')) ?> / <?= e(term('sub')) ?>) se cambian en <a href="<?= e(url('/admin/configuracion/general')) ?>">Configuración</a>.</p>
 
 <form method="post" class="form">
   <?= csrf_field() ?>

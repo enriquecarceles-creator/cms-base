@@ -3,7 +3,7 @@
 <div class="confirm danger-box">
   <p>Se va a borrar la página <strong><?= e($p['title']) ?></strong> (<code>/<?= e($p['slug']) ?></code>). <strong>Esto no se puede deshacer.</strong></p>
   <?php if ($files): ?><p class="muted">Sus <?= count($files) ?> foto<?= count($files) === 1 ? '' : 's' ?> se borrarán de <code>uploads/</code> salvo que las use otra cosa de la web.</p><?php endif; ?>
-  <?php if (is_admin()): ?><p class="muted">Si dudas, <a href="<?= e(url('/admin/copia')) ?>">descarga una copia de seguridad</a> antes.</p><?php endif; ?>
+  <?php if (is_admin()): ?><p class="muted">Si dudas, <a href="<?= e(url('/admin/configuracion/copia')) ?>">descarga una copia de seguridad</a> antes.</p><?php endif; ?>
   <form method="post" action="<?= e(url('/admin/paginas')) ?>" class="form">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$p['id'] ?>"><input type="hidden" name="confirm" value="1">

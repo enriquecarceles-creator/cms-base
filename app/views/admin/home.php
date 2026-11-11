@@ -56,7 +56,7 @@ if ($stats['noprice'] !== null) {
   <a href="<?= e(url('/admin/categorias')) ?>"><?= admin_icon('folder') ?> <?= e(term('families')) ?></a>
   <a href="<?= e(url('/')) ?>" target="_blank" rel="noopener"><?= admin_icon('external') ?> Ver web</a>
   <?php if (is_admin()): ?>
-    <form method="post" action="<?= e(url('/admin/copia')) ?>" class="inline"><?= csrf_field() ?><button type="submit"><?= admin_icon('download') ?> Descargar copia</button></form>
+    <form method="post" action="<?= e(url('/admin/configuracion/copia')) ?>" class="inline"><?= csrf_field() ?><button type="submit"><?= admin_icon('download') ?> Descargar copia</button></form>
   <?php endif; ?>
 </nav>
 <?php if (is_admin()): ?><p class="muted">Última copia descargada: <?= $lastBackup !== '' ? e(date('d/m/Y H:i', (int)strtotime($lastBackup))) : 'nunca' ?>.</p><?php endif; ?>

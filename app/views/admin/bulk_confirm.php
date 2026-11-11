@@ -50,6 +50,6 @@ $listUrl = admin_list_url($back);
     </div>
   </form>
   <?php if ($op === 'delete' && is_admin()): ?>
-    <form id="copia" method="post" action="<?= e(url('/admin/copia')) ?>" hidden><?= csrf_field() ?></form>
+    <form id="copia" method="post" action="<?= e(url('/admin/configuracion/copia')) ?>" hidden><?= csrf_field() ?></form>
   <?php endif; ?>
 </div>

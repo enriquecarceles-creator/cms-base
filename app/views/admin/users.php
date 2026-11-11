@@ -59,10 +59,10 @@
 </form>
 
 <h2 id="erp">Doble verificación para Clientes y Ventas</h2>
-<form method="post" action="<?= e(url('/admin/usuarios')) ?>" class="form">
+<form method="post" action="<?= e(url('/admin/configuracion/usuarios')) ?>" class="form">
   <?= csrf_field() ?><input type="hidden" name="action" value="erp_2fa">
   <label class="check"><input type="checkbox" name="erp_2fa" value="1"<?= $erp2fa ? ' checked' : '' ?>> <span>Exigir doble verificación para Clientes y Ventas</span></label>
   <p class="muted" style="margin:0">Con esto activado, solo entran en Clientes y Ventas los usuarios (rol «ERP» y administradores) que tengan activada la doble verificación en <a href="<?= e(url('/admin/clave#doble')) ?>">Mi cuenta</a>. Son datos personales de clientes: <strong>en la web publicada debe estar activado</strong>.</p>
-  <label>Tu contraseña (solo para desactivarla) <input type="password" name="erp_pass" autocomplete="current-password"><small>Si quitas la marca, escribe aquí tu contraseña. Se avisará por correo a los destinatarios de avisos del sistema (<a href="<?= e(url('/admin/correo')) ?>">Correo</a>) y en Inicio saldrá un aviso mientras esté desactivada.</small></label>
+  <label>Tu contraseña (solo para desactivarla) <input type="password" name="erp_pass" autocomplete="current-password"><small>Si quitas la marca, escribe aquí tu contraseña. Se avisará por correo a los destinatarios de avisos del sistema (<a href="<?= e(url('/admin/configuracion/correo')) ?>">Correo</a>) y en Inicio saldrá un aviso mientras esté desactivada.</small></label>
   <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
 </form>

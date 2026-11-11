@@ -446,6 +446,32 @@ $check('perfiles: el de sistema no se renombra ni se borra, y no se repiten nomb
 profiles_delete($dup);
 $check('perfiles: el propio se borra', $one("SELECT COUNT(*) FROM import_profiles WHERE id = $dup") === 0);
 
+/* 5e. Series de documentos: letras de las facturas importadas de NCS y numeración */
+$section('Series de documentos');
+require_once $tmp . '/app/doc_series.php';
+$ncsLetters = array_keys(series_ncs_letters());
+$check('series: las letras de las facturas importadas se leen de erp_invoices', $ncsLetters !== [] && count(array_filter($ncsLetters, fn($l) => preg_match('/^[A-Z]+$/', $l))) === count($ncsLetters), implode(',', $ncsLetters));
+$seed = array_column($db->query('SELECT letter FROM doc_series ORDER BY id')->fetchAll(), 'letter');
+$check('series: F, R, A y P sembradas', $seed === ['F', 'R', 'A', 'P']);
+$errs = [];
+$postS = ['s' => [], 'default' => [], 'new' => ['type' => 'factura', 'letter' => $ncsLetters[0] ?? 'V', 'digits' => 5, 'with_year' => '']];
+foreach (series_all() as $sid => $sr) {
+    $postS['s'][$sid] = ['descr' => $sr['descr'], 'active' => '1', 'letter' => $sr['letter'], 'digits' => $sr['digits'], 'with_year' => $sr['with_year']];
+}
+series_plan($postS, series_ncs_letters(), (int)date('Y'), $errs);
+$check('series: una serie SIN año con la letra de NCS queda bloqueada', count($errs) === 1 && str_contains($errs[0], 'repetir'));
+$postS['new']['with_year'] = '1';
+$errs = [];
+series_plan($postS, series_ncs_letters(), (int)date('Y'), $errs);
+$check('series: con año se permite (y se avisa en pantalla)', $errs === []);
+$fid = (int)$db->query("SELECT id FROM doc_series WHERE letter = 'F'")->fetchColumn();
+$db->beginTransaction();
+$n1 = series_next_number($fid, 2026)['number'];
+$db->rollBack();
+$n2 = series_next_number($fid, 2026)['number'];
+$check('series: numeración correlativa y sin huecos tras un rollback', $n1 === $n2 && $n2 === 1);
+$check('series: copia de seguridad: las series van dentro y sus contadores también', in_array('doc_series', DB_TABLES, true) && in_array('doc_series_counters', DB_TABLES, true));
+
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();

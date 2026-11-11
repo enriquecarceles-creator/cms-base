@@ -318,6 +318,49 @@ const SCHEMA_HISTORY_DDL = "
     );
 ";
 
+/**
+ * Series de numeración de documentos (Configuración → Series): factura, rectificativa, albarán y pedido. Varias por tipo, una por
+ * defecto. La numeración es correlativa por serie y año (doc_series_counters, una fila por serie y año; yr = 0 si la serie no usa
+ * año). start_no = primer número del año; last_no = último usado (last_no >= start_no ⇒ ya se ha usado algún número).
+ * Van dentro de las copias: restaurar no debe perder la numeración.
+ */
+const SCHEMA_SERIES_DDL = "
+    CREATE TABLE doc_series (
+        id {ID},
+        doc_type {S} NOT NULL,
+        letter {K} NOT NULL UNIQUE,
+        descr {S} NOT NULL DEFAULT '',
+        digits {I} NOT NULL DEFAULT 5,
+        with_year {I} NOT NULL DEFAULT 1,
+        is_default {I} NOT NULL DEFAULT 0,
+        is_active {I} NOT NULL DEFAULT 1,
+        created_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE TABLE doc_series_counters (
+        series_id {I} NOT NULL,
+        yr {I} NOT NULL,
+        start_no {I} NOT NULL DEFAULT 1,
+        last_no {I} NOT NULL DEFAULT 0,
+        PRIMARY KEY (series_id, yr)
+    );
+";
+
+/** Series iniciales (solo si no hay ninguna): F facturas, R rectificativas, A albaranes y P pedidos. */
+const SCHEMA_SERIES_SEED = [
+    ['factura', 'F', 'Facturas'], ['rectificativa', 'R', 'Facturas rectificativas'], ['albaran', 'A', 'Albaranes'], ['pedido', 'P', 'Pedidos'],
+];
+
+function schema_seed_series(CmsPdo $pdo): void
+{
+    if ((int)$pdo->query('SELECT COUNT(*) FROM doc_series')->fetchColumn() > 0) {
+        return;
+    }
+    $st = $pdo->prepare('INSERT INTO doc_series (doc_type, letter, descr, digits, with_year, is_default, is_active, created_at) VALUES (?, ?, ?, 5, 1, 1, 1, ?)');
+    foreach (SCHEMA_SERIES_SEED as [$type, $letter, $descr]) {
+        $st->execute([$type, $letter, $descr, time()]);
+    }
+}
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -403,7 +446,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -411,6 +454,7 @@ function install_schema(CmsPdo $pdo): void
     foreach (db_ddl(SCHEMA_DDL, $pdo->drv) as $st) {
         $pdo->rawExec($st);
     }
+    schema_seed_series($pdo);
     db_set_schema_version($pdo, SCHEMA_VERSION);
 }
 
@@ -500,6 +544,14 @@ function migrate_schema(CmsPdo $pdo): void
                 $pdo->rawExec($st);
             }
         }
+    }
+    if ($ver < 27) {
+        if (!in_array('doc_series', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_SERIES_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
+        }
+        schema_seed_series($pdo);
     }
     if ($ver < 26 && !in_array('data_history', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_HISTORY_DDL, $pdo->drv) as $st) {

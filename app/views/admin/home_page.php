@@ -22,7 +22,7 @@ $sec = function (string $id) use ($byId): string {
 $last = count($blocks) - 1;
 ?>
 <div class="head"><h1>Página de inicio</h1><a href="<?= e(url('/')) ?>" target="_blank" rel="noopener">Ver la portada ↗</a></div>
-<p class="hint">Qué sale en la portada y en qué orden. Los datos de la empresa (nombre, logotipo, teléfono…) están en <a href="<?= e(url('/admin/empresa')) ?>">Empresa</a>.</p>
+<p class="hint">Qué sale en la portada y en qué orden. Los datos de la empresa (nombre, logotipo, teléfono…) están en <a href="<?= e(url('/admin/configuracion/empresa')) ?>">Empresa</a>.</p>
 
 <form method="post" enctype="multipart/form-data" class="form hp">
   <?= csrf_field() ?>

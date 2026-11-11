@@ -3,7 +3,7 @@
 <?php if ($lastBackup !== ''): ?><p class="muted">Última copia descargada: <?= e(date('d/m/Y H:i', (int)strtotime($lastBackup))) ?>.</p><?php else: ?><p class="alert warn"><?= admin_icon('alert') ?><span>Todavía no has descargado ninguna copia de seguridad.</span></p><?php endif; ?>
 
 <h2>Descargar una copia</h2>
-<form method="post" action="<?= e(url('/admin/copia')) ?>" class="form" id="copia">
+<form method="post" action="<?= e(url('/admin/configuracion/copia')) ?>" class="form" id="copia">
   <?= csrf_field() ?>
   <p class="muted" style="margin:0">Descarga un ZIP con la base de datos (artículos, <?= e(term('families', true)) ?>, usuarios, textos, portada) y todas las fotos. Hazlo antes de actualizar la web.</p>
   <label class="check"><input type="checkbox" name="with_erp" value="1"> <span>Incluir clientes y ventas (datos personales)</span></label>
@@ -33,7 +33,7 @@
 
 <?php if (ALLOW_RESET): ?>
 <h2>Empezar de cero</h2>
-<form method="post" action="<?= e(url('/admin/reiniciar')) ?>" class="form" onsubmit="return confirm('Se borrarán artículos, <?= e(addslashes(term('families', true))) ?>, fotos, slider y representantes. ¿Continuar?')">
+<form method="post" action="<?= e(url('/admin/configuracion/reiniciar')) ?>" class="form" onsubmit="return confirm('Se borrarán artículos, <?= e(addslashes(term('families', true))) ?>, fotos, slider y representantes. ¿Continuar?')">
   <?= csrf_field() ?>
   <p class="muted" style="margin:0">Vacía el catálogo (artículos, <?= e(term('families', true)) ?>, fotos, slider y representantes). Se conservan los usuarios y los datos de esta página. Antes se guarda una copia en <code>data/backups/</code>.</p>
   <label>Escribe el nombre comercial («<?= e(site_name()) ?>») para confirmar <input name="confirm" autocomplete="off" required></label>

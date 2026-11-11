@@ -95,7 +95,7 @@ function erp_notify_2fa_off(string $who): void
             . "  Cuándo:  " . date('d/m/Y H:i') . ' (' . date_default_timezone_get() . ")\r\n"
             . "  Desde:   " . ($_SERVER['REMOTE_ADDR'] ?? '') . "\r\n\r\n"
             . "Mientras esté desactivada, quien tenga el rol ERP o sea administrador puede ver los datos de clientes y ventas solo con su contraseña.\r\n"
-            . "Si no lo esperabas, vuelve a activarla en Configuración → Usuarios y seguridad (" . site_origin() . url('/admin/usuarios') . "#erp) y revisa los usuarios.\r\n";
+            . "Si no lo esperabas, vuelve a activarla en Configuración → Usuarios y seguridad (" . site_origin() . url('/admin/configuracion/usuarios') . "#erp) y revisa los usuarios.\r\n";
         foreach (mail_notify_recipients() as $to) { // los de Web → Correo → Avisos del sistema o, por defecto, los administradores
             app_mail($to, 'Doble verificación desactivada para Clientes y Ventas · ' . site_name(), $body);
         }
@@ -535,6 +535,7 @@ function erp_run(array &$job, float $deadline): bool
 function erp_finish(array $job): void
 {
     require_once __DIR__ . '/history.php';
+    save_setting('series_ncs_letters', ''); // las letras de las facturas importadas pueden haber cambiado
     $c = $job['counts'] ?? [];
     history_add('sincronizacion', 'clientes_ventas', 'NCS (sincronización manual)', 'ok',
         'clientes: ' . (int)($c['cust']['new'] ?? 0) . ' nuevos, ' . (int)($c['cust']['changed'] ?? 0) . ' cambiados · facturas: ' . (int)($c['inv']['new'] ?? 0) . ' nuevas, ' . (int)($c['inv']['changed'] ?? 0) . ' cambiadas');

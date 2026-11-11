@@ -506,3 +506,45 @@ html:has(.savebar){scroll-padding-bottom:96px}
 @media (max-width:980px){.if-head{grid-template-columns:1fr}.if-foot{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:640px){.if-bar{position:static;margin:0 0 12px}.if-grid-wrap{max-height:none}}
 @media (max-width:640px){.if-totals .ir.big{font-size:1.35rem}}
+
+/* ---------- Configuración compacta (tarea «Configuración»): submenú propio + pantallas densas tipo escritorio ---------- */
+.cfg{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:start}
+.cfg-nav{position:sticky;top:calc(var(--bar-h) + 14px);border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:6px 8px 10px}
+.cfg-nav h3{margin:12px 6px 3px;font-size:.7rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--steel)}
+.cfg-nav a{display:block;padding:5px 9px;border-radius:7px;font-size:.88rem;color:var(--ink);text-decoration:none}
+.cfg-nav a:hover{background:var(--hover)}
+.cfg-nav a[aria-current]{background:var(--ink);color:#fff}
+.cfg-main{min-width:0}
+.cfg-main .head h1{font-size:1.35rem}
+@media (max-width:860px){.cfg{grid-template-columns:1fr;gap:12px}.cfg-nav{position:static;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:center}.cfg-nav h3{width:100%;margin:6px 4px 0}}
+form.cfgf{display:block}
+form.cfgf fieldset{display:block;border:1px solid var(--line);border-radius:10px;padding:8px 14px 12px;margin:0 0 12px;background:var(--surface);min-width:0}
+form.cfgf legend{font-size:.8rem;font-weight:600;padding:0 6px;color:var(--ink)}
+form.cfgf .g2,form.cfgf .g3,form.cfgf .g4{display:grid;gap:8px 14px;margin-bottom:8px}
+form.cfgf .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+form.cfgf .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+form.cfgf .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:980px){form.cfgf .g3,form.cfgf .g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){form.cfgf .g2,form.cfgf .g3,form.cfgf .g4{grid-template-columns:1fr}}
+form.cfgf label{display:block;font-size:.78rem;font-weight:500;color:var(--steel);line-height:1.25}
+form.cfgf input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]),form.cfgf select{height:30px;padding:3px 8px;font-size:.88rem;border-radius:7px;margin-top:2px;color:var(--ink)}
+form.cfgf textarea{padding:5px 8px;font-size:.88rem;border-radius:7px;margin-top:2px;color:var(--ink)}
+form.cfgf input[type=color]{height:30px;padding:2px;width:60px}
+form.cfgf .wide{grid-column:1/-1}
+form.cfgf label.check{display:flex;align-items:flex-start;gap:7px;font-size:.86rem;font-weight:400;color:var(--ink);margin:0 0 4px}
+form.cfgf label.check input{width:auto;height:auto;margin-top:2px}
+form.cfgf small{display:block;font-size:.74rem;font-weight:400;color:var(--steel);margin-top:2px}
+form.cfgf .checks-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
+@media (max-width:700px){form.cfgf .checks-grid{grid-template-columns:1fr}}
+.cfgf .hint{margin:0 0 8px;font-size:.84rem}
+.savebar{position:sticky;bottom:0;z-index:6;display:flex;gap:10px;align-items:center;padding:10px 0 4px;margin-top:4px;background:linear-gradient(to top,var(--bg) 72%,rgba(250,249,247,0))}
+.savebar .muted{font-size:.8rem}
+.cfg-main .tbl{font-size:.86rem}
+.cfg-main .tbl th{padding:8px 10px}
+.cfg-main .tbl td{padding:6px 10px;vertical-align:middle}
+.cfg-main .tbl input:not([type=checkbox]):not([type=radio]),.cfg-main .tbl select{height:28px;padding:2px 7px;margin:0}
+.cfg-main .tbl input[type=checkbox],.cfg-main .tbl input[type=radio]{width:auto}
+.cfg-main .tbl .num{width:4.5em}
+.cfg-main .tbl .letter{width:3.6em;text-transform:uppercase}
+.series-prev{font-family:ui-monospace,Consolas,monospace;font-size:.86rem}
+.cfg-warn{margin:0 0 8px;padding:7px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:.84rem}
