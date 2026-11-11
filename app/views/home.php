@@ -1,12 +1,42 @@
-<?php $hero = setting('hero_image'); ?>
-<?php if (!empty($slides) && feature('slider')): $fx = setting('slider_effect', 'fade'); $secs = max(3, min(15, (int)setting('slider_seconds', '6'))); ?>
-<h1 class="sr"><?= e(site_name()) ?><?= setting('tagline') !== '' ? ' · ' . e(setting('tagline')) : '' ?></h1>
+<?php
+/*
+ * Portada: bloques en el orden y con la activación de Web → Página de inicio (home_blocks()).
+ * - «Imagen de cabecera» seguida de «Bienvenida»: el texto va sobre la imagen (como siempre).
+ * - «Quiénes somos» seguido de «Tarjetas»: salen lado a lado (como siempre).
+ * - El slider, si tiene imágenes y «sustituye», oculta la cabecera y la bienvenida (como hacía el antiguo módulo).
+ */
+$hero = setting('hero_image');
+$cards = json_decode(setting('home_cards') ?: '[]', true) ?: [];
+$cards = array_values(array_filter($cards, fn($c) => trim((string)($c[0] ?? '')) !== ''));
+$list = [];
+$replace = false;
+foreach ($blocks as $b) {
+    if ($b['on']) {
+        $list[] = $b['id'];
+        if ($b['id'] === 'slider' && !empty($slides) && $b['replace']) {
+            $replace = true;
+        }
+    }
+}
+if ($replace) {
+    $list = array_values(array_filter($list, fn($id) => !in_array($id, ['hero', 'welcome'], true)));
+}
+$welcomeShown = in_array('welcome', $list, true);
+$done = [];
+foreach ($list as $i => $id):
+    $prev = $list[$i - 1] ?? null;
+    $next = $list[$i + 1] ?? null;
+    if (isset($done[$id])) { continue; }
+
+    if ($id === 'slider' && !empty($slides)):
+      $fx = setting('slider_effect', 'fade'); $secs = max(3, min(15, (int)setting('slider_seconds', '6'))); ?>
+<?php if (!$welcomeShown): ?><h1 class="sr"><?= e(site_name()) ?><?= setting('tagline') !== '' ? ' · ' . e(setting('tagline')) : '' ?></h1><?php endif; ?>
 <?php $plain = true; foreach ($slides as $sl0) { if ($sl0['title'] !== '' || $sl0['text'] !== '' || $sl0['btn'] !== '') { $plain = false; } } ?>
 <section class="slider fx-<?= e($fx) ?><?= $plain ? ' plain' : '' ?>" data-secs="<?= $secs ?>" aria-roledescription="carousel" aria-label="Destacados">
-  <?php foreach ($slides as $i => $sl):
+  <?php foreach ($slides as $si => $sl):
       $href = $sl['link'] === '' ? '' : ($sl['link'][0] === '/' ? url($sl['link']) : $sl['link']); ?>
-    <div class="slide<?= $i === 0 ? ' is-on' : '' ?><?= ($sl['title'] !== '' || $sl['text'] !== '' || ($href !== '' && $sl['btn'] !== '')) ? ' has-txt' : '' ?>" role="group" aria-roledescription="diapositiva" aria-label="<?= $i + 1 ?> de <?= count($slides) ?>">
-      <img src="<?= e(img_url($sl['file'])) ?>" alt="<?= e($sl['title']) ?>" width="2000" height="800"<?= $i === 0 ? ' fetchpriority="high"' : ' loading="lazy"' ?>>
+    <div class="slide<?= $si === 0 ? ' is-on' : '' ?><?= ($sl['title'] !== '' || $sl['text'] !== '' || ($href !== '' && $sl['btn'] !== '')) ? ' has-txt' : '' ?>" role="group" aria-roledescription="diapositiva" aria-label="<?= $si + 1 ?> de <?= count($slides) ?>">
+      <img src="<?= e(img_url($sl['file'])) ?>" alt="<?= e($sl['title']) ?>" width="2000" height="800"<?= $si === 0 ? ' fetchpriority="high"' : ' loading="lazy"' ?>>
       <?php if ($sl['title'] !== '' || $sl['text'] !== '' || ($href !== '' && $sl['btn'] !== '')): ?>
         <div class="slide-txt wrap">
           <?php if ($sl['title'] !== ''): ?><h2><?= e($sl['title']) ?></h2><?php endif; ?>
@@ -19,7 +49,7 @@
   <?php if (count($slides) > 1): ?>
     <button class="sl-nav sl-prev" type="button" aria-label="Anterior">‹</button>
     <button class="sl-nav sl-next" type="button" aria-label="Siguiente">›</button>
-    <div class="sl-dots"><?php foreach ($slides as $i => $sl): ?><button type="button" aria-label="Ir a la diapositiva <?= $i + 1 ?>"<?= $i === 0 ? ' class="on"' : '' ?>></button><?php endforeach; ?></div>
+    <div class="sl-dots"><?php foreach ($slides as $si => $sl): ?><button type="button" aria-label="Ir a la diapositiva <?= $si + 1 ?>"<?= $si === 0 ? ' class="on"' : '' ?>></button><?php endforeach; ?></div>
     <script>
     (function(){var s=document.currentScript.parentNode,L=s.querySelectorAll('.slide'),D=s.querySelectorAll('.sl-dots button'),i=0,t,
     secs=(+s.dataset.secs||6)*1000,reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -36,9 +66,17 @@
     </script>
   <?php endif; ?>
 </section>
-<?php else:
-  $shots = array_slice(array_values(array_filter($cats, fn($c) => !empty($c['cover']))), 0, 3); ?>
-<section class="welcome<?= $hero ? ' has-img' : '' ?>"<?= $hero ? ' style="background-image:url(' . e(img_url($hero)) . ')"' : '' ?>>
+<?php
+    elseif ($id === 'hero'):
+      // Seguida de la bienvenida: la imagen va de fondo de la bienvenida. Sola: franja con la imagen.
+      if ($next !== 'welcome' && $hero): ?>
+<section class="hero-band" style="background-image:url(<?= e(img_url($hero)) ?>)" role="img" aria-label="<?= e(site_name()) ?>"></section>
+<?php endif;
+
+    elseif ($id === 'welcome'):
+      $bg = $prev === 'hero' && $hero ? $hero : '';
+      $shots = array_slice(array_values(array_filter($cats, fn($c) => !empty($c['cover']))), 0, 3); ?>
+<section class="welcome<?= $bg ? ' has-img' : '' ?>"<?= $bg ? ' style="background-image:url(' . e(img_url($bg)) . ')"' : '' ?>>
   <div class="wrap welcome-in">
     <div class="welcome-txt">
       <p class="eyebrow"><?= e(setting('tagline')) ?></p>
@@ -47,40 +85,52 @@
       <p class="welcome-btns"><a class="btn" href="<?= e(url('/catalogo')) ?>">Ver el catálogo</a>
          <a class="btn ghost" href="<?= e(url('/contacto')) ?>">Contacto</a></p>
     </div>
-    <?php if (!$hero && $shots): ?>
+    <?php if (!$bg && $shots): ?>
     <div class="welcome-pics" aria-hidden="true">
-      <?php foreach ($shots as $i => $c): ?>
-        <a class="wp wp<?= $i + 1 ?>" href="<?= e(url('/catalogo/' . $c['slug'])) ?>" tabindex="-1"><?= fit_img($c['cover'], '', 90, 1.0, false) ?></a>
+      <?php foreach ($shots as $si => $c): ?>
+        <a class="wp wp<?= $si + 1 ?>" href="<?= e(url('/catalogo/' . $c['slug'])) ?>" tabindex="-1"><?= fit_img($c['cover'], '', 90, 1.0, false) ?></a>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
   </div>
 </section>
-<?php endif; ?>
-
-<?php $cards = json_decode(setting('home_cards') ?: '[]', true) ?: []; $cards = array_values(array_filter($cards, fn($c) => trim((string)($c[0] ?? '')) !== '')); ?>
-<?php if (setting('home_text') !== '' || setting('home_title') !== '' || $cards): ?>
-<section class="wrap nosotros"<?= $cards ? '' : ' style="grid-template-columns:1fr"' ?>>
+<?php
+    elseif ($id === 'about' || $id === 'cards'):
+      // «Quiénes somos» con las tarjetas al lado si van seguidas; cada uno solo si no.
+      $withText = $id === 'about';
+      $withCards = ($id === 'cards' || $next === 'cards') ? $cards : [];
+      if ($id === 'about' && $next === 'cards') { $done['cards'] = true; }
+      $show = $id === 'about' ? (setting('home_text') !== '' || setting('home_title') !== '' || $withCards) : (bool)$withCards;
+      if ($show): ?>
+<section class="wrap nosotros"<?= ($withCards && $withText) ? '' : ' style="grid-template-columns:1fr"' ?>>
+  <?php if ($withText): ?>
   <div class="nosotros-txt">
     <p class="eyebrow">Quiénes somos</p>
     <?php if (setting('home_title') !== ''): ?><h2><?= e(setting('home_title')) ?></h2><?php endif; ?>
     <p><?= nl2br(e(setting('home_text'))) ?></p>
   </div>
-  <?php if ($cards): ?>
+  <?php endif; ?>
+  <?php if ($withCards): ?>
   <div class="nosotros-facts pillars">
-    <?php foreach ($cards as $c): ?><div><strong><?= e($c[0]) ?></strong><span><?= e($c[1] ?? '') ?></span></div><?php endforeach; ?>
+    <?php foreach ($withCards as $c): ?><div><strong><?= e($c[0]) ?></strong><span><?= e($c[1] ?? '') ?></span></div><?php endforeach; ?>
   </div>
   <?php endif; ?>
 </section>
-<?php endif; ?>
+<?php endif;
 
-<?php if ($cats): ?>
+    elseif ($id === 'families' && $featured): ?>
 <section class="wrap chips-sec">
   <p class="eyebrow"><?= e(setting('home_chips_title') !== '' ? setting('home_chips_title') : 'Nuestros productos') ?></p>
-  <p class="chips-row"><?php foreach ($cats as $c): ?><a class="chip-big" href="<?= e(url('/catalogo/' . $c['slug'])) ?>"><?= e($c['name']) ?></a><?php endforeach; ?></p>
+  <p class="chips-row"><?php foreach ($featured as $c): ?><a class="chip-big" href="<?= e(url('/catalogo/' . $c['slug'])) ?>"><?= e($c['name']) ?></a><?php endforeach; ?></p>
 </section>
-<?php endif; ?>
-
+<?php
+    elseif ($id === 'news' && $news): ?>
+<section class="wrap news-sec">
+  <p class="eyebrow"><?= e(setting('home_news_title') !== '' ? setting('home_news_title') : 'Novedades') ?></p>
+  <div class="grid"><?php foreach ($news as $p): ?><?= product_card($p) ?><?php endforeach; ?></div>
+</section>
+<?php
+    elseif ($id === 'cta'): ?>
 <section class="cta">
   <div class="wrap cta-in">
     <div>
@@ -93,3 +143,6 @@
     </p>
   </div>
 </section>
+<?php
+    endif;
+endforeach;

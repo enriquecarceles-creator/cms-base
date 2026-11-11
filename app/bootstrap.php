@@ -160,12 +160,85 @@ function tg(string $fem, string $masc): string
     return setting('term_gender', 'f') === 'm' ? $masc : $fem;
 }
 
-/** Módulos con su explicación (la de «Fila a escala» usa los nombres del catálogo). */
+/**
+ * Módulos que se activan en Web → Configuración, con su explicación (la de «Fila a escala» usa los nombres
+ * del catálogo). El slider ya no está aquí: es un bloque de Web → Página de inicio (mod_slider se mantiene
+ * sincronizado con ese bloque por compatibilidad).
+ */
 function features_help(): array
 {
     $all = FEATURES;
+    unset($all['slider']);
     $all['lineup'][1] = 'En ' . tg('una', 'un') . ' ' . term('family', true) . ' con ' . term('subs', true) . ', ' . tg('las', 'los') . ' muestra en fila con su tamaño real relativo (según las medidas).';
     return $all;
+}
+
+/* ---------- Página de inicio: bloques (Web → Página de inicio) ---------- */
+
+/** Bloques de la portada en su orden por defecto: id => [nombre, explicación]. */
+const HOME_BLOCKS = [
+    'slider' => ['Slider', 'Pase de imágenes grandes.'],
+    'hero' => ['Imagen de cabecera', 'Foto ancha de fondo. Si va justo antes de la bienvenida, el texto se pone encima.'],
+    'welcome' => ['Bienvenida', 'Saludo con el nombre de la empresa, una frase y los botones «Ver el catálogo» y «Contacto».'],
+    'about' => ['Quiénes somos', 'Título y texto sobre la empresa.'],
+    'cards' => ['Tarjetas', 'Hasta cuatro datos destacados. Si va justo después de «Quiénes somos», sale a su lado.'],
+    'families' => ['Familias destacadas', 'Botones con las familias del catálogo.'],
+    'news' => ['Novedades', 'Los últimos artículos añadidos.'],
+    'cta' => ['Llamada final', 'Franja final con botón de contacto y teléfono.'],
+];
+
+/**
+ * Bloques de la portada en su orden: [['id' => …, 'on' => 0|1, 'replace' => 0|1 (solo slider)], …].
+ * Si nunca se han guardado, se calculan de los ajustes de siempre para que la portada se vea igual:
+ * todos activos menos «Novedades», y el slider según el antiguo módulo (mod_slider), sustituyendo
+ * a la cabecera y la bienvenida cuando tiene imágenes, como hacía antes.
+ */
+function home_blocks(): array
+{
+    $saved = json_decode(setting('home_blocks'), true);
+    $out = [];
+    if (is_array($saved)) {
+        foreach ($saved as $b) {
+            $id = (string)($b['id'] ?? '');
+            if (isset(HOME_BLOCKS[$id]) && !isset($out[$id])) {
+                $out[$id] = ['id' => $id, 'on' => empty($b['on']) ? 0 : 1, 'replace' => empty($b['replace']) ? 0 : 1];
+            }
+        }
+    }
+    foreach (array_keys(HOME_BLOCKS) as $id) { // bloques que falten (webs antiguas o bloques nuevos)
+        $out[$id] ??= ['id' => $id, 'on' => $id === 'news' ? 0 : ($id === 'slider' ? (feature('slider') ? 1 : 0) : 1), 'replace' => $id === 'slider' ? 1 : 0];
+    }
+    return array_values($out);
+}
+
+/** Nombre visible de un bloque («Familias destacadas» con el nombre configurado). */
+function home_block_name(string $id): string
+{
+    return $id === 'families' ? term('families') . ' destacad' . tg('as', 'os') : HOME_BLOCKS[$id][0];
+}
+
+/* ---------- Página del catálogo (Web → Página del catálogo) ---------- */
+
+/** Órdenes posibles del catálogo público: clave => nombre. */
+const CATALOG_ORDERS = [
+    'manual' => 'Manual (el orden de cada artículo)',
+    'name' => 'Nombre (A → Z)',
+    'ref' => 'Referencia',
+    'new' => 'Más nuevos primero',
+    'price_asc' => 'Precio (de menor a mayor)',
+    'price_desc' => 'Precio (de mayor a menor)',
+];
+
+/** Ajustes del catálogo público, con los valores de siempre por defecto. */
+function catalog_opts(): array
+{
+    $order = setting('catalog_order', 'manual');
+    return [
+        'per_page' => max(0, (int)setting('catalog_per_page', '0')), // 0 = todos en una página (como siempre)
+        'order' => isset(CATALOG_ORDERS[$order]) ? $order : 'manual',
+        'show_ref' => setting('catalog_show_ref', '1') === '1',
+        'show_price' => setting('catalog_show_price', '1') === '1',
+    ];
 }
 
 /** ¿Hay ya un administrador? (si no, la web está sin instalar) */
@@ -404,14 +477,16 @@ function product_card(array $p): string
     $img = $p['image']
         ? fit_img($p['image'], $p['name'])
         : placeholder_svg();
+    static $opts = null;
+    $opts ??= catalog_opts(); // Web → Página del catálogo: mostrar referencia / precio en las tarjetas
     $meta = [];
-    if ($p['ref'] !== '') {
+    if ($p['ref'] !== '' && $opts['show_ref']) {
         $meta[] = 'Ref. ' . e($p['ref']);
     }
     if ($p['dimensions'] !== '') {
         $meta[] = e($p['dimensions']);
     }
-    $price = price_map()[(int)$p['id']] ?? '';
+    $price = $opts['show_price'] ? (price_map()[(int)$p['id']] ?? '') : '';
     return '<a class="card" href="' . $href . '"><span class="ph">' . $img . '</span>'
         . '<span class="card-body"><strong>' . e($p['name']) . '</strong>'
         . ($meta ? '<small>' . implode(' · ', $meta) . '</small>' : '')
@@ -542,7 +617,7 @@ function category_card(array $c): string
     $n = (int)$c['n'];
     $meta = [];
     if ($n === 1) {
-        if (($c['first_ref'] ?? '') !== '') {
+        if (($c['first_ref'] ?? '') !== '' && catalog_opts()['show_ref']) { // la referencia de su único artículo
             $meta[] = 'Ref. ' . e($c['first_ref']);
         }
         if (($c['first_dims'] ?? '') !== '') {

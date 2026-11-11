@@ -28,9 +28,22 @@ function categories_with_cover(?int $parent = null): array
 
 function page_home(): void
 {
+    $blocks = home_blocks();
+    $on = array_column(array_filter($blocks, fn($b) => $b['on']), 'id');
+    // {Familias} destacadas: las elegidas en Web → Página de inicio (vacío = todas, como siempre)
+    $cats = categories_with_cover();
+    $pick = array_map('intval', (array)(json_decode(setting('home_families'), true) ?: []));
+    $featured = $pick ? array_values(array_filter($cats, fn($c) => in_array((int)$c['id'], $pick, true))) : $cats;
+    // Novedades: solo se consultan si el bloque está activo
+    $news = [];
+    if (in_array('news', $on, true)) {
+        $n = max(1, min(24, (int)setting('home_news_count', '8')));
+        $news = db()->query('SELECT p.*, ' . PCAT_FIELDS . ' FROM products p ' . PCAT_JOIN . ' WHERE p.visible = 1 ORDER BY p.created_at DESC, p.id DESC LIMIT ' . $n)->fetchAll();
+    }
     render('home', [
-        'slides' => db()->query('SELECT * FROM slides WHERE visible = 1 ORDER BY sort, id')->fetchAll(),
-        'cats' => categories_with_cover(),
+        'blocks' => $blocks, 'featured' => $featured, 'news' => $news,
+        'slides' => in_array('slider', $on, true) ? db()->query('SELECT * FROM slides WHERE visible = 1 ORDER BY sort, id')->fetchAll() : [],
+        'cats' => $cats,
         'total' => (int)db()->query('SELECT COUNT(*) FROM products WHERE visible = 1')->fetchColumn(),
         'nreps' => (int)db()->query('SELECT COUNT(*) FROM reps')->fetchColumn(),
         'title' => site_name() . (setting('tagline') !== '' ? ' · ' . setting('tagline') : ''),
@@ -85,7 +98,36 @@ function page_catalog(?string $slug): void
         $like = '%' . $q . '%';
         array_push($args, $like, $like, $like, $like, $like);
     }
-    $sql .= ' ORDER BY ' . PCAT_ORDER;
+    // Orden y páginas (Web → Página del catálogo). Por defecto: orden manual y todo en una página, como siempre.
+    $opts = catalog_opts();
+    $order = PCAT_ORDER;
+    $pf = field_price_public();
+    if ($opts['order'] !== 'manual' && ($pf || !str_starts_with($opts['order'], 'price'))) {
+        $fam = 'COALESCE(pc.sort, c.sort), COALESCE(pc.name, c.name), '; // se sigue agrupando por {familia}
+        $order = $fam . match ($opts['order']) {
+            'name' => 'p.name, p.id',
+            'ref' => "CASE WHEN p.ref = '' THEN 1 ELSE 0 END, p.ref, p.id",
+            'new' => 'p.created_at DESC, p.id DESC',
+            'price_asc', 'price_desc' => 'CASE WHEN pr.value IS NULL THEN 1 ELSE 0 END, CAST(pr.value AS DECIMAL(14,4)) ' . ($opts['order'] === 'price_desc' ? 'DESC' : 'ASC') . ', p.name, p.id',
+        };
+        if (str_starts_with($opts['order'], 'price')) {
+            $sql = str_replace(' FROM products p ' . PCAT_JOIN, ' FROM products p ' . PCAT_JOIN . ' LEFT JOIN product_fields pr ON pr.product_id = p.id AND pr.field_id = ' . (int)$pf['id'], $sql);
+        }
+    }
+    $total = 0;
+    $page = 1;
+    $pages = 1;
+    if ($opts['per_page'] > 0) {
+        $cnt = db()->prepare('SELECT COUNT(*) FROM (' . $sql . ') t');
+        $cnt->execute($args);
+        $total = (int)$cnt->fetchColumn();
+        $pages = max(1, (int)ceil($total / $opts['per_page']));
+        $page = max(1, min($pages, (int)($_GET['pag'] ?? 1)));
+    }
+    $sql .= ' ORDER BY ' . $order;
+    if ($opts['per_page'] > 0) {
+        $sql .= ' LIMIT ' . $opts['per_page'] . ($page > 1 ? ' OFFSET ' . (($page - 1) * $opts['per_page']) : '');
+    }
     $st = db()->prepare($sql);
     $st->execute($args);
     $groups = [];
@@ -96,7 +138,7 @@ function page_catalog(?string $slug): void
     $title = ($current ? ($parent ? $parent['name'] . ' · ' : '') . $current['name'] . ' · ' : '') . 'Catálogo · ' . site_name();
     render('catalog', [
         'cats' => $cats, 'current' => $current, 'parent' => $parent, 'subs' => $q === '' ? $subs : [],
-        'groups' => $groups, 'q' => $q,
+        'groups' => $groups, 'q' => $q, 'page' => $page, 'pages' => $pages, 'total' => $total,
         'title' => $title,
         'desc' => 'Catálogo de ' . ($current ? mb_strtolower($current['name']) : 'productos') . ' de ' . site_name() . '.',
         'noindex' => $q !== '',

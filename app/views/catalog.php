@@ -13,6 +13,7 @@
       <button class="btn small" type="submit">Buscar</button>
     </form>
   </div>
+  <?php if (setting('catalog_intro') !== ''): ?><p class="cat-intro"><?= nl2br(e(setting('catalog_intro'))) ?></p><?php endif; ?>
   <div class="catgrid">
     <?php foreach ($cats as $c): ?>
       <div class="cg-w">
@@ -78,6 +79,15 @@
       <?php foreach ($g['items'] as $p): ?><?= product_card($p) ?><?php endforeach; ?>
     </div>
   <?php endforeach; ?>
+  <?php if ($pages > 1):
+      $base = '/catalogo' . ($current ? '/' . $current['slug'] : '');
+      $pg = fn(int $n) => url($base) . (($q !== '' || $n > 1) ? '?' . http_build_query(array_filter(['q' => $q, 'pag' => $n > 1 ? $n : null], fn($v) => $v !== null && $v !== '')) : ''); ?>
+    <nav class="cat-pager" aria-label="Páginas del catálogo">
+      <?php if ($page > 1): ?><a href="<?= e($pg($page - 1)) ?>" rel="prev">‹ Anterior</a><?php endif; ?>
+      <?php for ($n = 1; $n <= $pages; $n++): if ($n === $page): ?><span class="cur" aria-current="page"><?= $n ?></span><?php elseif ($n <= 2 || $n > $pages - 2 || abs($n - $page) <= 2): ?><a href="<?= e($pg($n)) ?>"><?= $n ?></a><?php elseif ($n === 3 || $n === $pages - 2): ?><span>…</span><?php endif; endfor; ?>
+      <?php if ($page < $pages): ?><a href="<?= e($pg($page + 1)) ?>" rel="next">Siguiente ›</a><?php endif; ?>
+    </nav>
+  <?php endif; ?>
 
 </div>
 </section>

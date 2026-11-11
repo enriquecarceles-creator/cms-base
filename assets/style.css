@@ -456,3 +456,12 @@ html{scrollbar-gutter:stable}
 .card-body .price{font-weight:700;margin-top:2px;color:var(--ink,#1c1b19)}
 .specs dd.price{font-size:1.25rem}
 .desc-h{font-size:1rem;margin:0 0 4px}
+
+/* Portada por bloques (Web → Página de inicio) */
+.hero-band{height:clamp(200px,34vw,440px);background:center/cover no-repeat}
+.news-sec{margin-block:40px}
+.news-sec .eyebrow{margin:0 0 14px;color:var(--gold-text);font-size:.8rem;letter-spacing:.16em;text-transform:uppercase}
+.cat-intro{max-width:70ch;color:var(--steel);margin:-6px 0 22px}
+.cat-pager{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;margin:28px 0 8px}
+.cat-pager a,.cat-pager span{min-width:40px;text-align:center;padding:8px 12px;border-radius:8px;text-decoration:none;border:1px solid var(--line)}
+.cat-pager .cur{background:var(--ink);color:#fff;border-color:var(--ink)}

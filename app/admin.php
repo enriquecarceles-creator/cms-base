@@ -38,7 +38,7 @@ function admin_dispatch(array $segs): void
         redirect('/admin/login');
     }
     require_login();
-    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
+    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
@@ -70,6 +70,12 @@ function admin_dispatch(array $segs): void
             break;
         case 'empresa':
             admin_company();
+            break;
+        case 'pagina-inicio':
+            admin_home_page();
+            break;
+        case 'pagina-catalogo':
+            admin_catalog_page();
             break;
         case 'configuracion':
             admin_config();
@@ -163,9 +169,10 @@ function admin_menu(): array
         ]],
         'web' => ['Web', 'web', [
             ['Empresa', '/admin/empresa', ['empresa'], true],
+            ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio', 'slider'], true],
+            ['Página del catálogo', '/admin/pagina-catalogo', ['pagina-catalogo'], true],
             ['Configuración', '/admin/configuracion', ['configuracion'], true],
             ['Campos', '/admin/campos', ['campos'], true],
-            ...(feature('slider') ? [['Slider', '/admin/slider', ['slider'], true]] : []),
             ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
         ]],
         'users' => ['Usuarios', 'users', [['Usuarios', '/admin/usuarios', ['usuarios'], true]]],
@@ -939,6 +946,7 @@ function admin_slider(): void
         redirect('/admin/slider');
     }
     admin_render('slider', [
+        'crumb' => 'Slider',
         'slides' => $db->query('SELECT * FROM slides ORDER BY sort, id')->fetchAll(),
         'effect' => db_setting('slider_effect') ?: 'fade', 'seconds' => (int)(db_setting('slider_seconds') ?: 6),
         'title' => 'Slider de portada',
@@ -980,10 +988,10 @@ function admin_reps(): void
 function admin_company(): void
 {
     $db = db();
+    // Lo de la portada (imagen de cabecera, textos, tarjetas) está ahora en Web → Página de inicio
     $keys = ['company_name', 'trade_name', 'brand_sub', 'tax_id', 'tagline', 'address', 'phone', 'whatsapp', 'email',
-        'facebook', 'instagram', 'linkedin', 'brand_color', 'logo_height', 'footer_banner_alt',
-        'home_lead', 'home_title', 'home_text', 'home_chips_title', 'home_desc'];
-    $images = ['hero' => 'hero_image', 'logo' => 'logo', 'banner' => 'footer_banner'];
+        'facebook', 'instagram', 'linkedin', 'brand_color', 'logo_height', 'footer_banner_alt'];
+    $images = ['logo' => 'logo', 'banner' => 'footer_banner'];
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
             flash('La imagen pesa demasiado para el servidor.', 'err');
@@ -997,7 +1005,7 @@ function admin_company(): void
                     delete_image($old);
                     save_setting($key, '');
                 } elseif (!empty($_FILES[$field]['name']) && ($_FILES[$field]['error'] ?? 4) !== UPLOAD_ERR_NO_FILE) {
-                    $new = save_image($_FILES[$field], $field === 'hero' ? 2000 : 1200, false);
+                    $new = save_image($_FILES[$field], 1200, false);
                     delete_image($old);
                     save_setting($key, $new);
                 }
@@ -1006,7 +1014,10 @@ function admin_company(): void
             }
         }
         foreach ($keys as $k) {
-            $val = trim((string)($_POST[$k] ?? ''));
+            $val = trim(str_replace("
+", "
+", (string)($_POST[$k] ?? ''))); // saltos de línea siempre 
+
             if ($k === 'brand_color' && $val !== '' && !preg_match('/^#[0-9a-fA-F]{6}$/', $val)) {
                 $val = '';
             }
@@ -1015,14 +1026,6 @@ function admin_company(): void
             }
             db_put_setting($db, $k, $val);
         }
-        $cards = [];
-        foreach ((array)($_POST['card_t'] ?? []) as $n => $t) {
-            $t = trim((string)$t);
-            if ($t !== '') {
-                $cards[] = [mb_substr($t, 0, 60), mb_substr(trim((string)($_POST['card_d'][$n] ?? '')), 0, 120)];
-            }
-        }
-        $st->execute(['home_cards', json_encode(array_slice($cards, 0, 4), JSON_UNESCAPED_UNICODE)]);
         flash('Datos de la empresa guardados.');
         redirect('/admin/empresa');
     }
@@ -1034,17 +1037,144 @@ function admin_company(): void
         $v = db_setting($key);
         $vals[$key] = $v;
     }
-    $vals['home_cards'] = json_decode(setting('home_cards') ?: '[]', true) ?: [];
     admin_render('company', ['v' => $vals, 'title' => 'Empresa']);
+}
+
+/* ---------- Web → Página de inicio (bloques de la portada) ---------- */
+
+/** Textos de la portada: clave => [etiqueta, valor por defecto, bloque]. Son los ajustes de siempre. */
+const HOME_TEXTS = [
+    'home_hello' => ['Saludo', 'Bienvenido a', 'welcome'],
+    'home_lead' => ['Frase de bienvenida', '', 'welcome'],
+    'home_title' => ['Título', '', 'about'],
+    'home_text' => ['Texto', '', 'about'],
+    'home_chips_title' => ['Título de la sección', 'Nuestros productos', 'families'],
+    'home_news_title' => ['Título de la sección', 'Novedades', 'news'],
+    'cta_title' => ['Título', '¿Hablamos?', 'cta'],
+    'cta_text' => ['Texto', 'Pídenos información, precios o presupuesto.', 'cta'],
+    'home_desc' => ['Descripción para Google (portada)', '', ''],
+];
+
+function admin_home_page(): void
+{
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+            flash('La imagen pesa demasiado para el servidor.', 'err');
+            redirect('/admin/pagina-inicio');
+        }
+        csrf_check();
+        // Imagen de cabecera
+        try {
+            $old = db_setting('hero_image');
+            if (!empty($_POST['hero_remove'])) {
+                delete_image($old);
+                save_setting('hero_image', '');
+            } elseif (!empty($_FILES['hero']['name']) && ($_FILES['hero']['error'] ?? 4) !== UPLOAD_ERR_NO_FILE) {
+                $new = save_image($_FILES['hero'], 2000, false);
+                delete_image($old);
+                save_setting('hero_image', $new);
+            }
+        } catch (RuntimeException $e) {
+            flash($e->getMessage(), 'err');
+        }
+        // Textos (vacío = el texto por defecto)
+        foreach (HOME_TEXTS as $k => $_) {
+            $max = $k === 'home_text' ? 3000 : ($k === 'home_desc' ? 160 : 300);
+            save_setting($k, mb_substr(trim(str_replace("
+", "
+", (string)($_POST[$k] ?? ''))), 0, $max));
+        }
+        save_setting('home_news_count', (string)max(1, min(24, (int)($_POST['home_news_count'] ?? 8))));
+        // Tarjetas
+        $cards = [];
+        foreach ((array)($_POST['card_t'] ?? []) as $n => $t) {
+            $t = trim((string)$t);
+            if ($t !== '') {
+                $cards[] = [mb_substr($t, 0, 60), mb_substr(trim((string)($_POST['card_d'][$n] ?? '')), 0, 120)];
+            }
+        }
+        save_setting('home_cards', (string)json_encode(array_slice($cards, 0, 4), JSON_UNESCAPED_UNICODE));
+        // {Familias} destacadas: todas, o solo las marcadas
+        $valid = array_map('intval', array_column(db()->query('SELECT id FROM categories WHERE parent_id IS NULL')->fetchAll(), 'id'));
+        $pick = array_values(array_intersect(array_map('intval', (array)($_POST['fam'] ?? [])), $valid));
+        save_setting('home_families', ($_POST['fam_mode'] ?? '') === 'some' && $pick ? (string)json_encode($pick) : '');
+        // Bloques: activo, orden (número) y flechas ↑ ↓
+        $blocks = home_blocks();
+        $on = (array)($_POST['on'] ?? []);
+        $ord = (array)($_POST['ord'] ?? []);
+        foreach ($blocks as $i => &$b) {
+            $b['on'] = isset($on[$b['id']]) ? 1 : 0;
+            $b['n'] = isset($ord[$b['id']]) && is_numeric($ord[$b['id']]) ? (float)$ord[$b['id']] : ($i + 1) * 10;
+            $b['i'] = $i;
+            if ($b['id'] === 'slider') {
+                $b['replace'] = empty($_POST['slider_replace']) ? 0 : 1;
+            }
+        }
+        unset($b);
+        usort($blocks, fn($a, $b) => $a['n'] <=> $b['n'] ?: $a['i'] <=> $b['i']);
+        [$mid, $dir] = array_pad(explode(':', (string)($_POST['move'] ?? '')), 2, '');
+        $pos = array_search($mid, array_column($blocks, 'id'), true);
+        if ($pos !== false) {
+            $to = $dir === 'up' ? $pos - 1 : ($dir === 'down' ? $pos + 1 : $pos);
+            if ($to >= 0 && $to < count($blocks)) {
+                [$blocks[$pos], $blocks[$to]] = [$blocks[$to], $blocks[$pos]];
+            }
+        }
+        $save = array_map(fn($b) => ['id' => $b['id'], 'on' => $b['on']] + ($b['id'] === 'slider' ? ['replace' => $b['replace']] : []), $blocks);
+        save_setting('home_blocks', (string)json_encode($save));
+        // El antiguo módulo «slider» sigue el bloque (compatibilidad)
+        foreach ($save as $b) {
+            if ($b['id'] === 'slider') {
+                save_setting('mod_slider', $b['on'] ? '1' : '0');
+            }
+        }
+        flash($mid !== '' ? 'Orden cambiado.' : 'Página de inicio guardada.');
+        redirect('/admin/pagina-inicio' . ($mid !== '' ? '#bloques' : ''));
+    }
+    $v = [];
+    foreach (HOME_TEXTS as $k => $_) {
+        $v[$k] = db_setting($k);
+    }
+    $v['hero_image'] = db_setting('hero_image');
+    $v['home_news_count'] = db_setting('home_news_count') ?: '8';
+    admin_render('home_page', [
+        'v' => $v, 'blocks' => home_blocks(),
+        'cards' => array_pad(json_decode(setting('home_cards') ?: '[]', true) ?: [], 4, ['', '']),
+        'roots' => db()->query('SELECT id, name FROM categories WHERE parent_id IS NULL ORDER BY sort, name')->fetchAll(),
+        'pick' => array_map('intval', (array)(json_decode(setting('home_families'), true) ?: [])),
+        'nSlides' => (int)db()->query('SELECT COUNT(*) FROM slides WHERE visible = 1')->fetchColumn(),
+        'title' => 'Página de inicio',
+    ]);
+}
+
+/* ---------- Web → Página del catálogo ---------- */
+
+function admin_catalog_page(): void
+{
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        save_setting('catalog_title', mb_substr(trim((string)($_POST['catalog_title'] ?? '')), 0, 200));
+        save_setting('catalog_intro', mb_substr(trim(str_replace("
+", "
+", (string)($_POST['catalog_intro'] ?? ''))), 0, 2000));
+        save_setting('catalog_per_page', (string)max(0, min(200, (int)($_POST['catalog_per_page'] ?? 0))));
+        $o = (string)($_POST['catalog_order'] ?? 'manual');
+        save_setting('catalog_order', isset(CATALOG_ORDERS[$o]) ? $o : 'manual');
+        save_setting('catalog_show_ref', empty($_POST['catalog_show_ref']) ? '0' : '1');
+        save_setting('catalog_show_price', empty($_POST['catalog_show_price']) ? '0' : '1');
+        flash('Página del catálogo guardada.');
+        redirect('/admin/pagina-catalogo');
+    }
+    admin_render('catalog_page', [
+        'title_v' => db_setting('catalog_title'), 'intro' => db_setting('catalog_intro'), 'opts' => catalog_opts(),
+        'hasPrice' => field_price_public() !== null,
+        'title' => 'Página del catálogo',
+    ]);
 }
 
 /* ---------- Configuración: módulos, país, textos fijos ---------- */
 
 const CONFIG_TEXTS = [
-    'home_hello' => ['Saludo de la portada', 'Bienvenido a', 'Va delante del nombre de la empresa.'],
-    'catalog_title' => ['Título del índice del catálogo', '', ''], // por defecto: catalog_title_default()
-    'cta_title' => ['Llamada final de la portada: título', '¿Hablamos?', ''],
-    'cta_text' => ['Llamada final de la portada: texto', 'Pídenos información, precios o presupuesto.', ''],
     'reps_title' => ['Título de la lista de representantes', 'Representantes por zonas', ''],
 ];
 
@@ -1064,7 +1194,7 @@ function admin_config(): void
 {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
-        foreach (FEATURES as $k => $_) {
+        foreach (array_keys(features_help()) as $k) { // sin «slider»: se activa en Web → Página de inicio
             save_setting('mod_' . $k, in_array($k, (array)($_POST['mods'] ?? []), true) ? '1' : '0');
         }
         save_setting('phone_prefix', preg_replace('/\D+/', '', (string)($_POST['phone_prefix'] ?? '')));

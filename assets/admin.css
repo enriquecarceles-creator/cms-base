@@ -294,7 +294,7 @@ fieldset.multi label.check{font-weight:400}
 
 /* ===== Formulario de artículo por secciones ===== */
 /* Los campos que reciben el foco no quedan debajo de la barra fija de guardar */
-html:has(.pform){scroll-padding-bottom:96px}
+html:has(.savebar){scroll-padding-bottom:96px}
 .pform{max-width:1100px;padding-bottom:0}
 .ptabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:-4px 0 4px}
 .ptabs a{padding:8px 14px;color:var(--steel);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-size:.93rem}
@@ -310,7 +310,7 @@ html:has(.pform){scroll-padding-bottom:96px}
 .savebar-back{font-size:.9rem;color:var(--steel)}
 .savebar-state{margin-left:auto;font-size:.88rem;color:var(--warn);font-weight:600}
 .pform.dirty .savebar{border-top-color:var(--gold)}
-@media (max-width:600px){html:has(.pform){scroll-padding-bottom:150px}.savebar{gap:8px}.savebar .btn{padding:9px 16px}.savebar-state{margin-left:0;width:100%}}
+@media (max-width:600px){html:has(.savebar){scroll-padding-bottom:150px}.savebar{gap:8px}.savebar .btn{padding:9px 16px}.savebar-state{margin-left:0;width:100%}}
 
 /* Arreglos de botones: «font: … inherit» no es válido (se ignoraba y los <button> salían con letra pequeña),
    y .btn pisaba el fondo blanco de los botones de peligro */
@@ -320,3 +320,17 @@ html:has(.pform){scroll-padding-bottom:96px}
 .btn.danger-btn:hover{background:var(--err-bg)}
 .form label > .lbl small{font-weight:400;margin-left:4px}
 .t-thumb a{text-decoration:none;display:block}
+
+/* ===== Web → Página de inicio ===== */
+.tbl.blocks td{vertical-align:middle}
+.blk-ord{width:90px}
+.blk-move{white-space:nowrap}
+.blk-move .btn{min-width:38px;padding:6px 10px}
+.blk-move .btn:disabled{opacity:.35;cursor:default}
+.blk-opt{display:inline-flex;margin-top:6px;font-size:.9rem}
+.blk-link{display:inline-block;margin-top:4px;font-size:.86rem;color:var(--steel)}
+.fam-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;padding-left:24px}
+.fam-pick label.check{font-weight:400}
+.hp .savebar{margin-top:6px}
+.tbl input[type=checkbox],.tbl input[type=radio]{width:auto;margin:0}
+.tbl input.blk-ord{width:90px;margin:0}
