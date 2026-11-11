@@ -78,7 +78,7 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 ## 6. Probar, instalar y caso real
 **Local:**
 ```bash
-php -d upload_max_filesize=64M -d post_max_size=70M -S 127.0.0.1:8099 router.php
+php -d upload_max_filesize=1G -d post_max_size=1G -d memory_limit=1G -d max_execution_time=600 -S 127.0.0.1:8099 router.php
 ```
 Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flujo en el navegador.
 
