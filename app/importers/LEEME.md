@@ -79,3 +79,8 @@ Para un programa de gestión concreto normalmente basta con el origen «Base de 
 El origen «Base de datos» guarda y aplica perfiles (tabla `import_profiles`). Para añadir un perfil de sistema para otro programa de gestión, añádelo a `IMPORT_SYSTEM_PROFILES` con:
 - `mapping`: las mismas claves que el paso de columnas (`table`, `name`, `ref`, `family`, `fam_table`…) y `fields` => [slug del campo => columna].
 - `rules`: `require_tables` (para proponerlo solo cuando encaja), `exclude_columns` (columnas que no se leen nunca; `PREFIJO*` vale para todas las que empiezan así) y `fields` (campos que se crean si faltan: slug => [nombre, tipo, unidad, público]).
+
+## Fotos por carpeta de artículo (app/photofolders.php)
+
+Para programas que guardan las fotos en `ARTICULO_<código>/` (NCS): `pf_find_source()`, `pf_scan()`, `pf_index()` + `pf_lookup()` (exacta → sin signos → ambigua) y `pf_images()`, que devuelve las fotos listas para el plan (`ftp` = ruta dentro de `data/importar/`, leída sin copiar; o `file` extraído del ZIP). Las usan `fotos-carpetas.php` y `base-datos.php`.
+En un ítem del plan, `'replace' => true` hace que el núcleo quite antes las fotos del artículo cuya `src` no esté entre las del ítem.

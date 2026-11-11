@@ -15,6 +15,10 @@
       <?php if ($src['help'] !== ''): ?><small><?= e($src['help']) ?></small><?php endif; ?>
       <?php if (!empty($src['template'])): ?><small><a href="<?= e(url('/admin/importar?plantilla=' . rawurlencode($id))) ?>">Descargar plantilla de ejemplo (CSV)</a></small><?php endif; ?>
       <?php foreach ($src['fields'] as $f): $type = $f['type'] ?? 'text'; ?>
+        <?php if ($type === 'checkbox'): ?>
+          <label class="check"><input type="checkbox" name="<?= e($f['name']) ?>" value="1"<?= !empty($f['checked']) ? ' checked' : '' ?>> <span><?= e($f['label']) ?></span></label>
+          <?php continue; ?>
+        <?php endif; ?>
         <label><?= e($f['label']) ?>
           <?php if ($type === 'file'): ?>
             <input type="file" name="<?= e($f['name']) ?>"<?= !empty($f['accept']) ? ' accept="' . e($f['accept']) . '"' : '' ?><?= !empty($f['required']) ? ' required' : '' ?>>
@@ -77,7 +81,13 @@
 <?php elseif ($status === 'plan'): ?>
   <p class="hint">Esto es lo que se ha encontrado en <strong><?= e($job['origin']) ?></strong><?= !empty($job['source_label']) ? ' (' . e($job['source_label']) . ')' : '' ?>. Desmarca lo que no quieras importar y pulsa <strong>Importar</strong>.</p>
 
-  <?php foreach ($job['warnings'] as $w): ?><p class="flash <?= str_starts_with($w, 'Columnas reconocidas') ? 'ok' : 'err' ?>"><?= e($w) ?></p><?php endforeach; ?>
+  <?php foreach ($job['warnings'] as $w): ?><p class="flash <?= str_starts_with($w, 'Columnas reconocidas') || str_starts_with($w, 'Fotos por carpeta (') ? 'ok' : 'err' ?>"><?= e($w) ?></p><?php endforeach; ?>
+  <?php if (!empty($job['summary'])): ?>
+    <ul class="summary">
+      <?php foreach ($job['summary'] as $s): ?><li<?= !empty($s[2]) ? ' class="bad"' : '' ?>><b><?= (int)$s[1] ?></b> <?= e($s[0]) ?></li><?php endforeach; ?>
+    </ul>
+    <?php foreach ($job['lists'] ?? [] as $title => $list): ?><p class="muted"><b><?= e($title) ?> (<?= count($list) ?>):</b> <?= e(implode(', ', $list)) ?></p><?php endforeach; ?>
+  <?php endif; ?>
 
   <?php if (count($job['items']) > 250):
       $st = ['new' => 0, 'upd' => 0, 'skip' => 0, 'img' => 0, 'hidden' => 0];
@@ -90,7 +100,7 @@
       foreach ($job['items'] as $it) { if (!$it['pid'] && !empty($it['cat_name'])) { $fams[$it['cat_name']] = ($fams[$it['cat_name']] ?? 0) + 1; } }
       ksort($fams, SORT_NATURAL | SORT_FLAG_CASE);
   ?>
-    <ul class="summary">
+    <ul class="summary"<?= !empty($job['summary']) ? ' hidden' : '' ?>>
       <li><b><?= $st['new'] ?></b> artículos nuevos<?= $st['hidden'] ? ' (' . $st['hidden'] . ' ocultos, como en el origen)' : '' ?></li>
       <li><b><?= $st['upd'] ?></b> ya existen (solo se rellenan sus huecos)</li>
       <li><b><?= $st['img'] ?></b> fotos</li>
@@ -106,8 +116,10 @@
     </table></div>
     <form method="post" style="margin-top:14px">
       <?= csrf_field() ?><input type="hidden" name="all" value="1">
+      <?php if (empty($job['no_append'])): ?>
       <label class="check"><input type="checkbox" name="texts" value="1" checked> En los artículos que ya existen, rellenar los campos vacíos</label>
       <label class="check"><input type="checkbox" name="append" value="1"> Añadir fotos aunque el artículo ya tenga fotos</label>
+      <?php endif; ?>
       <div class="buttons" style="margin-top:14px">
         <button class="btn" name="action" value="start" type="submit">Importar los <?= $st['new'] + $st['upd'] ?> artículos</button>
         <button class="btn ghost" name="action" value="reset" type="submit">Descartar</button>
@@ -120,7 +132,7 @@
     <?php foreach ($job['items'] as $i => $it):
         $canImport = $it['pid'] || $it['cat_id'] || !empty($it['cat_path']);
         $hasTexts = $it['pid'] && ($it['ref'] !== '' || $it['dims'] !== '' || $it['desc'] !== '' || !empty($it['fields']));
-        $skipPhotos = $it['pid'] && $it['have_images'] > 0;
+        $skipPhotos = $it['pid'] && $it['have_images'] > 0 && empty($it['replace']);
     ?>
       <fieldset class="imp">
         <label class="check imp-title">
@@ -146,6 +158,7 @@
 
         <?php if ($it['images']): ?>
           <?php if ($skipPhotos): ?><p class="muted">Ya tiene <?= (int)$it['have_images'] ?> foto<?= $it['have_images'] === 1 ? '' : 's' ?>: se omiten estas, salvo que marques abajo «añadir aunque ya tengan fotos».</p><?php endif; ?>
+          <?php if (!empty($it['replace']) && !empty($it['foreign'])): ?><p class="flash err">Tiene <?= (int)$it['foreign'] ?> foto<?= $it['foreign'] === 1 ? '' : 's' ?> que no viene<?= $it['foreign'] === 1 ? '' : 'n' ?> de esta carpeta: se quitará<?= $it['foreign'] === 1 ? '' : 'n' ?> (Sustituir).</p><?php endif; ?>
           <div class="gal">
             <?php foreach ($it['images'] as $k => $im): ?>
               <label class="gitem">
@@ -164,7 +177,7 @@
       <p class="muted"><b>Fotos sin asignar a ningún artículo (no se importan):</b> <?= e(implode(', ', $job['unassigned'])) ?>. Puedes subirlas a mano desde cada artículo.</p>
     <?php endif; ?>
 
-    <label class="check"><input type="checkbox" name="append" value="1"> Añadir fotos aunque el artículo ya tenga fotos</label>
+    <?php if (empty($job['no_append'])): ?><label class="check"><input type="checkbox" name="append" value="1"> Añadir fotos aunque el artículo ya tenga fotos</label><?php endif; ?>
     <div class="buttons" style="margin-top:14px">
       <button class="btn" name="action" value="start" type="submit">Importar lo marcado</button>
       <button class="btn ghost" name="action" value="reset" type="submit">Descartar</button>
@@ -213,6 +226,7 @@
       <li><b><?= $ok ?></b> foto<?= $ok === 1 ? '' : 's' ?> importada<?= $ok === 1 ? '' : 's' ?></li>
       <li><b><?= $created ?></b> artículo<?= $created === 1 ? '' : 's' ?> nuevo<?= $created === 1 ? '' : 's' ?></li>
       <?php if ($dup): ?><li><?= $dup ?> ya estaban importadas</li><?php endif; ?>
+      <?php $removed = array_sum(array_map(fn($it) => (int)($it['removed'] ?? 0), $job['items'])); if ($removed): ?><li><?= $removed ?> foto<?= $removed === 1 ? '' : 's' ?> anterior<?= $removed === 1 ? '' : 'es' ?> quitada<?= $removed === 1 ? '' : 's' ?> (Sustituir)</li><?php endif; ?>
       <?php if ($err): ?><li class="bad"><b><?= $err ?></b> con error</li><?php endif; ?>
     </ul>
     <?php if ($errs): ?>

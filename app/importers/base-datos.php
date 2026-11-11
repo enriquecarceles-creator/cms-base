@@ -505,6 +505,7 @@ function dbimp_apply_profile(array $job, array $p): array
     }
     $m['visible_inv'] = !empty($mp['visible_inv']) ? '1' : '';
     $m['caps'] = !empty($mp['caps']) ? '1' : '';
+    $m['folders'] = !empty($mp['folders']) ? '1' : '';
     $m['extra'] = array_values(array_filter(array_map(fn($c) => $col($table, (string)$c), (array)($mp['extra'] ?? []))));
     $m['extra_labels'] = (string)($mp['extra_labels'] ?? '');
     $m['img_base'] = preg_match('#^https?://[^/\s]+#i', (string)($mp['img_base'] ?? '')) ? (string)$mp['img_base'] : '';
@@ -645,6 +646,7 @@ function dbimp_guess(array $tables, ?string $table): array
         }
     }
     $m['img_base'] = '';
+    $m['folders'] = '';       // '1' = fotos por carpeta ARTICULO_<código> si la columna de foto está vacía
     $m['mode'] = 'import';        // 'import' (crear y rellenar huecos) o 'update' (actualizar precios y stock)
     $m['upd_fields'] = null;      // ids de campos a actualizar; null = aún sin elegir (se proponen precio y números)
     $m['upd_visible'] = '';       // '1' = actualizar también la visibilidad
@@ -772,6 +774,7 @@ function dbimp_map_form(array $job): string
         . '<label>Su columna con el id del artículo ' . $sel('img_fk', $allCols((string)$m['img_table']), (string)$m['img_fk']) . '</label></div>'
         . '<div class="two"><label>Su columna con la foto ' . $sel('img_file', $allCols((string)$m['img_table']), (string)$m['img_file']) . '</label>'
         . '<label>Su columna de orden (opcional) ' . $sel('img_sort', $allCols((string)$m['img_table']), (string)$m['img_sort']) . '</label></div></fieldset>'
+        . '<label class="check"><input type="checkbox" name="m[folders]" value="1"' . (($m['folders'] ?? '') === '1' ? ' checked' : '') . '> <span>Fotos por carpeta de artículo (<code>ARTICULO_&lt;código&gt;</code>): si la columna de la foto está vacía, se usan las fotos de la carpeta con su referencia (del ZIP o de una carpeta en data/importar/). Sin los GIF.</span></label>'
         . '<label>Opcional: ZIP con las fotos <input type="file" name="zip" accept=".zip,application/zip"><small>Si las fotos son nombres de archivo y no hay dirección base. Si pesa mucho, déjalo por FTP en data/importar/.</small></label>'
         . '<input type="hidden" name="action" value="map">'
         . '<fieldset><legend>Guardar como perfil</legend><div class="row-inline"><label class="grow">Nombre del perfil <input name="profile_name" maxlength="120" value="' . e(isset($profiles[$curProfile]) && !$profiles[$curProfile]['is_system'] ? $profiles[$curProfile]['name'] : '') . '" placeholder="Por ejemplo: Almacén de mi programa"></label>'
@@ -818,7 +821,7 @@ function dbimp_map(array $job, array $post, array $files): array
         $m = array_merge(dbimp_guess($tables, $newTable), $keep); // otra tabla: nueva propuesta de columnas
     } else {
         foreach ($m as $k => $_) {
-            if (in_array($k, ['table', 'extra', 'visible_inv', 'caps', 'upd_fields', 'upd_visible', 'profile'], true)) {
+            if (in_array($k, ['table', 'extra', 'visible_inv', 'caps', 'folders', 'upd_fields', 'upd_visible', 'profile'], true)) {
                 continue;
             }
             if (array_key_exists($k, $in) && !is_array($in[$k])) {
@@ -831,6 +834,7 @@ function dbimp_map(array $job, array $post, array $files): array
         $m['extra'] = array_values(array_intersect((array)($in['extra'] ?? []), $tables[$m['table']]['cols']));
         $m['visible_inv'] = empty($in['visible_inv']) ? '' : '1';
         $m['caps'] = empty($in['caps']) ? '' : '1';
+        $m['folders'] = empty($in['folders']) ? '' : '1';
         if (array_key_exists('mode', $in)) { // el formulario siempre envía el modo junto a sus casillas
             $m['upd_fields'] = array_values(array_intersect(array_map('intval', (array)($in['upd_fields'] ?? [])), array_keys(fields_all())));
             $m['upd_visible'] = empty($in['upd_visible']) ? '' : '1';
@@ -934,9 +938,28 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
 
     // ZIP de fotos (opcional)
     $zipMap = [];
-    $zipPath = ($zipUpload && ($zipUpload['error'] ?? 4) === UPLOAD_ERR_OK && is_uploaded_file((string)$zipUpload['tmp_name'])) ? (string)$zipUpload['tmp_name'] : import_zip_input(null);
-    if ($zipPath) {
+    $uploaded = ($zipUpload && ($zipUpload['error'] ?? 4) === UPLOAD_ERR_OK && is_uploaded_file((string)$zipUpload['tmp_name'])) ? (string)$zipUpload['tmp_name'] : null;
+
+    // Fotos por carpeta ARTICULO_<código> (se usan cuando la columna de la foto está vacía)
+    $pfSrc = null;
+    $pfIdx = null;
+    $pfZip = null;
+    $pfUsed = 0;
+    if (($m['folders'] ?? '') === '1') {
+        $pfSrc = pf_find_source($uploaded && pf_zip_has_folders($uploaded) ? $uploaded : null);
+        if ($pfSrc) {
+            $pfIdx = pf_index(array_map(fn($f) => [$f['code'], $f], pf_scan($pfSrc)));
+        } else {
+            $warnings[] = 'Has marcado «Fotos por carpeta de artículo» pero no hay ningún ZIP ni carpeta con carpetas ARTICULO_<código> (súbelo o déjalo por FTP en data/importar/).';
+        }
+    }
+    // ZIP de fotos sueltas (las de la columna de foto), si no es el de las carpetas
+    $zipPath = $uploaded ?? import_zip_input(null);
+    if ($zipPath && !($pfSrc && $pfSrc['type'] === 'zip' && realpath($pfSrc['path']) === realpath($zipPath))) {
         $zipMap = import_extract_zip($zipPath);
+    }
+    if ($pfSrc) {
+        $pfZip = pf_open($pfSrc); // después de import_extract_zip, que vacía data/import_files/
     }
 
     $idx = import_existing_index();
@@ -1018,6 +1041,16 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
                 $images[] = ['key' => $url, 'urls' => [$url]];
             }
         }
+        if ($pfIdx && $get('img') === '' && $get('ref') !== '') {
+            [$folder] = pf_lookup($pfIdx, $get('ref'));
+            if ($folder) {
+                $more = pf_images($folder, false, $pfZip);
+                if ($more) {
+                    $images = array_merge($images, $more);
+                    $pfUsed++;
+                }
+            }
+        }
         $fv = [];
         foreach (fields_all() as $cf) {
             $k = 'cf_' . $cf['id'];
@@ -1038,6 +1071,10 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
     }
     if ($noFam) {
         $warnings[] = $noFam . ' artículo(s) sin familia: no se importarán. Revisa la columna de familia.';
+    }
+    $pfZip?->close();
+    if ($pfSrc) {
+        array_unshift($warnings, 'Fotos por carpeta (' . $pfSrc['label'] . '): ' . $pfUsed . ' artículo(s) sin foto en la columna toman las de su carpeta ARTICULO_<código>.');
     }
     if ($missing) {
         $warnings[] = count($missing) . ' foto(s) son nombres de archivo sin ZIP ni dirección base: ' . mb_strimwidth(implode(', ', array_values($missing)), 0, 300, '…');
@@ -1113,7 +1150,7 @@ function dbimp_save_profile(array $job, string $name): int
     $mapping = [];
     foreach (['table', 'id', 'name', 'ref', 'family', 'sub', 'dims', 'desc', 'short', 'visible', 'sort', 'img',
         'fam_table', 'fam_id', 'fam_name', 'fam_parent', 'img_table', 'img_fk', 'img_file', 'img_sort',
-        'visible_inv', 'caps', 'extra_labels', 'img_base'] as $k) {
+        'visible_inv', 'caps', 'folders', 'extra_labels', 'img_base'] as $k) {
         if ((string)($m[$k] ?? '') !== '') {
             $mapping[$k] = (string)$m[$k];
         }

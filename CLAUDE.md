@@ -22,8 +22,9 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 - `app/views/` (públicas) y `app/views/admin/` (panel). Escapar siempre con `e()`.
 - `app/import.php` — núcleo del importador (plan → revisión → importación por tandas con transacciones). También aplica el modo «actualizar» (ítems con `update`: sobrescribe solo los campos elegidos).
 - `app/profiles.php` — perfiles de importación (tabla `import_profiles`): perfiles de sistema en `IMPORT_SYSTEM_PROFILES` (se copian solos a la tabla), perfiles propios, columnas prohibidas (`exclude_columns`, admite `PREFIJO*`) y creación de los campos que pida un perfil (por nombre, sin duplicar).
+- `app/photofolders.php` — fotos por carpeta de artículo (`ARTICULO_<CODIGO>/<CODIGO>_2.jpg…`): busca el origen (ZIP subido, o ZIP/carpeta en `data/importar/`), ordena por número (GIF al final, y solo si se piden), empareja con la referencia sin mayúsculas ni signos (`pf_norm`: solo letras y números; primero la exacta; si hay varias, no se asigna).
 - `app/importers/*.php` — un archivo por origen; aparecen solos en el panel. Guía: `app/importers/LEEME.md`.
-  - `woocommerce-csv.php`, `hoja-calculo.php`, `base-datos.php` (Access/SQL/SQLite con paso de emparejar columnas, «Usar perfil» / «Guardar como perfil» y modo «Actualizar precios y stock»), `wordpress-web.php`.
+  - `woocommerce-csv.php`, `hoja-calculo.php`, `base-datos.php` (Access/SQL/SQLite con paso de emparejar columnas, «Usar perfil» / «Guardar como perfil», modo «Actualizar precios y stock» y casilla «Fotos por carpeta de artículo» si la columna de foto está vacía), `fotos-carpetas.php` (fotos por carpeta para artículos que ya existen: solo a los que no tienen fotos salvo «Sustituir», que quita las que no vienen de la carpeta; clave `carpeta:<CARPETA>/<archivo>` en `product_images.src` para no duplicar), `wordpress-web.php`.
 - `app/mdb.php` — lector de Access (.mdb Jet3/Jet4, .accdb) en PHP puro (`MdbReader`).
 - `app/backup.php` — restaurar copias de seguridad (ZIP con `data/site.sqlite` + `uploads/`; en MariaDB/SQL Server se copian los datos con `db_copy_all()`).
 - `assets/style.css` (web), `assets/admin.css` (panel). `uploads/` fotos (WebP). `data/` nunca accesible desde el navegador.
@@ -64,11 +65,12 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 
 **NCS Facturación — `FALMACEN.MDB` (Access 97), catálogo de calzado:**
 - `TFAM` (42 familias: `CODIGO`, `FAMILIA`). Regla: no juntar familias parecidas, solo plurales («Zapatillas» ≠ «Zapatillas señora»).
-- `TART` (6.872 artículos): referencia `CODIGO`, nombre `DESCRIPCION`, familia `FAMILIA` → `TFAM`, visible `BLOQUEADO` invertido (`0` = visible), foto `FOTO` (ruta Windows; se empareja por nombre con un ZIP de `\NCSFACT.NET\IMAGENES`).
+- `TART` (6.872 artículos): referencia `CODIGO`, nombre `DESCRIPCION`, familia `FAMILIA` → `TFAM`, visible `BLOQUEADO` invertido (`0` = visible), foto `FOTO` (ruta Windows; se empareja por nombre con un ZIP de `\NCSFACT.NET\IMAGENES`). Si `FOTO` está vacía, el perfil usa las carpetas `FOTOS_ARTICULOS_001/ARTICULO_<CODIGO>` (casilla «Fotos por carpeta»).
+- Fotos por carpeta (`pruebas/FOTOS_ARTICULOS_001`, 205 carpetas): contra el MDB, 126 exactas + 23 sin signos = 149 emparejadas y 56 sin artículo (en la web salen 148/57: `CUTN8042` no tiene familia y no se importa; `ARTICULO_ZZZT` está vacía). Algunos códigos llevan `/` (`CASN013/22` ↔ `ARTICULO_CASN01322`) y los archivos a veces llevan otro código que la carpeta: manda la carpeta. Los GIF se guardan como imagen fija.
 - Campos: Precio ← `PVP2` (confirmar con la empresa cuál es su tarifa pública), Tallas ← `T00`, Color ← `C00`, Stock ← `SACTUAL` (interno).
 - **`AMPLIACIOND` tiene notas internas con precios: nunca importarla ni publicarla.** Sus traducciones (`AMPLIACIONDING`, `…FRA`, `…ALE`, `…ITA`, `…DIA`) tampoco. El perfil las prohíbe con `AMPLIACIOND*`: se quitan de la lista de columnas al analizar y nunca se leen (las consultas piden solo las columnas elegidas).
 - Este emparejamiento es el perfil de sistema «NCS Facturación — Almacén (FALMACEN.MDB)», que se aplica solo si la base de datos tiene `TART` y `TFAM` y crea los campos Precio, Tallas, Color y Stock (interno) si faltan.
-- Para pruebas con los datos reales: `pruebas/FALMACEN.MDB` (fuera de git: datos de la empresa).
+- Para pruebas con los datos reales: `pruebas/` (`FALMACEN.MDB`, `FCUENTAS.MDB`, `FHISTORI.MDB`, `FOTOS_ARTICULOS_001/`; fuera de git: datos de la empresa).
 
 ## 7. Seguridad: mejoras objetivo (NO hechas todavía)
 - Ampliar `users` con `full_name`, `is_active`, `last_login_at`, `failed_attempts`, `locked_until`, `created_at`, `updated_at` y `email` único. **Mantener la columna `pass_hash`** (no renombrarla a `password_hash`: rompería las webs instaladas) y hacerlo con migración portable.

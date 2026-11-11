@@ -15,6 +15,8 @@ declare(strict_types=1);
  * Para añadir un origen nuevo, lee app/importers/LEEME.md.
  */
 
+require_once __DIR__ . '/photofolders.php';
+
 const IMPORT_FILE = DATA_DIR . '/import_job.json';
 const IMPORT_FILES_DIR = DATA_DIR . '/import_files';
 const IMPORT_FTP_DIR = DATA_DIR . '/importar';
@@ -579,10 +581,11 @@ function import_build_job(array $plan, array $post): array
         $images = [];
         foreach ($it['images'] as $k => $im) {
             if (in_array($k, $pick, true)) {
-                $images[] = ['key' => $im['key'], 'urls' => $im['urls'] ?? [], 'file' => $im['file'] ?? '', 'state' => 'pending', 'msg' => ''];
+                $images[] = ['key' => $im['key'], 'urls' => $im['urls'] ?? [], 'file' => $im['file'] ?? '', 'ftp' => $im['ftp'] ?? '', 'state' => 'pending', 'msg' => ''];
             }
         }
-        if ($it['pid'] && $it['have_images'] > 0 && !$append) {
+        $replace = !empty($it['replace']) && $it['pid'] && $images;
+        if ($it['pid'] && $it['have_images'] > 0 && !$append && !$replace) {
             $images = [];
         }
         $items[] = [
@@ -590,6 +593,7 @@ function import_build_job(array $plan, array $post): array
             'visible' => $it['visible'] ?? 1, 'name' => $it['name'],
             'ref' => $it['ref'], 'dims' => $it['dims'], 'desc' => $it['desc'], 'fields' => $it['fields'] ?? [],
             'texts' => !$it['pid'] || !empty($sel['texts']),
+            'replace' => $replace,
             'images' => $images, 'ready' => false, 'done' => false,
         ];
     }
@@ -624,6 +628,22 @@ function import_prepare_item(array &$it): void
         return;
     }
     if ($it['pid']) {
+        if (!empty($it['replace'])) {
+            // «Sustituir»: se quitan las fotos que no vienen en esta importación (las que sí, se conservan:
+            // así, al repetir, ni se borran ni se vuelven a subir)
+            $keep = array_column($it['images'], 'key');
+            $gone = 0;
+            foreach (gallery_for((int)$it['pid']) as $g) {
+                if (!in_array((string)$g['src'], $keep, true)) {
+                    remove_product_image((int)$it['pid'], (int)$g['id']);
+                    $gone++;
+                }
+            }
+            if ($gone) {
+                sync_gallery((int)$it['pid']);
+                $it['removed'] = $gone;
+            }
+        }
         if ($it['texts']) {
             $st = $db->prepare('SELECT ref, dimensions, description FROM products WHERE id = ?');
             $st->execute([$it['pid']]);
@@ -678,6 +698,16 @@ function import_fetch_image(array $im, array $allowed, string $origin, int $pid)
         $path = IMPORT_FILES_DIR . '/' . basename((string)$im['file']);
         if (!is_file($path)) {
             throw new RuntimeException('La foto ya no está en el servidor (¿se descartó la importación?).');
+        }
+        $file = save_image(['error' => UPLOAD_ERR_OK, 'size' => filesize($path), 'tmp_name' => $path, 'name' => basename($path)]);
+        add_product_image($pid, $file, $im['key']);
+        return 'ok';
+    }
+    if (!empty($im['ftp'])) {
+        // Foto de una carpeta dejada por FTP en data/importar/ (se lee sin copiarla)
+        $path = pf_ftp_path((string)$im['ftp']);
+        if ($path === null) {
+            throw new RuntimeException('La foto ya no está en data/importar/.');
         }
         $file = save_image(['error' => UPLOAD_ERR_OK, 'size' => filesize($path), 'tmp_name' => $path, 'name' => basename($path)]);
         add_product_image($pid, $file, $im['key']);

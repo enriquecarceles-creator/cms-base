@@ -693,9 +693,10 @@ function admin_import(): void
         echo ($sources[$_GET['plantilla']]['template'])();
         exit;
     }
-    // Vista previa de una foto que venía en un ZIP (data/ no se puede abrir desde el navegador)
-    if (isset($_GET['foto'])) {
-        $f = IMPORT_FILES_DIR . '/' . basename((string)$_GET['foto']);
+    // Vista previa de una foto que venía en un ZIP o en una carpeta de data/importar/
+    // (data/ no se puede abrir desde el navegador)
+    if (isset($_GET['foto']) || isset($_GET['ftpfoto'])) {
+        $f = isset($_GET['foto']) ? IMPORT_FILES_DIR . '/' . basename((string)$_GET['foto']) : (string)pf_ftp_path((string)$_GET['ftpfoto']);
         $type = is_file($f) ? (@getimagesize($f)['mime'] ?? '') : '';
         if (!str_starts_with($type, 'image/')) {
             http_response_code(404);

@@ -31,6 +31,7 @@ const IMPORT_SYSTEM_PROFILES = [
             'visible' => 'BLOQUEADO',
             'visible_inv' => '1',          // BLOQUEADO = 0 → visible
             'img' => 'FOTO',               // ruta de Windows: se empareja por nombre con el ZIP de fotos
+            'folders' => '1',              // si FOTO está vacía: carpeta ARTICULO_<CODIGO> (app/photofolders.php)
             'caps' => '1',
             'fam_table' => 'TFAM',
             'fam_id' => 'CODIGO',
