@@ -38,7 +38,7 @@ function admin_dispatch(array $segs): void
         redirect('/admin/login');
     }
     require_login();
-    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
+    if (!is_admin() && in_array($page, ['representantes', 'empresa', 'pagina-inicio', 'pagina-catalogo', 'paginas', 'menu', 'configuracion', 'campos', 'slider', 'usuarios', 'copia', 'reiniciar'], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
@@ -76,6 +76,9 @@ function admin_dispatch(array $segs): void
             break;
         case 'paginas':
             admin_pages((string)($segs[2] ?? ''));
+            break;
+        case 'menu':
+            admin_site_menu();
             break;
         case 'pagina-catalogo':
             admin_catalog_page();
@@ -175,6 +178,7 @@ function admin_menu(): array
             ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio', 'slider'], true],
             ['Página del catálogo', '/admin/pagina-catalogo', ['pagina-catalogo'], true],
             ['Páginas', '/admin/paginas', ['paginas'], true],
+            ['Menú', '/admin/menu', ['menu'], true],
             ['Configuración', '/admin/configuracion', ['configuracion'], true],
             ['Campos', '/admin/campos', ['campos'], true],
             ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], true]] : []),
@@ -1234,6 +1238,71 @@ function admin_config(): void
         'noindex' => setting('noindex') === '1',
         'title' => 'Configuración',
     ]);
+}
+
+/* ---------- Web → Menú (menú de arriba y pie de la web) ---------- */
+
+/**
+ * Elegir y ordenar qué sale en el menú de arriba y en el pie, con nombre opcional. Se guarda en los ajustes
+ * menu_top y menu_foot (JSON [{k, on, label}]), sin tablas. Las flechas son botones del mismo formulario
+ * (sin JavaScript): guardan todo y mueven el elemento. Solo administradores; todo POST lleva CSRF.
+ */
+function admin_site_menu(): void
+{
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        $a = (string)($_POST['action'] ?? '');
+        if ($a === 'reset') {
+            if (($_POST['confirm'] ?? '') !== '1') {
+                admin_render('site_menu', ['confirmReset' => true, 'menus' => [], 'crumb' => 'Restaurar', 'title' => 'Menú']);
+                return;
+            }
+            save_setting('menu_top', '');
+            save_setting('menu_foot', '');
+            flash('Menú restaurado: arriba Inicio, Catálogo y Contacto; en el pie, las páginas visibles.');
+            redirect('/admin/menu');
+        }
+        if ($a === 'save') {
+            // Flecha pulsada: «lugar:clave:up|down» (la clave puede llevar «:», como p:3)
+            $mv = explode(':', (string)($_POST['move'] ?? ''));
+            $moveDir = count($mv) >= 3 ? array_pop($mv) : '';
+            $movePlace = count($mv) >= 2 ? array_shift($mv) : '';
+            $moveKey = implode(':', $mv);
+            foreach (array_keys(MENU_PLACES) as $place) {
+                $rows = menu_config($place);
+                $on = (array)($_POST['on'][$place] ?? []);
+                $ord = (array)($_POST['ord'][$place] ?? []);
+                $lab = (array)($_POST['label'][$place] ?? []);
+                foreach ($rows as $i => &$r) {
+                    $k = $r['k'];
+                    $r['on'] = isset($on[$k]) ? 1 : 0;
+                    $r['n'] = isset($ord[$k]) && is_numeric($ord[$k]) ? (float)$ord[$k] : ($i + 1) * 10;
+                    $r['i'] = $i;
+                    $txt = $lab[$k] ?? '';
+                    $r['label'] = mb_substr(trim((string)preg_replace('/\s+/u', ' ', is_string($txt) ? $txt : '')), 0, 40); // ignora valores que no son texto
+                }
+                unset($r);
+                usort($rows, fn($x, $y) => $x['n'] <=> $y['n'] ?: $x['i'] <=> $y['i']);
+                if ($place === $movePlace && in_array($moveDir, ['up', 'down'], true)) {
+                    $pos = array_search($moveKey, array_column($rows, 'k'), true);
+                    if ($pos !== false) {
+                        $to = $moveDir === 'up' ? $pos - 1 : $pos + 1;
+                        if ($to >= 0 && $to < count($rows)) {
+                            [$rows[$pos], $rows[$to]] = [$rows[$to], $rows[$pos]];
+                        }
+                    }
+                }
+                save_setting('menu_' . $place, (string)json_encode(array_map(fn($r) => ['k' => $r['k'], 'on' => $r['on'], 'label' => $r['label']], $rows), JSON_UNESCAPED_UNICODE));
+            }
+            flash($movePlace !== '' ? 'Orden cambiado.' : 'Menú guardado.');
+            redirect('/admin/menu' . ($movePlace !== '' ? '#m-' . $movePlace : ''));
+        }
+    }
+    $menus = [];
+    foreach (MENU_PLACES as $place => $name) {
+        $menus[$place] = menu_config($place);
+    }
+    admin_render('site_menu', ['confirmReset' => false, 'menus' => $menus, 'title' => 'Menú']);
 }
 
 /* ---------- Web → Páginas (páginas propias en /<dirección>) ---------- */

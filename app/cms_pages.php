@@ -38,18 +38,80 @@ function page_slug_error(string $slug, int $ignoreId = 0): ?string
     return (int)$st->fetchColumn() > 0 ? 'Ya hay otra página con la dirección «' . $slug . '».' : null;
 }
 
-/** Páginas visibles en orden (para el pie y el sitemap): [['title', 'slug'], …]. Una sola consulta por petición. */
-function pages_visible(): array
+/** Todas las páginas (también las ocultas) en su orden: una sola consulta por petición. */
+function pages_all(): array
 {
     static $rows = null;
     if ($rows === null) {
         try {
-            $rows = db()->query('SELECT title, slug FROM pages WHERE visible = 1 ORDER BY sort, title')->fetchAll();
+            $rows = db()->query('SELECT id, title, slug, visible, sort FROM pages ORDER BY sort, title')->fetchAll();
         } catch (PDOException $e) {
             $rows = [];
         }
     }
     return $rows;
+}
+
+/** Páginas visibles en orden (sitemap y menús): [['title', 'slug', …], …]. */
+function pages_visible(): array
+{
+    return array_values(array_filter(pages_all(), fn($p) => (int)$p['visible'] === 1));
+}
+
+/* ---------- Menús de la web (Web → Menú) ---------- */
+
+/** Elementos fijos que se pueden poner en un menú: clave => [nombre, dirección]. Las páginas son «p:<id>». */
+const MENU_FIXED = ['home' => ['Inicio', '/'], 'catalog' => ['Catálogo', '/catalogo'], 'contact' => ['Contacto', '/contacto']];
+
+/** Los dos menús: clave => nombre. Se guardan en los ajustes menu_top y menu_foot (JSON). */
+const MENU_PLACES = ['top' => 'Menú de arriba', 'foot' => 'Pie de la web'];
+
+/** Qué se puede poner en un menú ahora mismo: clave => [name, path, page (bool), visible (bool)]. */
+function menu_available(): array
+{
+    $out = [];
+    foreach (MENU_FIXED as $k => [$name, $path]) {
+        $out[$k] = ['name' => $name, 'path' => $path, 'page' => false, 'visible' => true];
+    }
+    foreach (pages_all() as $p) {
+        $out['p:' . $p['id']] = ['name' => (string)$p['title'], 'path' => '/' . $p['slug'], 'page' => true, 'visible' => (int)$p['visible'] === 1];
+    }
+    return $out;
+}
+
+/**
+ * Configuración de un menú en su orden: [['k', 'on', 'label', 'name', 'path', 'page', 'visible'], …].
+ * Sin ajustes guardados es el de siempre: arriba Inicio, Catálogo y Contacto; en el pie, las páginas.
+ * Lo que falte (una página nueva) se añade al final con su valor por defecto; las páginas borradas se ignoran.
+ */
+function menu_config(string $place): array
+{
+    $avail = menu_available();
+    $saved = json_decode(setting('menu_' . $place), true);
+    $rows = [];
+    foreach (is_array($saved) ? $saved : [] as $s) {
+        $k = (string)($s['k'] ?? '');
+        if (isset($avail[$k]) && !isset($rows[$k])) {
+            $rows[$k] = ['k' => $k, 'on' => empty($s['on']) ? 0 : 1, 'label' => mb_substr(trim((string)($s['label'] ?? '')), 0, 40)];
+        }
+    }
+    foreach ($avail as $k => $a) {
+        $isPage = str_starts_with($k, 'p:');
+        $rows[$k] ??= ['k' => $k, 'on' => $place === 'top' ? ($isPage ? 0 : 1) : ($isPage ? 1 : 0), 'label' => ''];
+    }
+    return array_values(array_map(fn($r) => $r + $avail[$r['k']], $rows));
+}
+
+/** Elementos que salen de verdad en un menú público: [['k', 'label', 'path', 'page'], …]. Las páginas ocultas nunca. */
+function menu_items(string $place): array
+{
+    $out = [];
+    foreach (menu_config($place) as $r) {
+        if ($r['on'] && $r['visible']) {
+            $out[] = ['k' => $r['k'], 'label' => $r['label'] !== '' ? $r['label'] : $r['name'], 'path' => $r['path'], 'page' => $r['page']];
+        }
+    }
+    return $out;
 }
 
 /* ---------- Markdown limitado → HTML ---------- */

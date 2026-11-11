@@ -26,10 +26,17 @@ $isContact = str_contains($path, '/contacto');
 <header class="site-header">
   <div class="wrap bar">
     <a class="brand<?= brand_logo() ? ' stack' : '' ?>" href="<?= e(url('/')) ?>"><?php if ($lg = brand_logo()): ?><img class="logo" src="<?= e($lg) ?>" alt="" ><?php endif; ?><span class="brand-text"><?= e(mb_strtoupper(site_name())) ?><?php if (setting('brand_sub') !== ''): ?><small><?= e(setting('brand_sub')) ?></small><?php endif; ?></span></a>
+    <?php /* Menú de arriba: Web → Menú (menu_items). Por defecto Inicio, Catálogo y Contacto. */ $curPath = (string)parse_url($path, PHP_URL_PATH); ?>
     <nav aria-label="Principal">
-      <a href="<?= e(url('/')) ?>"<?= $path === url('/') || $path === url('') ? ' aria-current="page"' : '' ?>>Inicio</a>
-      <a href="<?= e(url('/catalogo')) ?>"<?= $isCat ? ' aria-current="page"' : '' ?>>Catálogo</a>
-      <a href="<?= e(url('/contacto')) ?>"<?= $isContact ? ' aria-current="page"' : '' ?>>Contacto</a>
+      <?php foreach (menu_items('top') as $mi):
+          $cur = match ($mi['k']) {
+              'home' => $path === url('/') || $path === url(''),
+              'catalog' => $isCat,
+              'contact' => $isContact,
+              default => $curPath === url($mi['path']),
+          }; ?>
+      <a href="<?= e(url($mi['path'])) ?>"<?= $cur ? ' aria-current="page"' : '' ?>><?= e($mi['label']) ?></a>
+      <?php endforeach; ?>
     </nav>
     <?php if ($phone !== ''): ?><a class="tel" href="<?= e(tel_href($phone)) ?>"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg><?= e($phone) ?></a><?php endif; ?>
   </div>
@@ -56,7 +63,7 @@ $isContact = str_contains($path, '/contacto');
       <?php if ($soc): ?><br><?php foreach ($soc as $n => $u): ?><a href="<?= e($u) ?>" target="_blank" rel="noopener"><?= e($n) ?></a> <?php endforeach; ?><?php endif; ?>
     </div>
   </div>
-  <?php if ($fp = pages_visible()): ?><nav class="wrap foot-pages" aria-label="Información legal"><?php foreach ($fp as $pg): ?><a href="<?= e(url('/' . $pg['slug'])) ?>"><?= e($pg['title']) ?></a><?php endforeach; ?></nav><?php endif; ?>
+  <?php if ($fm = menu_items('foot')): ?><nav class="wrap foot-pages" aria-label="<?= array_filter($fm, fn($m) => !$m['page']) ? 'Enlaces del pie' : 'Información legal' ?>"><?php foreach ($fm as $m): ?><a href="<?= e(url($m['path'])) ?>"><?= e($m['label']) ?></a><?php endforeach; ?></nav><?php endif; ?>
   <?php if ($bn = brand_banner()): ?><div class="wrap foot-eu"><img src="<?= e($bn) ?>" alt="<?= e(setting('footer_banner_alt')) ?>" height="103" loading="lazy"></div><?php endif; ?>
 </footer>
 </body>
