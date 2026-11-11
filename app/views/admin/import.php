@@ -4,7 +4,8 @@
 
 <?php if (!$job): ?>
   <p class="hint">Trae artículos, familias, textos y fotos desde otra web o aplicación. Primero se <strong>analiza</strong> y verás un resumen para elegir qué importar.
-  Nada se sobrescribe: solo se crean artículos nuevos, se añaden fotos y se rellenan los campos que estén vacíos. Se puede repetir sin duplicar.</p>
+  Nada se sobrescribe: solo se crean artículos nuevos, se añaden fotos y se rellenan los campos que estén vacíos. Se puede repetir sin duplicar.
+  Para poner al día precios y stock desde un programa de gestión, usa «Base de datos» y elige «Actualizar precios y stock» en el paso de columnas.</p>
   <?php if ($ftpZip): ?><p class="flash ok">Hay un ZIP de fotos subido por FTP: <code><?= e(basename($ftpZip)) ?></code>. Se usará si no subes otro.</p><?php endif; ?>
   <?php foreach ($sources as $id => $src): ?>
     <form method="post" enctype="multipart/form-data" class="form imp-src">
@@ -35,6 +36,43 @@
     <?= ($src['map_form'])($job) ?>
   <?php endif; ?>
   <form method="post" class="inline"><?= csrf_field() ?><button class="btn ghost" name="action" value="reset" type="submit">Descartar</button></form>
+
+<?php elseif ($status === 'plan' && ($job['mode'] ?? '') === 'update'):
+    $u = $job['upd']; $fa = fields_all(); $n = count($job['items']);
+    $fmt = fn(int $fid, string $v) => $v === '' ? '—' : (isset($fa[$fid]) ? field_format($fa[$fid], $v) : $v);
+?>
+  <p class="hint">Actualizar desde <strong><?= e($job['origin']) ?></strong>. Cada artículo se busca por su referencia. Solo se cambian los campos de abajo; el nombre, la descripción, la familia y las fotos no se tocan. No se crea ni se borra ningún artículo.</p>
+  <?php foreach ($job['warnings'] as $w): ?><p class="flash err"><?= e($w) ?></p><?php endforeach; ?>
+  <ul class="summary">
+    <li><b><?= $n ?></b> artículo<?= $n === 1 ? '' : 's' ?> cambia<?= $n === 1 ? '' : 'n' ?></li>
+    <?php foreach ($u['fields'] as $fid): ?><li><?= e($fa[$fid]['name'] ?? ('Campo ' . $fid)) ?>: <b><?= (int)($u['counts'][$fid] ?? 0) ?></b> cambian</li><?php endforeach; ?>
+    <?php if ($u['visible']): ?><li>Visibilidad (<?= e($u['visible_col']) ?>): <b><?= (int)$u['counts']['visible'] ?></b> cambian</li><?php endif; ?>
+    <li><b><?= (int)$u['same'] ?></b> ya tienen esos valores</li>
+    <li<?= $u['not_found'] ? ' class="bad"' : '' ?>><b><?= (int)$u['not_found'] ?></b> códigos de la base de datos no existen en la web (no se crean)</li>
+    <li<?= $u['missing'] ? ' class="bad"' : '' ?>><b><?= (int)$u['missing'] ?></b> artículos de la web no están en la base de datos (no se tocan)</li>
+  </ul>
+  <?php if ($u['not_found']): ?><p class="muted"><b>Códigos que no están en la web<?= $u['not_found'] > 20 ? ' (primeros 20 de ' . (int)$u['not_found'] . ')' : '' ?>:</b> <?= e(implode(', ', $u['not_found_codes'])) ?></p><?php endif; ?>
+  <?php if ($u['missing']): ?><p class="muted"><b>Referencias de la web que no están en la base de datos<?= $u['missing'] > 20 ? ' (primeras 20 de ' . (int)$u['missing'] . ')' : '' ?>:</b> <?= e(implode(', ', $u['missing_codes'])) ?></p><?php endif; ?>
+
+  <?php if ($n): ?>
+    <h2>Cambios<?= $n > 100 ? ' (100 de ' . $n . ')' : '' ?></h2>
+    <div class="dbprev"><table>
+      <tr><th>Ref.</th><th>Nombre</th><?php foreach ($u['fields'] as $fid): ?><th><?= e($fa[$fid]['name'] ?? '') ?></th><?php endforeach; ?><?php if ($u['visible']): ?><th>Visible</th><?php endif; ?></tr>
+      <?php foreach (array_slice($job['items'], 0, 100) as $it): ?>
+        <tr><td><?= e($it['ref']) ?></td><td><?= e($it['name']) ?></td>
+          <?php foreach ($u['fields'] as $fid): ?><td><?= array_key_exists($fid, $it['fields']) ? e($fmt($fid, (string)$it['old'][$fid])) . ' → <b>' . e($fmt($fid, (string)$it['fields'][$fid])) . '</b>' : '<span class="muted">igual</span>' ?></td><?php endforeach; ?>
+          <?php if ($u['visible']): ?><td><?= $it['visible'] === null ? '<span class="muted">igual</span>' : ($it['old_visible'] ? 'Sí' : 'No') . ' → <b>' . ($it['visible'] ? 'Sí' : 'No') . '</b>' ?></td><?php endif; ?>
+        </tr>
+      <?php endforeach; ?>
+    </table></div>
+  <?php endif; ?>
+  <form method="post" style="margin-top:14px">
+    <?= csrf_field() ?><input type="hidden" name="all" value="1">
+    <div class="buttons">
+      <?php if ($n): ?><button class="btn" name="action" value="start" type="submit">Aplicar los cambios a <?= $n ?> artículo<?= $n === 1 ? '' : 's' ?></button><?php endif; ?>
+      <button class="btn ghost" name="action" value="reset" type="submit"><?= $n ? 'Descartar' : 'Volver' ?></button>
+    </div>
+  </form>
 
 <?php elseif ($status === 'plan'): ?>
   <p class="hint">Esto es lo que se ha encontrado en <strong><?= e($job['origin']) ?></strong><?= !empty($job['source_label']) ? ' (' . e($job['source_label']) . ')' : '' ?>. Desmarca lo que no quieras importar y pulsa <strong>Importar</strong>.</p>
@@ -153,6 +191,22 @@
     <div class="bar-progress"><span style="width:<?= (int)round(($itDone + $done) * 100 / max(1, $itTot + $tot)) ?>%"></span></div>
     <p><?= $itDone ?> de <?= $itTot ?> artículos<?= $tot ? ' · ' . $done . ' de ' . $tot . ' fotos' : '' ?>.</p>
     <form method="get"><button class="btn small ghost" type="submit">Continuar ahora</button></form>
+  <?php elseif (($job['mode'] ?? '') === 'update'):
+      $upd = 0; foreach ($job['items'] as $it) { if (!empty($it['updated'])) { $upd++; } }
+      $fa = fields_all(); $u = $job['upd'] ?? [];
+  ?>
+    <p class="flash ok">Actualización terminada.</p>
+    <ul class="summary">
+      <li><b><?= $upd ?></b> artículo<?= $upd === 1 ? '' : 's' ?> actualizado<?= $upd === 1 ? '' : 's' ?></li>
+      <?php foreach ($u['fields'] ?? [] as $fid): ?><li><?= e($fa[$fid]['name'] ?? '') ?>: <?= (int)($u['counts'][$fid] ?? 0) ?></li><?php endforeach; ?>
+      <?php if (!empty($u['visible'])): ?><li>Visibilidad: <?= (int)($u['counts']['visible'] ?? 0) ?></li><?php endif; ?>
+      <?php if ($errs): ?><li class="bad"><b><?= count($errs) ?></b> con error</li><?php endif; ?>
+    </ul>
+    <?php if ($errs): ?><ul class="errlist"><?php foreach ($errs as [$name, , $msg]): ?><li><b><?= e($name) ?></b>: <?= e($msg) ?></li><?php endforeach; ?></ul><?php endif; ?>
+    <div class="buttons">
+      <a class="btn" href="<?= e(url('/admin')) ?>">Ver artículos</a>
+      <form method="post" class="inline"><?= csrf_field() ?><button class="btn ghost" name="action" value="reset" type="submit">Nuevo análisis</button></form>
+    </div>
   <?php else: ?>
     <p class="flash ok">Importación terminada.</p>
     <ul class="summary">

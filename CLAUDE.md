@@ -16,13 +16,14 @@ Web de catálogo + panel de administración para adaptar a cualquier empresa (lo
 - `instalar.php` — asistente de 6 pasos: servidor → base de datos → web nueva o restaurar copia → empresa (datos, logotipo, color, país) → opciones (módulos, campos del catálogo, prefijo, zona horaria, noindex) → administrador. Se borra solo al terminar.
 - `app/bootstrap.php` — configuración común, `db()`, `setting()`, `feature()`, `tel_href()`, `url()`, `COUNTRIES`, `FEATURES`, imágenes, **sesión, CSRF y acceso** (ver sección 4).
 - `app/db.php` — conexión a los tres motores. `CmsPdo` traduce al vuelo el SQL escrito «al estilo SQLite» (`db_sql()`): `||` → CONCAT, `LIMIT n` → TOP en SQL Server, quita `COLLATE NOCASE`, cita `key`/`file`. También `db_put_setting()`, `db_tables()`, `db_columns()`, `db_copy_all()`, `db_export_sqlite()`.
-- `app/schema.php` — esquema único con marcadores que `db_ddl()` convierte a cada motor, y migraciones (`SCHEMA_VERSION`, ahora 14). Marcadores: `{ID}` autonumérico · `{S}` texto corto (255) · `{K}` texto con índice único (VARCHAR(191) en MariaDB) · `{T}` texto largo · `{I}` entero · `{BIG}` entero grande · `{Q:nombre}` nombre reservado.
+- `app/schema.php` — esquema único con marcadores que `db_ddl()` convierte a cada motor, y migraciones (`SCHEMA_VERSION`, ahora 15). Marcadores: `{ID}` autonumérico · `{S}` texto corto (255) · `{K}` texto con índice único (VARCHAR(191) en MariaDB) · `{T}` texto largo · `{I}` entero · `{BIG}` entero grande · `{Q:nombre}` nombre reservado.
 - `app/fields.php` — campos libres del catálogo (tablas `custom_fields` y `product_fields`); panel en Web → Campos.
 - `app/admin.php` — controladores del panel (incluidos login, usuarios y bloqueo de intentos). `app/pages.php` — páginas públicas.
 - `app/views/` (públicas) y `app/views/admin/` (panel). Escapar siempre con `e()`.
-- `app/import.php` — núcleo del importador (plan → revisión → importación por tandas con transacciones).
+- `app/import.php` — núcleo del importador (plan → revisión → importación por tandas con transacciones). También aplica el modo «actualizar» (ítems con `update`: sobrescribe solo los campos elegidos).
+- `app/profiles.php` — perfiles de importación (tabla `import_profiles`): perfiles de sistema en `IMPORT_SYSTEM_PROFILES` (se copian solos a la tabla), perfiles propios, columnas prohibidas (`exclude_columns`, admite `PREFIJO*`) y creación de los campos que pida un perfil (por nombre, sin duplicar).
 - `app/importers/*.php` — un archivo por origen; aparecen solos en el panel. Guía: `app/importers/LEEME.md`.
-  - `woocommerce-csv.php`, `hoja-calculo.php`, `base-datos.php` (Access/SQL/SQLite con paso de emparejar columnas), `wordpress-web.php`.
+  - `woocommerce-csv.php`, `hoja-calculo.php`, `base-datos.php` (Access/SQL/SQLite con paso de emparejar columnas, «Usar perfil» / «Guardar como perfil» y modo «Actualizar precios y stock»), `wordpress-web.php`.
 - `app/mdb.php` — lector de Access (.mdb Jet3/Jet4, .accdb) en PHP puro (`MdbReader`).
 - `app/backup.php` — restaurar copias de seguridad (ZIP con `data/site.sqlite` + `uploads/`; en MariaDB/SQL Server se copian los datos con `db_copy_all()`).
 - `assets/style.css` (web), `assets/admin.css` (panel). `uploads/` fotos (WebP). `data/` nunca accesible desde el navegador.
@@ -65,8 +66,9 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - `TFAM` (42 familias: `CODIGO`, `FAMILIA`). Regla: no juntar familias parecidas, solo plurales («Zapatillas» ≠ «Zapatillas señora»).
 - `TART` (6.872 artículos): referencia `CODIGO`, nombre `DESCRIPCION`, familia `FAMILIA` → `TFAM`, visible `BLOQUEADO` invertido (`0` = visible), foto `FOTO` (ruta Windows; se empareja por nombre con un ZIP de `\NCSFACT.NET\IMAGENES`).
 - Campos: Precio ← `PVP2` (confirmar con la empresa cuál es su tarifa pública), Tallas ← `T00`, Color ← `C00`, Stock ← `SACTUAL` (interno).
-- **`AMPLIACIOND` tiene notas internas con precios: nunca importarla ni publicarla.**
-- Hoy este emparejamiento se elige a mano en el paso de columnas (casi todo se propone solo); todavía no hay perfiles guardados.
+- **`AMPLIACIOND` tiene notas internas con precios: nunca importarla ni publicarla.** Sus traducciones (`AMPLIACIONDING`, `…FRA`, `…ALE`, `…ITA`, `…DIA`) tampoco. El perfil las prohíbe con `AMPLIACIOND*`: se quitan de la lista de columnas al analizar y nunca se leen (las consultas piden solo las columnas elegidas).
+- Este emparejamiento es el perfil de sistema «NCS Facturación — Almacén (FALMACEN.MDB)», que se aplica solo si la base de datos tiene `TART` y `TFAM` y crea los campos Precio, Tallas, Color y Stock (interno) si faltan.
+- Para pruebas con los datos reales: `pruebas/FALMACEN.MDB` (fuera de git: datos de la empresa).
 
 ## 7. Seguridad: mejoras objetivo (NO hechas todavía)
 - Ampliar `users` con `full_name`, `is_active`, `last_login_at`, `failed_attempts`, `locked_until`, `created_at`, `updated_at` y `email` único. **Mantener la columna `pass_hash`** (no renombrarla a `password_hash`: rompería las webs instaladas) y hacerlo con migración portable.
@@ -76,10 +78,11 @@ Antes de dar algo por terminado: `php -l` de cada archivo tocado y probar el flu
 - Ficha pública: si hay un admin con sesión iniciada, mostrar también los campos internos con la insignia «Solo visible para administradores». Nunca a visitantes ni en el PDF.
 
 ## 8. Hoja de ruta
-**Fase A — Perfiles de importación**
+**Fase A — Perfiles de importación** (hecha: ver `app/profiles.php`; solo para el catálogo y el origen «Base de datos»)
 - Tabla `import_profiles`: `id`, `name`, `source_type` (`mdb`, `sql`, `csv`), `target_module` (`catalog`, `customers`, `sales`), `mapping_json`, `rules_json`, `is_system`, `created_at`.
 - Perfil de sistema «NCS Facturación — Almacén (FALMACEN.MDB)» con el emparejamiento de la sección 6 (inversión de `BLOQUEADO`, exclusión de `AMPLIACIOND`, `T00`, `C00`, `PVP2`, `SACTUAL`).
-- Guardar perfiles propios y **actualización incremental**: actualizar precio y stock por `CODIGO` sin tocar fotos ni textos editados en el CMS. (Hoy el importador solo rellena huecos: no actualiza valores que ya existen.)
+- Guardar perfiles propios y **actualización incremental**: modo «Actualizar precios y stock» en el paso de columnas. Busca solo por referencia; cambia los campos marcados (y la visibilidad si se marca), aunque tengan valor; vacío en el origen = no tocar; precio 0 = vacío; stock 0 sí se actualiza. Resumen previo con cuántos cambian, cuántos códigos no están en la web y cuántos artículos de la web no están en el origen (primeros 20 de cada grupo). Nunca crea ni borra artículos.
+- Pendiente: perfiles para el origen CSV y para los módulos `customers` / `sales` (Fase C).
 
 **Fase B — Catálogo avanzado**
 - Nombres de la jerarquía configurables en Web → Configuración (Familia/Subfamilia, Categoría/Subcategoría…).

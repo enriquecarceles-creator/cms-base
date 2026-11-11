@@ -23,7 +23,7 @@ const DB_ENGINES = [
 
 /** Tablas de la aplicación en orden de dependencias (padres antes que hijas). */
 const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'settings', 'categories', 'products',
-    'product_images', 'slides', 'reps', 'custom_fields', 'product_fields'];
+    'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles'];
 
 /** PDO que traduce el SQL al motor de destino. */
 final class CmsPdo extends PDO

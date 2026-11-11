@@ -23,6 +23,20 @@ const SCHEMA_FIELDS_DDL = "
     );
 ";
 
+/** v15: perfiles de importación (emparejamientos de columnas guardados; ver app/profiles.php). */
+const SCHEMA_PROFILES_DDL = "
+    CREATE TABLE import_profiles (
+        id {ID},
+        name {S} NOT NULL,
+        source_type {S} NOT NULL DEFAULT 'mdb',
+        target_module {S} NOT NULL DEFAULT 'catalog',
+        mapping_json {T} NOT NULL,
+        rules_json {T} NOT NULL,
+        is_system {I} NOT NULL DEFAULT 0,
+        created_at {S} NOT NULL
+    );
+";
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -101,7 +115,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -121,6 +135,11 @@ function migrate_schema(CmsPdo $pdo): void
     }
     if ($ver < 14 && !in_array('custom_fields', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_FIELDS_DDL, $pdo->drv) as $st) {
+            $pdo->rawExec($st);
+        }
+    }
+    if ($ver < 15 && !in_array('import_profiles', db_tables($pdo), true)) {
+        foreach (db_ddl(SCHEMA_PROFILES_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
         }
     }

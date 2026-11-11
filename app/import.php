@@ -368,7 +368,8 @@ function import_load(): ?array
 function import_save(array $job): void
 {
     $tmp = IMPORT_FILE . '.tmp';
-    file_put_contents($tmp, json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    // INVALID_UTF8_SUBSTITUTE: un texto mal codificado no debe hacer perder el trabajo entero
+    file_put_contents($tmp, json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE), LOCK_EX);
     rename($tmp, IMPORT_FILE);
 }
 
@@ -547,6 +548,22 @@ function import_dims(string $s): string
 
 function import_build_job(array $plan, array $post): array
 {
+    if (($plan['mode'] ?? '') === 'update') {
+        // Actualizar precios y stock: todo lo que cambia (ya revisado en el resumen), sin fotos ni textos
+        $items = [];
+        foreach ($plan['items'] as $it) {
+            $items[] = [
+                'update' => true, 'pid' => (int)$it['pid'], 'name' => $it['name'], 'ref' => $it['ref'],
+                'fields' => $it['fields'], 'visible' => $it['visible'],
+                'images' => [], 'ready' => false, 'done' => false,
+            ];
+        }
+        return [
+            'status' => 'running', 'mode' => 'update', 'origin' => $plan['origin'], 'allowed' => [],
+            'source' => $plan['source'] ?? '', 'source_label' => $plan['source_label'] ?? '',
+            'upd' => $plan['upd'] ?? [], 'items' => $items, 'started' => time(), 'lock' => 0,
+        ];
+    }
     $append = !empty($post['append']);
     $items = [];
     $all = !empty($post['all']); // plan grande: se importa todo lo que se pueda (sin casillas una a una)
@@ -588,6 +605,24 @@ function import_prepare_item(array &$it): void
 {
     $db = db();
     $now = date('Y-m-d H:i:s');
+    if (!empty($it['update'])) {
+        // Modo actualizar: solo los campos elegidos (aunque tengan valor) y, si se pidió, la visibilidad
+        $st = $db->prepare('SELECT COUNT(*) FROM products WHERE id = ?');
+        $st->execute([$it['pid']]);
+        if (!(int)$st->fetchColumn()) {
+            throw new RuntimeException('El artículo ya no existe en la web.');
+        }
+        if (!empty($it['fields'])) {
+            product_fields_save((int)$it['pid'], $it['fields']);
+        }
+        if ($it['visible'] !== null) {
+            $db->prepare('UPDATE products SET visible = ?, updated_at = ? WHERE id = ?')->execute([(int)$it['visible'], $now, $it['pid']]);
+        } else {
+            $db->prepare('UPDATE products SET updated_at = ? WHERE id = ?')->execute([$now, $it['pid']]);
+        }
+        $it['updated'] = true;
+        return;
+    }
     if ($it['pid']) {
         if ($it['texts']) {
             $st = $db->prepare('SELECT ref, dimensions, description FROM products WHERE id = ?');

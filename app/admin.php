@@ -769,6 +769,10 @@ function admin_import_saved(array $plan): void
     }
     $plan['status'] = 'plan';
     import_save($plan);
+    if (($plan['mode'] ?? '') === 'update') {
+        flash($plan['items'] ? count($plan['items']) . ' artículo(s) cambian. Revisa el resumen y pulsa «Aplicar los cambios».' : 'No hay nada que cambiar: la web ya tiene esos valores.');
+        return;
+    }
     flash(count($plan['items']) . ' artículo(s) encontrados. Revisa lo que se va a importar y pulsa «Importar lo marcado».');
 }
 

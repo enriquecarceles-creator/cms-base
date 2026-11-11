@@ -73,3 +73,9 @@ La importación real (crear artículos y familias, descargar y optimizar fotos p
 
 `app/mdb.php` (clase `MdbReader`) lee archivos `.mdb` y `.accdb` en PHP puro: `tables()`, `columns($pagina)`, `rowsByPage($pagina)`.
 Para un programa de gestión concreto normalmente basta con el origen «Base de datos» y emparejar columnas; si se repite mucho, se puede crear un origen propio que fije el emparejamiento.
+
+## Perfiles de importación (app/profiles.php)
+
+El origen «Base de datos» guarda y aplica perfiles (tabla `import_profiles`). Para añadir un perfil de sistema para otro programa de gestión, añádelo a `IMPORT_SYSTEM_PROFILES` con:
+- `mapping`: las mismas claves que el paso de columnas (`table`, `name`, `ref`, `family`, `fam_table`…) y `fields` => [slug del campo => columna].
+- `rules`: `require_tables` (para proponerlo solo cuando encaja), `exclude_columns` (columnas que no se leen nunca; `PREFIJO*` vale para todas las que empiezan así) y `fields` (campos que se crean si faltan: slug => [nombre, tipo, unidad, público]).

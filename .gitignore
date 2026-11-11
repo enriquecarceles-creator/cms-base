@@ -13,6 +13,9 @@ uploads/*
 FOTOS_ARTICULOS_*/
 FOTOS_ARTICULOS_*.zip
 
+# Datos reales de empresas para pruebas (nunca al repositorio)
+pruebas/
+
 # Registros locales y archivos del sistema
 *.log
 Thumbs.db

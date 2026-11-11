@@ -10,7 +10,18 @@ declare(strict_types=1);
  * Paso 2: se elige la tabla de artículos y qué columna es cada cosa (nombre, referencia, familia, fotos…),
  *         incluidas familias y fotos que están en otras tablas (por número de id).
  * Paso 3: el plan de siempre, para revisar e importar.
+ *
+ * Perfiles (app/profiles.php): en el paso 2 se puede aplicar un emparejamiento guardado o guardar
+ * el actual. Si la base de datos encaja con un perfil de sistema (p. ej. NCS: tablas TART y TFAM),
+ * se aplica solo. Las columnas prohibidas por los perfiles (AMPLIACIOND…) se quitan de la lista de
+ * columnas nada más analizar: no aparecen en ningún desplegable ni se leen nunca.
+ *
+ * Modo «Actualizar precios y stock» (map['mode'] = 'update'): busca cada artículo SOLO por su
+ * referencia y cambia únicamente los campos elegidos (y, si se marca, la visibilidad), aunque ya
+ * tengan valor. Nunca crea ni borra artículos, ni toca nombre, descripción, familia o fotos.
  */
+
+require_once dirname(__DIR__) . '/profiles.php';
 
 const DBIMP_EXTS = ['sql', 'gz', 'sqlite', 'sqlite3', 'db', 'mdb', 'accdb'];
 const DBIMP_MAX_BYTES = 300 * 1024 * 1024;
@@ -422,6 +433,10 @@ function dbimp_analyze(array $in): array
         $tables = dbimp_tables($db);
     }
     $tables = array_filter($tables, fn($t) => $t['rows'] > 0);
+    // Columnas y tablas que no se leen nunca (p. ej. AMPLIACIOND en NCS): fuera desde ya
+    $exclude = profiles_forced_excludes($tables);
+    [$tables, $hidden] = profiles_strip($tables, $exclude);
+    $tables = array_filter($tables, fn($t) => $t['cols'] !== []);
     if (!$tables) {
         @unlink(IMPORT_DB_FILE);
         throw new RuntimeException('La base de datos no tiene ninguna tabla con datos.');
@@ -429,11 +444,86 @@ function dbimp_analyze(array $in): array
     $job = [
         'stage' => 'map',
         'origin' => $name,
+        'source_type' => preg_match('/\.(mdb|accdb)$/', $lname) || str_contains(substr($head, 4, 16), 'Standard') ? 'mdb' : 'sql',
         'tables' => $tables,
+        'exclude' => $exclude,
+        'hidden' => $hidden,
         'map' => [],
         'msg' => count($tables) . ' tabla(s) con datos. Elige la tabla de artículos y sus columnas.',
     ];
     $job['map'] = dbimp_guess($tables, null);
+    foreach (profiles_compatible($tables) as $p) {
+        if ($p['is_system']) {
+            $job = dbimp_apply_profile($job, $p);
+            $job['msg'] = count($tables) . ' tabla(s) con datos. ' . $job['msg'];
+            break;
+        }
+    }
+    return $job;
+}
+
+/** Aplica un perfil al paso de columnas (el perfil manda: lo que no dice queda en «— ninguna —»). */
+function dbimp_apply_profile(array $job, array $p): array
+{
+    $tables = $job['tables'];
+    $mp = $p['mapping'];
+    $table = profiles_table($tables, (string)($mp['table'] ?? ''));
+    if ($table === null) {
+        throw new RuntimeException('Esta base de datos no tiene la tabla «' . ($mp['table'] ?? '') . '» que usa el perfil.');
+    }
+    $created = profiles_ensure_fields((array)($p['rules']['fields'] ?? []));
+    $prev = $job['map'] ?? [];
+    $m = dbimp_guess($tables, $table);
+    foreach ($m as $k => $v) {
+        if (is_string($v) && $k !== 'table') {
+            $m[$k] = '';
+        }
+    }
+    $missing = [];
+    $col = function (?string $t, string $c) use ($tables, &$missing): string {
+        if ($c === '') {
+            return '';
+        }
+        $r = $t !== null ? profiles_column($tables[$t]['cols'], $c) : null;
+        if ($r === null) {
+            $missing[] = $c;
+        }
+        return (string)$r;
+    };
+    foreach (['id', 'name', 'ref', 'family', 'sub', 'dims', 'desc', 'short', 'visible', 'sort', 'img'] as $k) {
+        $m[$k] = $col($table, (string)($mp[$k] ?? ''));
+    }
+    foreach (['fam' => ['fam_id', 'fam_name', 'fam_parent'], 'img' => ['img_fk', 'img_file', 'img_sort']] as $g => $keys) {
+        $t = profiles_table($tables, (string)($mp[$g . '_table'] ?? ''));
+        if (($mp[$g . '_table'] ?? '') !== '' && $t === null) {
+            $missing[] = (string)$mp[$g . '_table'];
+        }
+        $m[$g . '_table'] = (string)$t;
+        foreach ($keys as $k) {
+            $m[$k] = $t !== null ? $col($t, (string)($mp[$k] ?? '')) : '';
+        }
+    }
+    $m['visible_inv'] = !empty($mp['visible_inv']) ? '1' : '';
+    $m['caps'] = !empty($mp['caps']) ? '1' : '';
+    $m['extra'] = array_values(array_filter(array_map(fn($c) => $col($table, (string)$c), (array)($mp['extra'] ?? []))));
+    $m['extra_labels'] = (string)($mp['extra_labels'] ?? '');
+    $m['img_base'] = preg_match('#^https?://[^/\s]+#i', (string)($mp['img_base'] ?? '')) ? (string)$mp['img_base'] : '';
+    foreach ((array)($mp['fields'] ?? []) as $ref => $c) {
+        $f = profiles_field((string)$ref);
+        if ($f) {
+            $m['cf_' . $f['id']] = $col($table, (string)$c);
+        } else {
+            $missing[] = 'campo «' . $ref . '»';
+        }
+    }
+    $m['mode'] = (string)($prev['mode'] ?? 'import');
+    $m['upd_fields'] = null;
+    $m['upd_visible'] = '';
+    $m['profile'] = (int)$p['id'];
+    $job['map'] = $m;
+    $job['msg'] = 'Se ha aplicado el perfil «' . $p['name'] . '».'
+        . ($created ? ' He creado estos campos que no existían: ' . implode(', ', $created) . ' (puedes cambiarlos en Web → Campos).' : '');
+    $job['warnings'] = $missing ? ['El perfil usa cosas que no están en esta base de datos y se han dejado en «— ninguna —»: ' . implode(', ', array_unique($missing)) . '.'] : [];
     return $job;
 }
 
@@ -555,6 +645,10 @@ function dbimp_guess(array $tables, ?string $table): array
         }
     }
     $m['img_base'] = '';
+    $m['mode'] = 'import';        // 'import' (crear y rellenar huecos) o 'update' (actualizar precios y stock)
+    $m['upd_fields'] = null;      // ids de campos a actualizar; null = aún sin elegir (se proponen precio y números)
+    $m['upd_visible'] = '';       // '1' = actualizar también la visibilidad
+    $m['profile'] = 0;            // perfil aplicado
     return $m;
 }
 
@@ -591,10 +685,11 @@ function dbimp_map_form(array $job): string
     $allCols = function (string $table) use ($tables): array {
         return $table !== '' && isset($tables[$table]) ? array_combine($tables[$table]['cols'], $tables[$table]['cols']) : [];
     };
-    // Vista previa de la tabla elegida
+    // Vista previa de la tabla elegida (solo columnas permitidas: nunca las prohibidas por un perfil)
     $preview = '';
     try {
-        $rows = dbimp_open()->query('SELECT * FROM "' . str_replace('"', '""', $t) . '" LIMIT 4')->fetchAll();
+        $qc = implode(', ', array_map(fn($c) => '"' . str_replace('"', '""', $c) . '"', $tables[$t]['cols']));
+        $rows = dbimp_open()->query('SELECT ' . $qc . ' FROM "' . str_replace('"', '""', $t) . '" LIMIT 4')->fetchAll();
         if ($rows) {
             $preview = '<div class="dbprev"><table><tr>';
             foreach (array_keys($rows[0]) as $c) {
@@ -614,8 +709,38 @@ function dbimp_map_form(array $job): string
     }
     $f = fn(string $k, string $label, string $help = '') => '<label>' . e($label) . ' ' . $sel($k, $colOpts, (string)($m[$k] ?? '')) . ($help !== '' ? '<small>' . e($help) . '</small>' : '') . '</label>';
 
+    // Perfiles que encajan con esta base de datos
+    $profiles = profiles_compatible($tables);
+    $curProfile = (int)($m['profile'] ?? 0);
+    $profOpts = '';
+    foreach ($profiles as $pid => $p) {
+        $profOpts .= '<option value="' . $pid . '"' . ($pid === $curProfile ? ' selected' : '') . '>' . e($p['name']) . ($p['is_system'] ? ' · sistema' : '') . '</option>';
+    }
+    $mode = ($m['mode'] ?? 'import') === 'update' ? 'update' : 'import';
+    $updFields = $m['upd_fields'] ?? null;
+    $updBoxes = '';
+    foreach (fields_all() as $cf) {
+        $on = $updFields === null ? in_array($cf['kind'], ['price', 'number'], true) : in_array($cf['id'], array_map('intval', (array)$updFields), true);
+        $updBoxes .= '<label class="check"><input type="checkbox" name="m[upd_fields][]" value="' . $cf['id'] . '"' . ($on ? ' checked' : '') . '> <span>' . e($cf['name']) . ($cf['is_public'] ? '' : ' (interno)')
+            . (($m['cf_' . $cf['id']] ?? '') !== '' ? ' <small class="muted">← ' . e((string)$m['cf_' . $cf['id']]) . '</small>' : ' <small class="muted">(sin columna asignada)</small>') . '</span></label>';
+    }
+    $visCol = (string)($m['visible'] ?? '');
+
     $h = '<p class="hint">Base de datos <strong>' . e($job['origin']) . '</strong>. Elige la tabla donde están los artículos y qué columna es cada cosa. Lo que no exista, déjalo en «— ninguna —».</p>'
         . '<form method="post" enctype="multipart/form-data" class="form">' . csrf_field()
+        . ($profiles ? '<fieldset><legend>Perfil de importación</legend><div class="row-inline"><label class="grow">Usar perfil <select name="profile">' . $profOpts . '</select></label>'
+            . '<button class="btn small ghost" name="sub" value="profile_apply" type="submit">Aplicar</button>'
+            . (isset($profiles[$curProfile]) && !$profiles[$curProfile]['is_system'] ? ' <button class="btn small ghost" name="sub" value="profile_delete" type="submit" onclick="return confirm(\'¿Borrar este perfil?\')">Borrar perfil</button>' : '')
+            . '</div><small>Un perfil rellena solo todas las columnas de abajo. Después puedes cambiar lo que quieras.</small></fieldset>' : '')
+        . (!empty($job['hidden']) ? '<p class="muted">Por seguridad, estas columnas no se leen nunca: ' . e(implode(', ', $job['hidden'])) . '.</p>' : '')
+        . '<fieldset><legend>Qué hacer</legend>'
+        . '<label class="check"><input type="radio" name="m[mode]" value="import"' . ($mode === 'import' ? ' checked' : '') . '> <span><b>Importar artículos</b>: crea los nuevos y rellena los huecos de los que ya existen (no cambia nada que ya tenga valor).</span></label>'
+        . '<label class="check"><input type="radio" name="m[mode]" value="update"' . ($mode === 'update' ? ' checked' : '') . '> <span><b>Actualizar precios y stock</b>: busca cada artículo por su <b>referencia</b> y cambia solo los campos marcados, aunque ya tengan valor. No crea ni borra artículos, ni toca nombre, descripción, familia ni fotos.</span></label>'
+        . '<div class="upd-opts"><small>Solo para «Actualizar»: campos que se actualizan</small>'
+        . ($updBoxes !== '' ? $updBoxes : '<small>No hay campos del catálogo. Créalos en Web → Campos.</small>')
+        . '<label class="check"><input type="checkbox" name="m[upd_visible]" value="1"' . (($m['upd_visible'] ?? '') === '1' ? ' checked' : '') . '> <span>Actualizar también la visibilidad' . ($visCol !== '' ? ' (' . e($visCol) . ')' : ' <small class="muted">(sin columna de visible)</small>') . '</span></label>'
+        . '<small>Si en el origen un valor está vacío, se deja el que hay en la web. Un precio 0 cuenta como vacío; un stock 0 sí se actualiza.</small></div>'
+        . '</fieldset>'
         . '<h2 style="margin:0">1. Tabla de artículos</h2>'
         . '<div class="row-inline"><label class="grow">Tabla ' . str_replace('<option value="">— ninguna —</option>', '', $sel('table', $tabOpts, $t)) . '</label>'
         . '<button class="btn small ghost" name="sub" value="table" type="submit">Ver sus columnas</button></div>'
@@ -649,6 +774,9 @@ function dbimp_map_form(array $job): string
         . '<label>Su columna de orden (opcional) ' . $sel('img_sort', $allCols((string)$m['img_table']), (string)$m['img_sort']) . '</label></div></fieldset>'
         . '<label>Opcional: ZIP con las fotos <input type="file" name="zip" accept=".zip,application/zip"><small>Si las fotos son nombres de archivo y no hay dirección base. Si pesa mucho, déjalo por FTP en data/importar/.</small></label>'
         . '<input type="hidden" name="action" value="map">'
+        . '<fieldset><legend>Guardar como perfil</legend><div class="row-inline"><label class="grow">Nombre del perfil <input name="profile_name" maxlength="120" value="' . e(isset($profiles[$curProfile]) && !$profiles[$curProfile]['is_system'] ? $profiles[$curProfile]['name'] : '') . '" placeholder="Por ejemplo: Almacén de mi programa"></label>'
+        . '<button class="btn small ghost" name="sub" value="profile_save" type="submit">Guardar como perfil</button></div>'
+        . '<small>Guarda la tabla y las columnas elegidas para usarlas la próxima vez. Si ya tienes un perfil con ese nombre, se sustituye.</small></fieldset>'
         . '<div class="buttons"><button class="btn small ghost" name="sub" value="table" type="submit">Ver sus columnas</button> <button class="btn" name="sub" value="go" type="submit">Analizar</button></div>'
         . '</form>';
     return $h;
@@ -661,6 +789,24 @@ function dbimp_map(array $job, array $post, array $files): array
         throw new RuntimeException('La base de datos temporal ya no está. Vuelve a subir el archivo.');
     }
     $tables = $job['tables'];
+    $sub = (string)($post['sub'] ?? '');
+    $job['warnings'] = [];
+
+    // Aplicar un perfil: sustituye todo lo elegido
+    if ($sub === 'profile_apply') {
+        $p = profiles_compatible($tables)[(int)($post['profile'] ?? 0)] ?? null;
+        if (!$p) {
+            throw new RuntimeException('Ese perfil no vale para esta base de datos (le faltan tablas).');
+        }
+        return dbimp_apply_profile($job, $p);
+    }
+    if ($sub === 'profile_delete') {
+        $name = profiles_delete((int)($post['profile'] ?? 0));
+        $job['map']['profile'] = 0;
+        $job['msg'] = 'Perfil «' . $name . '» borrado.';
+        return $job;
+    }
+
     $in = (array)($post['m'] ?? []);
     $m = $job['map'];
     $newTable = (string)($in['table'] ?? $m['table']);
@@ -668,13 +814,14 @@ function dbimp_map(array $job, array $post, array $files): array
         $newTable = $m['table'];
     }
     if ($newTable !== $m['table']) {
-        $m = dbimp_guess($tables, $newTable); // otra tabla: nueva propuesta de columnas
+        $keep = ['mode' => $in['mode'] ?? $m['mode'] ?? 'import', 'profile' => $m['profile'] ?? 0];
+        $m = array_merge(dbimp_guess($tables, $newTable), $keep); // otra tabla: nueva propuesta de columnas
     } else {
         foreach ($m as $k => $_) {
-            if (in_array($k, ['table', 'extra', 'visible_inv', 'caps'], true)) {
+            if (in_array($k, ['table', 'extra', 'visible_inv', 'caps', 'upd_fields', 'upd_visible', 'profile'], true)) {
                 continue;
             }
-            if (array_key_exists($k, $in)) {
+            if (array_key_exists($k, $in) && !is_array($in[$k])) {
                 $m[$k] = trim((string)$in[$k]);
             }
         }
@@ -684,7 +831,12 @@ function dbimp_map(array $job, array $post, array $files): array
         $m['extra'] = array_values(array_intersect((array)($in['extra'] ?? []), $tables[$m['table']]['cols']));
         $m['visible_inv'] = empty($in['visible_inv']) ? '' : '1';
         $m['caps'] = empty($in['caps']) ? '' : '1';
+        if (array_key_exists('mode', $in)) { // el formulario siempre envía el modo junto a sus casillas
+            $m['upd_fields'] = array_values(array_intersect(array_map('intval', (array)($in['upd_fields'] ?? [])), array_keys(fields_all())));
+            $m['upd_visible'] = empty($in['upd_visible']) ? '' : '1';
+        }
     }
+    $m['mode'] = ($m['mode'] ?? '') === 'update' ? 'update' : 'import';
     // Validar que cada columna existe en su tabla
     $chk = function (string $table, array $keys) use (&$m, $tables): void {
         foreach ($keys as $k) {
@@ -705,10 +857,19 @@ function dbimp_map(array $job, array $post, array $files): array
         $m['img_base'] = '';
     }
     $job['map'] = $m;
-    $job['warnings'] = [];
-    if (($post['sub'] ?? '') !== 'go') {
+    if ($sub === 'profile_save') {
+        $pname = trim(mb_scrub((string)($post['profile_name'] ?? ''), 'UTF-8'));
+        $id = dbimp_save_profile($job, $pname);
+        $job['map']['profile'] = $id;
+        $job['msg'] = 'Perfil «' . $pname . '» guardado. Aparecerá en «Usar perfil» cuando subas una base de datos con las mismas tablas.';
+        return $job;
+    }
+    if ($sub !== 'go') {
         $job['msg'] = '';
         return $job;
+    }
+    if ($m['mode'] === 'update') {
+        return dbimp_build_update($job);
     }
     if ($m['name'] === '') {
         $job['warnings'] = ['Elige la columna del nombre.'];
@@ -736,8 +897,7 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
             $fams[trim((string)$r['i'])] = [trim(html_entity_decode(strip_tags((string)$r['n']), ENT_QUOTES | ENT_HTML5, 'UTF-8')), trim((string)($r['p'] ?? ''))];
         }
     }
-    $caps = fn(string $s): string => ($m['caps'] === '1' && $s !== '' && $s === mb_strtoupper($s) && preg_match('/\p{L}{3}/u', $s))
-        ? mb_strtoupper(mb_substr(mb_strtolower($s), 0, 1)) . mb_substr(mb_strtolower($s), 1) : $s;
+    $caps = dbimp_caps($m);
     $xLabels = array_map('trim', explode(',', (string)($m['extra_labels'] ?? '')));
     $famPath = function (string $v) use ($fams): array {
         $v = trim($v);
@@ -786,7 +946,7 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
     $noFam = 0;
     $order = $m['sort'] !== '' ? ' ORDER BY CAST(' . $q($m['sort']) . ' AS REAL)' : '';
     $n = 0;
-    foreach ($db->query('SELECT * FROM ' . $q($m['table']) . $order) as $r) {
+    foreach ($db->query(dbimp_select($job, $m) . $order) as $r) {
         if (++$n > 20000) {
             $warnings[] = 'Solo se leen los primeros 20 000 artículos.';
             break;
@@ -862,11 +1022,7 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
         foreach (fields_all() as $cf) {
             $k = 'cf_' . $cf['id'];
             if (($m[$k] ?? '') !== '') {
-                $v = trim((string)preg_replace('/\s{2,}/u', ', ', trim((string)($r[$m[$k]] ?? ''))));
-                if (in_array($cf['kind'], ['multi', 'select'], true)) {
-                    $v = str_replace(', ', '|', $v);
-                }
-                $fv[$cf['id']] = in_array($cf['kind'], ['text', 'textarea'], true) ? $caps($v) : $v;
+                $fv[$cf['id']] = dbimp_cf_value($cf, (string)($r[$m[$k]] ?? ''), $caps);
             }
         }
         $item = import_plan_item(import_existing_find($idx, $name, $get('ref')), $name, $path, $get('ref'), $dims, $desc, $images, $visible, $fv);
@@ -895,6 +1051,233 @@ function dbimp_build_plan(array $job, ?array $zipUpload): array
         'allowed' => array_values(array_unique($allowed)),
         'items' => array_values($items),
         'warnings' => $warnings,
+    ];
+}
+
+/**
+ * SELECT solo con las columnas elegidas en el emparejamiento (nunca SELECT *: así una columna
+ * prohibida o que no se ha elegido no se lee jamás). Solo se aceptan columnas permitidas de la tabla.
+ */
+function dbimp_select(array $job, array $m, ?array $keys = null, bool $withExtra = true): string
+{
+    $cols = $job['tables'][$m['table']]['cols'] ?? [];
+    $keys ??= array_merge(['id', 'name', 'ref', 'family', 'sub', 'dims', 'desc', 'short', 'visible', 'sort', 'img'], array_map(fn($id) => 'cf_' . $id, array_keys(fields_all())));
+    $want = [];
+    foreach ($keys as $k) {
+        $c = (string)($m[$k] ?? '');
+        if ($c !== '' && in_array($c, $cols, true)) {
+            $want[$c] = true;
+        }
+    }
+    if ($withExtra) {
+        foreach ((array)($m['extra'] ?? []) as $c) {
+            if (in_array($c, $cols, true)) {
+                $want[$c] = true;
+            }
+        }
+    }
+    if (!$want && $cols) {
+        $want[$cols[0]] = true;
+    }
+    $q = fn(string $s) => '"' . str_replace('"', '""', $s) . '"';
+    return 'SELECT ' . implode(', ', array_map($q, array_keys($want))) . ' FROM ' . $q($m['table']);
+}
+
+/** Valor de un campo libre leído de la base de datos, ya normalizado ('' = vacío). Un precio 0 cuenta como vacío. */
+function dbimp_cf_value(array $cf, string $raw, callable $caps): string
+{
+    $v = trim((string)preg_replace('/\s{2,}/u', ', ', trim($raw)));
+    if (in_array($cf['kind'], ['multi', 'select'], true)) {
+        $v = str_replace(', ', '|', $v);
+    } elseif (in_array($cf['kind'], ['text', 'textarea'], true)) {
+        $v = $caps($v);
+    }
+    $v = field_clean($cf, $v);
+    if ($cf['kind'] === 'price' && $v !== '' && (float)$v == 0.0) {
+        return ''; // nunca «0,00 €»: un precio 0 en el programa de gestión es «sin precio»
+    }
+    return $v;
+}
+
+/** Función de mayúsculas del emparejamiento («CHANCLA DE PLAYA» → «Chancla de playa»). */
+function dbimp_caps(array $m): callable
+{
+    return fn(string $s): string => (($m['caps'] ?? '') === '1' && $s !== '' && $s === mb_strtoupper($s) && preg_match('/\p{L}{3}/u', $s))
+        ? mb_strtoupper(mb_substr(mb_strtolower($s), 0, 1)) . mb_substr(mb_strtolower($s), 1) : $s;
+}
+
+/** Guarda el emparejamiento actual como perfil propio. Devuelve su id. */
+function dbimp_save_profile(array $job, string $name): int
+{
+    $m = $job['map'];
+    $mapping = [];
+    foreach (['table', 'id', 'name', 'ref', 'family', 'sub', 'dims', 'desc', 'short', 'visible', 'sort', 'img',
+        'fam_table', 'fam_id', 'fam_name', 'fam_parent', 'img_table', 'img_fk', 'img_file', 'img_sort',
+        'visible_inv', 'caps', 'extra_labels', 'img_base'] as $k) {
+        if ((string)($m[$k] ?? '') !== '') {
+            $mapping[$k] = (string)$m[$k];
+        }
+    }
+    $mapping['extra'] = array_values((array)($m['extra'] ?? []));
+    $mapping['fields'] = [];
+    $defs = [];
+    foreach (fields_all() as $cf) {
+        if ((string)($m['cf_' . $cf['id']] ?? '') !== '') {
+            $mapping['fields'][$cf['slug']] = (string)$m['cf_' . $cf['id']];
+            $defs[$cf['slug']] = [$cf['name'], $cf['kind'], $cf['unit'], $cf['is_public']]; // para crearlos en otra web
+        }
+    }
+    $rules = [
+        'require_tables' => array_values(array_filter([(string)$m['table'], (string)$m['fam_table'], (string)$m['img_table']])),
+        'exclude_columns' => array_values((array)($job['exclude'] ?? [])),
+        'fields' => $defs,
+    ];
+    return profiles_save($name, (string)($job['source_type'] ?? 'sql'), $mapping, $rules);
+}
+
+/**
+ * Modo «Actualizar precios y stock»: compara la base de datos con la web por referencia y
+ * devuelve un plan solo con los artículos que cambian, más el resumen para revisarlo.
+ */
+function dbimp_build_update(array $job): array
+{
+    $m = $job['map'];
+    if ($m['ref'] === '') {
+        $job['warnings'] = ['Para actualizar hace falta la columna «Referencia / código»: es la única forma segura de saber qué artículo es cada fila.'];
+        return $job;
+    }
+    $all = fields_all();
+    $fids = [];
+    foreach ((array)($m['upd_fields'] ?? []) as $fid) {
+        if (isset($all[(int)$fid]) && (string)($m['cf_' . $fid] ?? '') !== '') {
+            $fids[] = (int)$fid;
+        }
+    }
+    $vis = ($m['upd_visible'] ?? '') === '1' && $m['visible'] !== '';
+    if (!$fids && !$vis) {
+        $job['warnings'] = ['Marca al menos un campo que tenga una columna asignada (o la visibilidad, eligiendo antes su columna).'];
+        return $job;
+    }
+
+    // La web: referencia (sin mayúsculas) → artículos
+    $web = [];
+    $info = [];
+    $webNoRef = 0;
+    foreach (db()->query('SELECT id, ref, name, visible FROM products')->fetchAll() as $p) {
+        $ref = mb_strtolower(trim((string)$p['ref']));
+        if ($ref === '') {
+            $webNoRef++;
+            continue;
+        }
+        $web[$ref][] = (int)$p['id'];
+        $info[(int)$p['id']] = ['ref' => trim((string)$p['ref']), 'name' => (string)$p['name'], 'visible' => (int)$p['visible']];
+    }
+    $cur = [];
+    if ($fids) {
+        foreach (db()->query('SELECT product_id, field_id, value FROM product_fields WHERE field_id IN (' . implode(',', $fids) . ')')->fetchAll() as $r) {
+            $cur[(int)$r['product_id']][(int)$r['field_id']] = (string)$r['value'];
+        }
+    }
+
+    $caps = dbimp_caps($m);
+    $keys = array_merge(['ref'], $vis ? ['visible'] : [], array_map(fn($f) => 'cf_' . $f, $fids));
+    $seen = [];
+    $notFound = [];
+    $items = [];
+    $counts = ['visible' => 0];
+    foreach ($fids as $fid) {
+        $counts[$fid] = 0;
+    }
+    $same = $noRef = $dup = $matched = 0;
+    foreach (dbimp_open()->query(dbimp_select($job, $m, $keys, false)) as $r) {
+        $code = trim((string)($r[$m['ref']] ?? ''));
+        if ($code === '') {
+            $noRef++;
+            continue;
+        }
+        $lk = mb_strtolower($code);
+        if (isset($seen[$lk])) {
+            $dup++; // código repetido en el origen: vale la primera fila
+            continue;
+        }
+        $seen[$lk] = true;
+        if (!isset($web[$lk])) {
+            $notFound[] = $code;
+            continue;
+        }
+        $new = [];
+        foreach ($fids as $fid) {
+            $v = dbimp_cf_value($all[$fid], (string)($r[$m['cf_' . $fid]] ?? ''), $caps);
+            if ($v !== '') { // vacío (o precio 0) en el origen: no se toca
+                $new[$fid] = $v;
+            }
+        }
+        $newVis = null;
+        if ($vis) {
+            $raw = trim((string)($r[$m['visible']] ?? ''));
+            if ($raw !== '') {
+                $b = import_bool($raw);
+                $newVis = $m['visible_inv'] === '1' ? 1 - $b : $b;
+            }
+        }
+        foreach ($web[$lk] as $pid) {
+            $matched++;
+            $chg = [];
+            $old = [];
+            foreach ($new as $fid => $v) {
+                $o = $cur[$pid][$fid] ?? '';
+                if ($o !== $v) {
+                    $chg[$fid] = $v;
+                    $old[$fid] = $o;
+                    $counts[$fid]++;
+                }
+            }
+            $vchg = $newVis !== null && $newVis !== $info[$pid]['visible'];
+            if ($vchg) {
+                $counts['visible']++;
+            }
+            if (!$chg && !$vchg) {
+                $same++;
+                continue;
+            }
+            $items[] = [
+                'pid' => $pid, 'ref' => $info[$pid]['ref'], 'name' => $info[$pid]['name'],
+                'fields' => $chg, 'old' => $old,
+                'visible' => $vchg ? $newVis : null, 'old_visible' => $info[$pid]['visible'],
+            ];
+        }
+    }
+    $missing = [];
+    foreach ($web as $lk => $pids) {
+        if (!isset($seen[$lk])) {
+            foreach ($pids as $pid) {
+                $missing[] = $info[$pid]['ref'];
+            }
+        }
+    }
+    natcasesort($missing);
+    $warnings = [];
+    if ($dup) {
+        $warnings[] = $dup . ' código(s) están repetidos en la base de datos: se ha usado la primera fila de cada uno.';
+    }
+    if ($noRef) {
+        $warnings[] = $noRef . ' fila(s) de la base de datos no tienen código: se ignoran.';
+    }
+    if ($webNoRef) {
+        $warnings[] = $webNoRef . ' artículo(s) de la web no tienen referencia: no se pueden actualizar.';
+    }
+    return [
+        'origin' => $job['origin'] . ' · tabla ' . $m['table'],
+        'mode' => 'update',
+        'allowed' => [],
+        'items' => $items,
+        'warnings' => $warnings,
+        'upd' => [
+            'fields' => $fids, 'visible' => $vis, 'visible_col' => $m['visible'], 'counts' => $counts,
+            'matched' => $matched, 'same' => $same,
+            'not_found' => count($notFound), 'not_found_codes' => array_slice($notFound, 0, 20),
+            'missing' => count($missing), 'missing_codes' => array_slice(array_values($missing), 0, 20),
+        ],
     ];
 }
 
