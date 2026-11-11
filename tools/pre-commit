@@ -1,0 +1,25 @@
+#!/bin/sh
+# Hook pre-commit: si el commit toca importadores, conectores o tablas, pasa la batería de NCS (tools/ncs-check.php) con los
+# archivos reales de pruebas/. Si falla, el commit se bloquea: el conector no se da por terminado.
+# Instalar: sh tools/install-hooks.sh   (los hooks de git no viajan con el repositorio)
+# Saltarlo solo si no hay archivos de pruebas en este equipo: NCS_CHECK_SKIP=1 git commit …
+
+[ "$NCS_CHECK_SKIP" = "1" ] && exit 0
+
+changed=$(git diff --cached --name-only)
+echo "$changed" | grep -E '^(app/importers/|app/(profiles|import|mdb|erp|erp_client|photofolders|schema|db|backup|fields)\.php$|tools/ncs-)' >/dev/null || exit 0
+
+PHP="${PHP_BIN:-php}"
+command -v "$PHP" >/dev/null 2>&1 || PHP=/c/php/php.exe
+
+echo "Batería de NCS (este commit toca importadores, conectores o tablas)…"
+out=$("$PHP" tools/ncs-check.php 2>&1)
+code=$?
+echo "$out" | grep -E 'FALLO|^NCS:|^PHP |Fatal|Warning'
+if [ $code -ne 0 ]; then
+    echo ""
+    echo "Commit BLOQUEADO: la batería de NCS ha fallado (código $code)."
+    echo "Si NCS ha cambiado de verdad: adapta el conector y, ya revisado, ejecuta  php tools/ncs-check.php --update"
+    exit 1
+fi
+exit 0
