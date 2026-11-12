@@ -1,6 +1,6 @@
 <?php
 /** Alta de un cliente del CMS (compacta, misma rejilla que la ficha). Variables: $v, $tariffs, $methods, $series, $errors, $nifWarn. */
-$in = fn(string $k, string $label, int $span, int $max, string $extra = '') => '<div class="cfld s' . $span . '"><label class="cl" for="n-' . e($k) . '">' . e($label) . '</label><input id="n-' . e($k) . '" name="' . e($k) . '" value="' . e((string)$v[$k]) . '" maxlength="' . $max . '"' . $extra . '></div>';
+$in = fn(string $k, string $label, int $span, int $max, string $extra = '') => '<div class="cfld s' . $span . (in_array($k, ['cust_code', 'name', 'nif'], true) ? ' bold' : '') . '"><label class="cl" for="n-' . e($k) . '">' . e($label) . '</label><input id="n-' . e($k) . '" name="' . e($k) . '" value="' . e((string)$v[$k]) . '" maxlength="' . $max . '"' . $extra . '></div>';
 ?>
 <div class="head"><h1>Nuevo cliente</h1><a class="btn ghost" href="<?= e(url('/admin/clientes')) ?>">Volver</a></div>
 <?php foreach ($errors as $er): ?><p class="flash err"><?= e($er) ?></p><?php endforeach; ?>
@@ -9,14 +9,14 @@ $in = fn(string $k, string $label, int $span, int $max, string $extra = '') => '
   <section class="cc-card"><h2>General</h2>
     <div class="cgrid">
       <?= $in('cust_code', 'Código', 2, 40, ' required') ?>
-      <?= $in('nif', 'NIF', 2, 40) ?>
-      <?= $in('name', 'Nombre o razón social', 4, 255, ' required') ?>
+      <?= $in('name', 'Nombre o razón social', 7, 255, ' required') ?>
+      <?= $in('nif', 'NIF', 3, 40) ?>
       <?= $in('trade_name', 'Nombre comercial', 4, 255) ?>
-      <?= $in('address', 'Dirección', 6, 255) ?>
-      <?= $in('postcode', 'C. postal', 1, 20) ?>
-      <?= $in('city', 'Población', 3, 255) ?>
-      <?= $in('province', 'Provincia', 2, 255) ?>
-      <?= $in('country', 'País', 2, 255) ?>
+      <?= $in('address', 'Dirección', 8, 255) ?>
+      <?= $in('postcode', 'C. postal', 2, 20) ?>
+      <?= $in('city', 'Población', 4, 255) ?>
+      <?= $in('province', 'Provincia', 3, 255) ?>
+      <?= $in('country', 'País', 3, 255) ?>
     </div>
     <p class="cc-note"><small>El código propuesto es el siguiente libre; con letra delante (nunca solo números: esos son los de NCS). DNI, NIE o CIF: si el formato no cuadra, solo se avisa.</small></p>
   </section>

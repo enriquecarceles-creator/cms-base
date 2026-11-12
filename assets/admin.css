@@ -670,3 +670,6 @@ form.cfgf .lg{display:block;font-size:.8rem;margin-bottom:4px}
 @media (max-width:1100px){.cfld.s1,.cfld.s2{grid-column:span 3}.cfld.s3{grid-column:span 4}.cfld.s4{grid-column:span 6}.cfld.s6{grid-column:1/-1}.cc-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.cgrid{grid-template-columns:1fr}.cfld.s1,.cfld.s2,.cfld.s3,.cfld.s4,.cfld.s6,.cfld.s12{grid-column:1/-1}.cc-head{position:static}.cc-quick{grid-template-columns:1fr 1fr}.cc-pop{position:static;box-shadow:none}.cc-noteform{flex-direction:column}.cc-noteform textarea{width:100%}}
 .cl .muted{text-transform:none;letter-spacing:0;font-size:.72rem}
+.cfld.s7{grid-column:span 7}.cfld.s8{grid-column:span 8}.cfld.bold .cl,.cfld.bold .cv,.cfld.bold input{font-weight:700}
+@media (max-width:1100px){.cfld.s7{grid-column:span 5}.cfld.s8{grid-column:1/-1}}
+@media (max-width:640px){.cfld.s7,.cfld.s8{grid-column:1/-1}}

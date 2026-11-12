@@ -18,7 +18,7 @@ $fld = function (string $k, string $label, int $span, array $o = []) use ($edit,
     $v = (string)($f[$k] ?? '');
     $ownField = in_array($k, ERP_CUST_OWN, true);
     $canEdit = $edit && (!$own || $ownField) && ($o['can'] ?? true);
-    $h = '<div class="cfld s' . $span . '"><label class="cl"' . ($canEdit ? ' for="f-' . e($k) . '"' : '') . '>' . e($label) . '</label>';
+    $h = '<div class="cfld s' . $span . (!empty($o['bold']) ? ' bold' : '') . '"><label class="cl"' . ($canEdit ? ' for="f-' . e($k) . '"' : '') . '>' . e($label) . '</label>';
     if ($canEdit) {
         $h .= '<input id="f-' . e($k) . '" name="' . e($k) . '" value="' . e($v) . '" maxlength="' . (int)($o['max'] ?? 255) . '"' . (!empty($o['type']) ? ' type="' . e($o['type']) . '"' : '') . (!empty($o['mode']) ? ' inputmode="' . e($o['mode']) . '"' : '') . (!empty($o['ph']) ? ' placeholder="' . e($o['ph']) . '"' : '') . '>';
     } else {
@@ -101,15 +101,15 @@ $self_ = url($self);
 
 <section class="cc-card" id="general"><h2>General</h2>
   <div class="cgrid">
-    <?= $fld('cust_code', 'Código', 2, ['can' => $canCode, 'max' => 40]) ?>
-    <?= $fld('nif', 'NIF', 2, ['max' => 40]) ?>
-    <?= $fld('name', 'Nombre o razón social', 4, ['max' => 255]) ?>
+    <?= $fld('cust_code', 'Código', 2, ['can' => $canCode, 'max' => 40, 'bold' => 1]) ?>
+    <?= $fld('name', 'Nombre o razón social', 7, ['max' => 255, 'bold' => 1]) ?>
+    <?= $fld('nif', 'NIF', 3, ['max' => 40, 'bold' => 1]) ?>
     <?= $fld('trade_name', 'Nombre comercial', 4, ['max' => 255]) ?>
-    <?= $fld('address', 'Dirección', 6, ['max' => 255]) ?>
-    <?= $fld('postcode', 'C. postal', 1, ['max' => 20]) ?>
-    <?= $fld('city', 'Población', 3, ['max' => 255]) ?>
-    <?= $fld('province', 'Provincia', 2, ['max' => 255]) ?>
-    <?= $fld('country', 'País', 2, ['max' => 255]) ?>
+    <?= $fld('address', 'Dirección', 8, ['max' => 255]) ?>
+    <?= $fld('postcode', 'C. postal', 2, ['max' => 20]) ?>
+    <?= $fld('city', 'Población', 4, ['max' => 255]) ?>
+    <?= $fld('province', 'Provincia', 3, ['max' => 255]) ?>
+    <?= $fld('country', 'País', 3, ['max' => 255]) ?>
   </div>
   <?php if ($edit && !$own && !$canCode): ?><p class="cc-note"><small>El código no se puede cambiar: el cliente ya tiene documentos.</small></p><?php endif; ?>
 </section>

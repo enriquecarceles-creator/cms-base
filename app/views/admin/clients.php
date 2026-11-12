@@ -34,12 +34,12 @@ $hasFilters = (bool)array_diff_key($q, ['orden' => 1, 'dir' => 1, 'pag' => 1]);
   <p class="empty">No hay clientes<?= $hasFilters ? ' con ese filtro' : '' ?>.</p>
 <?php else: ?>
 <div class="tbl-wrap"><table class="tbl list cl-tbl">
-  <thead><tr><?= $th('codigo', 'Código') ?><?= $th('nombre', 'Cliente') ?><th scope="col">NIF</th><th scope="col">Población</th><th scope="col">Teléfono</th><th scope="col">Estado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+  <thead><tr><?= $th('codigo', 'Código') ?><?= $th('nombre', 'Nombre') ?><th scope="col">NIF</th><th scope="col">Población</th><th scope="col">Teléfono</th><th scope="col">Estado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
   <tbody>
   <?php foreach ($rows as $r): $off = (int)$r['blocked'] === 1 || (int)$r['ended_day'] > 0; $cu = url('/admin/clientes/' . rawurlencode($r['cust_code'])); ?>
     <tr<?= $off ? ' class="off"' : '' ?>>
       <td><a href="<?= e($cu) ?>"><?= e($r['cust_code']) ?></a></td>
-      <td><a href="<?= e($cu) ?>"><?= e($r['name'] !== '' ? $r['name'] : '(sin nombre)') ?></a><?= $r['trade_name'] !== '' && $r['trade_name'] !== $r['name'] ? ' <small class="muted">' . e($r['trade_name']) . '</small>' : '' ?></td>
+      <td><strong><a href="<?= e($cu) ?>"><?= e($r['name'] !== '' ? $r['name'] : '(sin nombre)') ?></a></strong><?= $r['trade_name'] !== '' && $r['trade_name'] !== $r['name'] ? ' <small class="muted">' . e($r['trade_name']) . '</small>' : '' ?></td>
       <td><?= e($r['nif']) ?></td>
       <td><?= e($r['city']) ?></td>
       <td><?= e($r['phone']) ?></td>
