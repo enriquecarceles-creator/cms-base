@@ -118,6 +118,7 @@ const SCHEMA_ERP_DDL = "
         blocked {I} NOT NULL DEFAULT 0,
         created_day {I} NOT NULL DEFAULT 0,
         ended_day {I} NOT NULL DEFAULT 0,
+        origin {S} NOT NULL DEFAULT 'ncs',
         row_hash {S} NOT NULL,
         synced_at {BIG} NOT NULL DEFAULT 0
     );
@@ -825,6 +826,10 @@ function migrate_schema(CmsPdo $pdo): void
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
         }
+    }
+    // v31: clientes dados de alta a mano en el CMS (origin = 'cms'); los de NCS quedan con 'ncs'
+    if ($ver < 31 && in_array('erp_customers', db_tables($pdo), true) && !in_array('origin', db_columns($pdo, 'erp_customers'), true)) {
+        db_add_column($pdo, 'erp_customers', 'origin', "{S} NOT NULL DEFAULT 'ncs'");
     }
     db_set_schema_version($pdo, SCHEMA_VERSION);
 }

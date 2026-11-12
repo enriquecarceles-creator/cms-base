@@ -590,6 +590,15 @@ $check('facturas: la emitida queda en Ventas con origen CMS y en el registro enc
 $resF = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
 erp_job_clear();
 $check('facturas: sincronizar con NCS no las cuenta como «ya no están» ni cambia nada', $resF['counts']['inv']['gone'] === 0 && $resF['counts']['inv']['new'] + $resF['counts']['inv']['changed'] === 0, json_encode($resF['counts']['inv']));
+
+// Clientes dados de alta a mano: NCS nunca los sobrescribe, aunque el código coincida
+$ncsCode = (string)db()->query("SELECT cust_code FROM erp_customers WHERE origin = 'ncs' ORDER BY id LIMIT 1")->fetchColumn();
+db()->prepare('DELETE FROM erp_customers WHERE cust_code = ?')->execute([$ncsCode]);
+db()->prepare("INSERT INTO erp_customers (cust_code, name, origin, row_hash) VALUES (?, 'Cliente manual de prueba', 'cms', '')")->execute([$ncsCode]);
+$resC = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
+erp_job_clear();
+$check('clientes del CMS: si NCS trae el mismo código, se avisa y no se sobrescribe', $resC['counts']['cust_conflict'] === 1 && $resC['counts']['cust']['new'] === 0 && $one("SELECT COUNT(*) FROM erp_customers WHERE origin = 'cms'") === 1, json_encode($resC['counts']['cust']));
+db()->prepare("DELETE FROM erp_customers WHERE origin = 'cms'")->execute();
 $ridF = $fidF > 0 ? docs_rectify(docs_get($fidF), 'diferencias', 'R1', 'Devolución') : 0;
 $codeR = '';
 try {

@@ -15,6 +15,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/mdb.php';
 require_once __DIR__ . '/erp_client.php';
+require_once __DIR__ . '/erp_customer_edit.php';
 require_once __DIR__ . '/documents.php';
 require_once __DIR__ . '/erp_invoice.php';
 require_once __DIR__ . '/erp_invoice_send.php';
@@ -269,8 +270,13 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
     }
     $db = db();
     $haveC = [];
-    foreach ($db->query('SELECT cust_code, row_hash FROM erp_customers')->fetchAll(PDO::FETCH_NUM) as $r) {
-        $haveC[$r[0]] = $r[1];
+    $cmsC = []; // clientes dados de alta a mano en el CMS: NCS nunca los sobrescribe
+    foreach ($db->query('SELECT cust_code, row_hash, origin FROM erp_customers')->fetchAll(PDO::FETCH_NUM) as $r) {
+        if ((string)$r[2] === 'cms') {
+            $cmsC[mb_strtolower((string)$r[0])] = true;
+        } else {
+            $haveC[$r[0]] = $r[1];
+        }
     }
     $haveI = [];
     foreach ($db->query("SELECT inv_number, row_hash FROM erp_invoices WHERE origin = 'ncs'")->fetchAll(PDO::FETCH_NUM) as $r) { // las del CMS no vienen de NCS
@@ -283,7 +289,7 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
     $st->exec('CREATE TABLE cust (seq INTEGER PRIMARY KEY, code TEXT, state TEXT, data TEXT)');
     $st->exec('CREATE TABLE inv (seq INTEGER PRIMARY KEY, num TEXT, state TEXT, data TEXT)');
 
-    $cnt = ['cust' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'inv' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'lines' => 0, 'skipped' => 0];
+    $cnt = ['cust' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'inv' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'lines' => 0, 'skipped' => 0, 'cust_conflict' => 0];
 
     // Clientes
     $st->beginTransaction();
@@ -297,6 +303,10 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
             continue;
         }
         $seen[$m['cust_code']] = true;
+        if (isset($cmsC[mb_strtolower($m['cust_code'])])) { // mismo código que un cliente creado en el CMS: no se toca
+            $cnt['cust_conflict']++;
+            continue;
+        }
         $m['row_hash'] = erp_hash($m);
         $state = !isset($haveC[$m['cust_code']]) ? 'new' : ($haveC[$m['cust_code']] === $m['row_hash'] ? 'same' : 'changed');
         $cnt['cust'][$state]++;
@@ -420,12 +430,16 @@ function erp_run(array &$job, float $deadline): bool
         if (($job['phase'] ?? 'cust') === 'cust') {
             $db->beginTransaction();
             $q = $st->query("SELECT data, state FROM cust WHERE state <> 'same' ORDER BY seq");
-            $find = $db->prepare('SELECT id FROM erp_customers WHERE cust_code = ?');
+            $find = $db->prepare('SELECT id, origin FROM erp_customers WHERE LOWER(cust_code) = LOWER(?)');
             foreach ($q as $row) {
                 $d = json_decode((string)$row['data'], true);
                 $d['synced_at'] = $now;
                 $find->execute([$d['cust_code']]);
-                $id = $find->fetchColumn();
+                $found = $find->fetch();
+                if ($found && (string)$found['origin'] === 'cms') { // creado en el CMS mientras tanto: no se sobrescribe
+                    continue;
+                }
+                $id = $found ? $found['id'] : false;
                 erp_save_row('erp_customers', 'cust_code', $d, $id === false ? null : (int)$id);
                 $job['done_cust'] = ($job['done_cust'] ?? 0) + 1;
             }
@@ -737,9 +751,24 @@ function erp_clients_url(array $q, array $change = []): string
     return '/admin/clientes' . ($q ? '?' . http_build_query($q) : '');
 }
 
-function admin_clients(string $code): void
+function admin_clients(string $code, string $sub = ''): void
 {
     if (!erp_guard()) {
+        return;
+    }
+    if ($code === 'nuevo' && $sub === '') {
+        admin_client_edit(null);
+        return;
+    }
+    if ($code !== '' && $sub === 'modificar') {
+        $st = db()->prepare('SELECT * FROM erp_customers WHERE cust_code = ?');
+        $st->execute([$code]);
+        $c = $st->fetch();
+        $c ? admin_client_edit($c) : not_found();
+        return;
+    }
+    if ($code !== '' && $sub !== '') {
+        not_found();
         return;
     }
     if ($code !== '') {

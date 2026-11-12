@@ -46,6 +46,7 @@ $st = $job['status'] ?? '';
     </tbody>
   </table></div>
   <p class="muted">Líneas de factura a escribir: <?= e($n((int)$c['lines'])) ?><?= $c['skipped'] ? ' · filas descartadas por no tener código o por repetirse: ' . e($n((int)$c['skipped'])) : '' ?>. Los que «ya no están en NCS» se conservan; no se borra nada.</p>
+  <?php if (!empty($c['cust_conflict'])): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><?= e($n((int)$c['cust_conflict'])) ?> cliente(s) de NCS tienen el mismo código que un cliente creado a mano en el CMS: <strong>no se traen</strong> (el del CMS no se toca). Cambia el código de ese cliente en NCS y vuelve a sincronizar.</span></p><?php endif; ?>
 
   <p class="muted" style="margin-top:0"><?= !empty($job['has_art']) ? 'Tallas y colores: se guardará el <strong>texto real</strong> (FALMACEN.MDB incluido: ' . e($n((int)($c['art'] ?? 0))) . ' artículos).' : 'Tallas y colores: sin FALMACEN.MDB se guarda solo el número; los textos ya guardados se conservan.' ?></p>
   <form method="post" class="form">

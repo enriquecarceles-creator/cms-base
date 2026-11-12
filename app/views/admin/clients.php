@@ -13,11 +13,11 @@ $th = function (string $key, string $label) use ($base, $sortKey, $desc) {
 };
 $hasFilters = (bool)array_diff_key($q, ['orden' => 1, 'dir' => 1, 'pag' => 1]);
 ?>
-<div class="head"><h1>Clientes</h1><a class="btn ghost" href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a></div>
+<div class="head"><h1>Clientes</h1><span class="buttons"><a class="btn" href="<?= e(url('/admin/clientes/nuevo')) ?>">+ Nuevo cliente</a> <a class="btn ghost" href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a></span></div>
 <?php if (!erp_2fa_required()): ?><p class="alert warn"><?= admin_icon('alert') ?><span>La doble verificación para Clientes y Ventas está desactivada</span></p><?php endif; ?>
 
 <?php if ($totals['customers'] === 0): ?>
-  <p class="empty">Todavía no hay clientes. Ve a <a href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a> para traerlos.</p>
+  <p class="empty">Todavía no hay clientes. Crea el primero con «+ Nuevo cliente» o ve a <a href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a> para traerlos.</p>
 <?php else: ?>
 <form class="filters lf" method="get" action="<?= e(url('/admin/clientes')) ?>">
   <label class="lf-q"><span class="sr-only">Buscar</span><input type="search" name="q" value="<?= e($q['q'] ?? '') ?>" placeholder="Nombre, código, NIF, población, teléfono o email"></label>

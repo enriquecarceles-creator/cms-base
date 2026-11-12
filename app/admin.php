@@ -139,7 +139,7 @@ function admin_dispatch(array $segs): void
             admin_photos();
             break;
         case 'clientes':
-            admin_clients((string)($segs[2] ?? ''));
+            admin_clients((string)($segs[2] ?? ''), (string)($segs[3] ?? ''));
             break;
         case 'ventas':
             $sub = (string)($segs[2] ?? '');

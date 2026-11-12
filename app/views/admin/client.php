@@ -21,12 +21,14 @@ $ended = (int)$c['ended_day'] > 0;
     <p class="muted cf-sub"><?= $legal !== '' ? e($legal) . ' · ' : '' ?>Código <strong><?= e($c['cust_code']) ?></strong><?= $c['nif'] !== '' ? ' · NIF <strong>' . e($c['nif']) . '</strong>' : '' ?></p>
     <p class="cf-tags">
       <?php if ($ended): ?><span class="tag tag-off">De baja</span><?php elseif ((int)$c['blocked'] === 1): ?><span class="tag tag-off">Bloqueado</span><?php else: ?><span class="tag tag-ok">Activo</span><?php endif; ?>
+      <?php if (erp_customer_is_cms($c)): ?><span class="tag">Origen: CMS</span><?php endif; ?>
       <?php if ($isRetail): ?><span class="tag">Contado</span><?php endif; ?>
       <?php if ((int)$c['tariff'] > 0): ?><span class="tag">Tarifa <?= (int)$c['tariff'] ?></span><?php endif; ?>
       <?php if ($c['pay_code'] !== ''): ?><span class="tag"><?= e(erp_pay_label($c["pay_code"])) ?></span><?php endif; ?>
     </p>
   </div>
   <div class="cf-actions">
+    <?php if (erp_customer_is_cms($c)): ?><a class="btn small" href="<?= e(url('/admin/clientes/' . rawurlencode((string)$c['cust_code']) . '/modificar')) ?>">Modificar</a><?php endif; ?>
     <?php if ($c['phone'] !== ''): ?><a class="btn small ghost" href="tel:<?= e(preg_replace('/[^\d+]/', '', $c['phone'])) ?>">Llamar</a><?php endif; ?>
     <?php if ($c['email'] !== ''): ?><a class="btn small ghost" href="mailto:<?= e($c['email']) ?>">Correo</a><?php endif; ?>
     <?php if ($c['nif'] !== ''): ?>
