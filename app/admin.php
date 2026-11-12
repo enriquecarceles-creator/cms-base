@@ -8,6 +8,7 @@ require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/import_wizard.php';
 require_once __DIR__ . '/doc_series.php';
 require_once __DIR__ . '/doc_params.php';
+require_once __DIR__ . '/doc_fields.php';
 require_once __DIR__ . '/docs_engine.php';
 require_once __DIR__ . '/docs_invoices.php';
 require_once __DIR__ . '/docs_actions.php';
@@ -196,8 +197,7 @@ function admin_render(string $view, array $vars = []): void
 }
 
 /**
- * Submenú de Configuración: grupo => [[clave, etiqueta, dirección]]. «Diseño de documentos» lleva por ahora a los ajustes de
- * documentos que ya existen (Sincronización manual con NCS), hasta que tenga su pantalla.
+ * Submenú de Configuración: grupo => [[clave, etiqueta, dirección]].
  */
 function admin_cfg_nav(): array
 {
@@ -205,7 +205,7 @@ function admin_cfg_nav(): array
         'Empresa' => [['empresa', 'Datos de la empresa', '/admin/configuracion/empresa']],
         'Documentos' => [
             ['series', 'Series', '/admin/configuracion/series'], ['parametros', 'Parámetros', '/admin/configuracion/parametros'], ['iva', 'IVA', '/admin/configuracion/iva'],
-            ['pagos', 'Formas de pago', '/admin/configuracion/pagos'], ['tarifas', 'Tarifas', '/admin/configuracion/tarifas'], ['diseno', 'Diseño de documentos', '/admin/erp#documentos'],
+            ['pagos', 'Formas de pago', '/admin/configuracion/pagos'], ['tarifas', 'Tarifas', '/admin/configuracion/tarifas'], ['diseno', 'Diseño de documentos', '/admin/configuracion/diseno'],
         ],
         'Sistema' => [
             ['general', 'General', '/admin/configuracion/general'], ['correo', 'Correo', '/admin/configuracion/correo'],
@@ -250,6 +250,9 @@ function admin_settings(string $sub): void
             break;
         case 'tarifas':
             admin_tariffs();
+            break;
+        case 'diseno':
+            admin_doc_design();
             break;
         case 'bloqueo':
             admin_period_lock();
@@ -305,7 +308,7 @@ function admin_icon(string $name): string
 /**
  * Menú del panel, organizado como un ERP: secciones con sus páginas. Cada página: [etiqueta, ruta, segmentos que la marcan,
  * quién la ve]. Quién: 'all' (cualquier usuario), 'catalog' (gestión de catálogo y admin), 'erp' (rol ERP y admin) o
- * 'admin'. Respeta además los módulos desactivados (slider, representantes).
+ * 'admin'. Las páginas de módulos (Slider, Representantes) se ven siempre; si el módulo está desactivado, la página enseña el interruptor.
  */
 function admin_menu_allows(string $who, string $role): bool
 {
@@ -346,8 +349,8 @@ function admin_menu(): array
             ['Página del catálogo', '/admin/pagina-catalogo', ['pagina-catalogo'], 'admin'],
             ['Páginas', '/admin/paginas', ['paginas'], 'admin'],
             ['Menú', '/admin/menu', ['menu'], 'admin'],
-            ...(feature('slider') ? [['Slider', '/admin/slider', ['slider'], 'admin']] : []),
-            ...(feature('reps') ? [['Representantes', '/admin/representantes', ['representantes'], 'admin']] : []),
+            ['Slider', '/admin/slider', ['slider'], 'admin'], // siempre a la vista: con el módulo desactivado, arriba sale el interruptor para activarlo
+            ['Representantes', '/admin/representantes', ['representantes'], 'admin'],
         ]],
         'settings' => ['Configuración', 'settings', [['Configuración', '/admin/configuracion', ['configuracion'], 'admin']]],
     ];
@@ -525,7 +528,7 @@ function admin_home(): void
         $alerts[] = ['err', 'El archivo instalar.php sigue en la web: bórralo por FTP. Cualquiera podría volver a instalarla.', null, null];
     }
     if (setting('noindex') === '1') {
-        $alerts[] = ['warn', 'La web está oculta a Google (noindex). Quítalo cuando la publiques.', is_admin() ? '/admin/configuracion/general' : null, 'General'];
+        $alerts[] = ['warn', 'La web está oculta a Google (noindex). Quítalo cuando la publiques.', is_admin() ? '/admin/pagina-inicio' : null, 'Página de inicio'];
     }
     if (is_admin()) {
         $last = setting('last_backup_at');
@@ -1145,6 +1148,9 @@ function admin_slider(): void
 {
     $db = db();
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (($_POST['action'] ?? '') === 'module') {
+            admin_module_post('slider', '/admin/slider');
+        }
         if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
             flash('La imagen pesa demasiado para el servidor.', 'err');
             redirect('/admin/slider');
@@ -1210,7 +1216,15 @@ function admin_reps(): void
 {
     $db = db();
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (($_POST['action'] ?? '') === 'module') {
+            admin_module_post('reps', '/admin/representantes');
+        }
         csrf_check();
+        if (($_POST['action'] ?? '') === 'title') { // título de la lista (antes en General)
+            save_setting('reps_title', mb_substr(trim((string)($_POST['reps_title'] ?? '')), 0, 200));
+            flash('Título guardado.');
+            redirect('/admin/representantes');
+        }
         $action = $_POST['action'] ?? '';
         $id = (int)($_POST['id'] ?? 0);
         $data = [
@@ -1231,7 +1245,7 @@ function admin_reps(): void
         }
         redirect('/admin/representantes');
     }
-    admin_render('reps', ['rows' => $db->query('SELECT * FROM reps ORDER BY zone')->fetchAll(), 'title' => 'Representantes']);
+    admin_render('reps', ['rows' => $db->query('SELECT * FROM reps ORDER BY zone')->fetchAll(), 'repsTitle' => db_setting('reps_title'), 'title' => 'Representantes']);
 }
 
 /* ---------- Datos de empresa ---------- */
@@ -1338,6 +1352,7 @@ function admin_home_page(): void
 ", (string)($_POST[$k] ?? ''))), 0, $max));
         }
         save_setting('home_news_count', (string)max(1, min(24, (int)($_POST['home_news_count'] ?? 8))));
+        save_setting('noindex', empty($_POST['noindex']) ? '0' : '1'); // «Ocultar la web a Google» (antes en General)
         // Tarjetas
         $cards = [];
         foreach ((array)($_POST['card_t'] ?? []) as $n => $t) {
@@ -1396,6 +1411,7 @@ function admin_home_page(): void
         'roots' => db()->query('SELECT id, name FROM categories WHERE parent_id IS NULL ORDER BY sort, name')->fetchAll(),
         'pick' => array_map('intval', (array)(json_decode(setting('home_families'), true) ?: [])),
         'nSlides' => (int)db()->query('SELECT COUNT(*) FROM slides WHERE visible = 1')->fetchColumn(),
+        'noindex' => setting('noindex') === '1',
         'title' => 'Página de inicio',
     ]);
 }
@@ -1423,18 +1439,66 @@ function admin_catalog_page(): void
             }
         }
         save_setting('catalog_filters', json_encode($keep));
+        // Nombres del catálogo (vacío = el de siempre) y módulos de esta página (antes en General)
+        foreach (TERM_DEFAULTS as $k => $_) {
+            save_setting('term_' . $k, mb_substr(trim(strip_tags((string)($_POST['term_' . $k] ?? ''))), 0, 40));
+        }
+        save_setting('term_gender', ($_POST['term_gender'] ?? '') === 'm' ? 'm' : 'f');
+        foreach (['pdf', 'sketch', 'lineup'] as $k) {
+            save_setting('mod_' . $k, in_array($k, (array)($_POST['mods'] ?? []), true) ? '1' : '0');
+        }
         flash('Página del catálogo guardada.');
         redirect('/admin/pagina-catalogo');
     }
+    $terms = [];
+    foreach (TERM_DEFAULTS as $k => $_) {
+        $terms['term_' . $k] = db_setting('term_' . $k);
+    }
+    $terms['term_gender'] = db_setting('term_gender') === 'm' ? 'm' : 'f';
     admin_render('catalog_page', [
         'title_v' => db_setting('catalog_title'), 'intro' => db_setting('catalog_intro'), 'opts' => catalog_opts(),
         'hasPrice' => field_price_public() !== null,
         'cand' => catalog_filter_candidates(), 'active' => catalog_filter_fields(),
+        'terms' => $terms, 'mods' => array_values(array_filter(['pdf', 'sketch', 'lineup'], 'feature')),
         'title' => 'Página del catálogo',
     ]);
 }
 
-/* ---------- Configuración: módulos, país, textos fijos ---------- */
+/* ---------- Interruptores de módulo (cada módulo se activa en la pantalla donde se usa) ---------- */
+
+/** Recuadro con el interruptor de un módulo para ponerlo arriba de su pantalla. */
+function admin_module_switch(string $key, string $back): string
+{
+    if (!isset(FEATURES[$key])) {
+        return '';
+    }
+    $on = feature($key);
+    return '<form method="post" action="' . e(url($back)) . '" class="modsw' . ($on ? '' : ' off') . '">' . csrf_field()
+        . '<input type="hidden" name="action" value="module"><input type="hidden" name="mod" value="' . e($key) . '"><input type="hidden" name="on" value="' . ($on ? '0' : '1') . '">'
+        . '<span class="modsw-t"><strong>' . e(FEATURES[$key][0]) . ':</strong> ' . ($on ? 'activado' : '<b>desactivado</b> (no se ve en la web)') . '</span> '
+        . '<button class="btn small' . ($on ? ' ghost' : '') . '" type="submit">' . ($on ? 'Desactivar' : 'Activar') . '</button>'
+        . '<small>' . e(FEATURES[$key][1]) . ' Desactivarlo solo lo oculta: no se borra nada.</small></form>';
+}
+
+/** POST del interruptor: activa o desactiva el módulo y vuelve a su pantalla. */
+function admin_module_post(string $key, string $back): void
+{
+    csrf_check();
+    if (($_POST['mod'] ?? '') !== $key || !isset(FEATURES[$key])) {
+        flash('Módulo desconocido.', 'err');
+        redirect($back);
+    }
+    $on = ($_POST['on'] ?? '') === '1';
+    save_setting('mod_' . $key, $on ? '1' : '0');
+    if ($key === 'slider') { // el módulo sigue al bloque «Slider» de la portada (y al revés)
+        $save = array_map(fn($b) => ['id' => $b['id'], 'on' => $b['id'] === 'slider' ? ($on ? 1 : 0) : $b['on']] + ($b['id'] === 'slider' ? ['replace' => $b['replace']] : []), home_blocks());
+        save_setting('home_blocks', (string)json_encode($save));
+    }
+    flash(FEATURES[$key][0] . ($on ? ' activado.' : ' desactivado.'));
+    redirect($back);
+}
+
+/* ---------- Configuración: región (prefijo y zona horaria) y dirección del panel ---------- */
 
 const CONFIG_TEXTS = [
     'reps_title' => ['Título de la lista de representantes', 'Representantes por zonas', ''],
@@ -1513,40 +1577,17 @@ function admin_config(): void
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
-        foreach (array_keys(features_help()) as $k) { // sin «slider»: se activa en Web → Página de inicio
-            save_setting('mod_' . $k, in_array($k, (array)($_POST['mods'] ?? []), true) ? '1' : '0');
-        }
         save_setting('phone_prefix', preg_replace('/\D+/', '', (string)($_POST['phone_prefix'] ?? '')));
         $tz = (string)($_POST['timezone'] ?? '');
         if (in_array($tz, timezone_identifiers_list(), true)) {
             save_setting('timezone', $tz);
         }
-        save_setting('noindex', empty($_POST['noindex']) ? '0' : '1');
-        foreach (CONFIG_TEXTS as $k => $_) {
-            save_setting($k, mb_substr(trim((string)($_POST[$k] ?? '')), 0, 200));
-        }
-        // Nombres del catálogo (vacío = el de siempre)
-        foreach (TERM_DEFAULTS as $k => $_) {
-            save_setting('term_' . $k, mb_substr(trim(strip_tags((string)($_POST['term_' . $k] ?? ''))), 0, 40));
-        }
-        save_setting('term_gender', ($_POST['term_gender'] ?? '') === 'm' ? 'm' : 'f');
-        flash('Configuración guardada.');
+        flash('Región guardada.');
         redirect('/admin/configuracion/general');
     }
-    $v = [];
-    foreach (CONFIG_TEXTS as $k => $_) {
-        $v[$k] = db_setting($k);
-    }
-    foreach (TERM_DEFAULTS as $k => $_) {
-        $v['term_' . $k] = db_setting('term_' . $k);
-    }
-    $v['term_gender'] = db_setting('term_gender') === 'm' ? 'm' : 'f';
     admin_render('config', [
-        'v' => $v,
-        'mods' => array_filter(array_keys(FEATURES), 'feature'),
         'prefix' => setting('phone_prefix', '34'),
         'tz' => date_default_timezone_get(),
-        'noindex' => setting('noindex') === '1',
         'cfg' => 'general', 'title' => 'General',
     ]);
 }
@@ -1626,6 +1667,9 @@ function admin_pages(string $sub): void
 {
     $db = db();
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (($_POST['action'] ?? '') === 'module') {
+            admin_module_post('map', '/admin/paginas');
+        }
         csrf_check();
         $a = (string)($_POST['action'] ?? '');
         if ($a === 'toggle') {

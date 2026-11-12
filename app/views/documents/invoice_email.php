@@ -15,7 +15,7 @@ if ($docx) {
 $fmtPct = fn($p) => $p === null ? '—' : rtrim(rtrim(number_format((float)$p, 1, ',', ''), '0'), ',') . ' %';
 $sizeTxt = fn(array $l) => $l['size_txt'] !== '' ? $l['size_txt'] : ((int)$l['size_no'] > 0 ? 'nº ' . $l['size_no'] : '');
 $colorTxt = fn(array $l) => $l['color_txt'] !== '' ? $l['color_txt'] : ((int)$l['color_no'] > 0 ? 'nº ' . $l['color_no'] : '');
-$cols = $d['cols'];
+$cols = doc_print_cols($d, (string)($docx['doc_type'] ?? 'factura'), $lines);
 $color = $d['color'];
 $ff = 'Arial,Helvetica,sans-serif';
 $custName = $cust ? ($cust['trade_name'] !== '' ? $cust['trade_name'] : $cust['name']) : '';
@@ -73,7 +73,7 @@ $logo = $co['logo'] ? (preg_match('#^https?://#', (string)$co['logo']) ? $co['lo
 <tr><td style="padding:14px 24px 0">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-word;font-size:12px;font-family:<?= $ff ?>">
     <tr>
-      <?php foreach ($cols as $c): ?><th<?= isset(DOC_COL_WIDTHS[$c]) ? ' width="' . DOC_COL_WIDTHS[$c] . '%"' : '' ?> align="<?= in_array($c, $right, true) ? 'right' : 'left' ?>" style="background:#f3f2ee;border-top:2px solid <?= e($color) ?>;border-bottom:2px solid <?= e($color) ?>;padding:5px 6px;font-size:11px;text-transform:uppercase;white-space:nowrap"><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
+      <?php foreach ($cols as $c): ?><th<?= isset(DOC_COL_WIDTHS[$c]) ? ' width="' . DOC_COL_WIDTHS[$c] . '%"' : '' ?> align="<?= in_array($c, $right, true) ? 'right' : 'left' ?>" style="background:#f3f2ee;border-top:2px solid <?= e($color) ?>;border-bottom:2px solid <?= e($color) ?>;padding:5px 6px;font-size:11px;text-transform:uppercase;white-space:nowrap"><?= e(doc_col_label($c)) ?></th><?php endforeach; ?>
     </tr>
     <?php if (!$lines): ?><tr><td colspan="<?= count($cols) ?>" style="padding:8px 6px;color:#6b665d">Esta factura no tiene líneas.</td></tr><?php endif; ?>
     <?php foreach ($shown as $l): $isTxt = (int)($l['kind'] ?? 0) === 1; ?>
@@ -88,6 +88,7 @@ $logo = $co['logo'] ? (preg_match('#^https?://#', (string)$co['logo']) ? $co['lo
           <?php elseif ($c === 'disc'): ?><td align="right" style="<?= $st ?>"><?= (int)$l['disc_bp'] > 0 ? e($fmtPct($l['disc_bp'] / 100)) : '' ?></td>
           <?php elseif ($c === 'amount'): ?><td align="right" style="<?= $st ?>"><?= e(erp_money((int)$l['amount_cents'])) ?></td>
           <?php elseif ($c === 'iva'): ?><td align="right" style="<?= $st ?>"><?= $lineRate !== null ? e($fmtPct($lineRate)) : '—' ?></td>
+          <?php elseif (str_starts_with($c, 'x:')): ?><td align="left" style="<?= $st ?>"><?= e(doc_line_extra_cell($c, $l)) ?></td>
           <?php endif; ?>
         <?php endforeach; endif; ?>
       </tr>

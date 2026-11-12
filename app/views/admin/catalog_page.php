@@ -1,12 +1,29 @@
 <?php /* Web → Página del catálogo: título, presentación, artículos por página, orden y qué sale en las tarjetas. */ ?>
 <div class="head"><h1>Página del catálogo</h1><a href="<?= e(url('/catalogo')) ?>" target="_blank" rel="noopener">Ver el catálogo ↗</a></div>
-<p class="hint">Cómo se ve el catálogo en la web. Los nombres de los grupos (<?= e(term('family')) ?> / <?= e(term('sub')) ?>) se cambian en <a href="<?= e(url('/admin/configuracion/general')) ?>">Configuración</a>.</p>
+<p class="hint">Cómo se ve el catálogo en la web. Los nombres de los grupos (<?= e(term('family')) ?> / <?= e(term('sub')) ?>) y las partes opcionales del catálogo se eligen más abajo.</p>
 
 <form method="post" class="form">
   <?= csrf_field() ?>
   <h2>Presentación</h2>
   <label>Título <input name="catalog_title" value="<?= e($title_v) ?>" maxlength="200" placeholder="<?= e(catalog_title_default()) ?>"><small>Vacío = «<?= e(catalog_title_default()) ?>».</small></label>
   <label>Texto de presentación (opcional) <textarea name="catalog_intro" rows="3" maxlength="2000"><?= e($intro) ?></textarea><small>Sale bajo el título, en la página principal del catálogo.</small></label>
+
+  <h2>Nombres del catálogo</h2>
+  <p class="hint" style="margin:0 0 6px">Cómo se llaman los grupos del catálogo en toda la web y en el panel (por ejemplo Categoría / Subcategoría). Las direcciones no cambian. Vacío = el nombre de siempre.</p>
+  <div class="two">
+    <?php foreach (['family' => 'Primer nivel (singular)', 'families' => 'Primer nivel (plural)', 'sub' => 'Segundo nivel (singular)', 'subs' => 'Segundo nivel (plural)'] as $k => $label): ?>
+      <label><?= e($label) ?> <input name="term_<?= e($k) ?>" value="<?= e($terms['term_' . $k]) ?>" placeholder="<?= e(TERM_DEFAULTS[$k]) ?>" maxlength="40"></label>
+    <?php endforeach; ?>
+  </div>
+  <label>Género de esos nombres
+    <select name="term_gender"><option value="f"<?= $terms['term_gender'] === 'f' ? ' selected' : '' ?>>Femenino (la familia, todas las familias)</option><option value="m"<?= $terms['term_gender'] === 'm' ? ' selected' : '' ?>>Masculino (el grupo, todos los grupos)</option></select>
+    <small>Para que frases como «Todas las…» o «… creada» concuerden.</small></label>
+
+  <h2>Partes opcionales</h2>
+  <?php foreach (['pdf', 'sketch', 'lineup'] as $mk): [$mn, $mh] = features_help()[$mk]; ?>
+    <label class="check"><input type="checkbox" name="mods[]" value="<?= e($mk) ?>"<?= in_array($mk, $mods, true) ? ' checked' : '' ?>> <span><b><?= e($mn) ?></b> — <?= e($mh) ?></span></label>
+  <?php endforeach; ?>
+  <small class="muted">Desactivar una parte solo la oculta: no se borra nada y se puede volver a activar.</small>
 
   <h2>Listado</h2>
   <div class="two">

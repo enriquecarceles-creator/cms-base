@@ -8,7 +8,8 @@ $annulled = $doc['status'] === 'anulado';
 $draft = $doc['status'] === 'borrador'; // factura aún sin emitir: vista previa sin número
 $test = docs_is_invoice((string)$doc['doc_type']) && (docs_is_test($doc) || ($draft && docp_bool('test_mode'))); // documento de prueba: sin validez fiscal
 $fmtPct = fn($p) => rtrim(rtrim(number_format((float)$p, 2, ',', ''), '0'), ',') . ' %';
-$cols = $d['cols'];
+$cols = doc_print_cols($d, (string)$doc['doc_type'], $lines);
+$model = doc_model_for((string)$doc['doc_type']);
 $sumRec = array_sum(array_column($vat, 'rec'));
 $custAddr = array_filter([(string)$doc['cust_address'], trim($doc['cust_postcode'] . ' ' . $doc['cust_city']), (string)$doc['cust_province']], 'strlen');
 ?><!doctype html>
@@ -70,6 +71,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 .sign div{border-top:1px solid var(--line);padding-top:4px}
 .testmark{margin:0 0 4mm;padding:5px 10px;border:2px solid #be1e1e;color:#be1e1e;text-align:center;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
 .stamp{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);border:8px solid rgba(190,30,30,.28);color:rgba(190,30,30,.28);font-size:84px;font-weight:800;letter-spacing:.12em;padding:0 26px;pointer-events:none;white-space:nowrap}
+<?= doc_model_css($model) ?>
 @page{size:A4;margin:<?= (int)$d['margin_mm'] ?>mm}
 @media print{
   body{background:#fff}
@@ -89,7 +91,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <div class="grp"><button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button></div>
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
-<div class="page"><article class="sheet">
+<div class="page"><article class="sheet m-<?= e($model) ?>">
   <?php if ($annulled || $draft || $test): ?><div class="stamp" aria-hidden="true"><?= $draft ? 'BORRADOR' : ($annulled ? 'ANULADO' : 'PRUEBA') ?></div><?php endif; ?>
   <?php if ($test): ?><p class="testmark"><?= e(docs_test_text()) ?></p><?php endif; ?>
   <header class="head">
@@ -122,7 +124,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <table class="lines">
     <?= doc_colgroup($cols) ?>
     <thead><tr>
-      <?php foreach ($cols as $c): ?><th<?= in_array($c, ['qty', 'price', 'disc', 'amount', 'iva'], true) ? ' class="num"' : '' ?>><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
+      <?php foreach ($cols as $c): ?><th<?= in_array($c, ['qty', 'price', 'disc', 'amount', 'iva'], true) ? ' class="num"' : '' ?>><?= e(doc_col_label($c)) ?></th><?php endforeach; ?>
     </tr></thead>
     <tbody>
     <?php foreach ($lines as $l): $isTxt = (int)($l['kind'] ?? 0) === 1; ?>
@@ -137,6 +139,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
           <?php elseif ($c === 'disc'): ?><td class="num"><?= (int)$l['disc_bp'] > 0 ? e($fmtPct($l['disc_bp'] / 100)) : '' ?></td>
           <?php elseif ($c === 'amount'): ?><td class="num"><?= e(docs_amount_txt((int)$l['amount_u'])) ?></td>
           <?php elseif ($c === 'iva'): ?><td class="num"><?= e($fmtPct($l['vat_bp'] / 100)) ?></td>
+          <?php elseif (str_starts_with($c, 'x:')): ?><td><?= e(doc_line_extra_cell($c, $l)) ?></td>
           <?php endif; ?>
         <?php endforeach; endif; ?>
       </tr>

@@ -534,11 +534,73 @@ function admin_doc_params(): void
             }
             $v[$k] = $x;
         }
+        // Series (tabla compacta): siguiente número y activa; se reutiliza el plan de la pantalla Series (mismas reglas)
+        $year = (int)date('Y');
+        $post2 = $_POST;
+        foreach (series_all() as $sid => $sr) { // si el número mostrado no se ha tocado, no se envía como cambio
+            $yr = (int)$sr['with_year'] === 1 ? $year : 0;
+            $cc = series_counters($sid)[$yr] ?? null;
+            $shown = $cc === null ? 1 : $cc['last'] + 1;
+            if (isset($post2['s'][$sid]['start']) && (string)$post2['s'][$sid]['start'] === (string)$shown) {
+                unset($post2['s'][$sid]['start']);
+            }
+            if (!isset($post2['s'][$sid])) {
+                $post2['s'][$sid] = [];
+            }
+        }
+        unset($post2['default'], $post2['new'], $post2['yr_year'], $post2['yr_series'], $post2['yr_start']);
+        $plan = series_plan($post2, series_ncs_letters(), $year, $errors);
+        // Campos de las líneas
+        $lfOld = docs_line_fields();
+        $lfNew = [];
+        $lfIn = (array)($_POST['lf'] ?? []);
+        $names = [];
+        foreach ($lfOld as $k => $f) {
+            $in = (array)($lfIn[$k] ?? []);
+            $in['docs'] = array_map('strval', (array)($in['docs'] ?? []));
+            if (!$f['builtin']) {
+                $in['name'] = trim((string)($in['name'] ?? $f['name']));
+                $in['type'] = $in['type'] ?? $f['type'];
+                $in['options'] = $in['options'] ?? $f['options'];
+            }
+            $nf = dlf_normalize($k, $in, (bool)$f['builtin']);
+            if (!$f['builtin'] && $in['name'] === '') {
+                $errors[] = 'Un campo de las líneas necesita nombre.';
+            }
+            if ($nf['type'] === 'list' && !$nf['options']) {
+                $errors[] = 'El campo «' . $nf['name'] . '» es una lista: escribe sus opciones, separadas por comas.';
+            }
+            $lfNew[$k] = $nf;
+            $names[mb_strtolower($nf['name'])][] = $k;
+        }
+        $nw = (array)($_POST['lfnew'] ?? []);
+        if (trim((string)($nw['name'] ?? '')) !== '') {
+            $customN = count(array_filter($lfNew, fn($f) => !$f['builtin']));
+            $nums = array_map(fn($k) => (int)substr((string)$k, 1), array_filter(array_keys($lfNew), fn($k) => str_starts_with((string)$k, 'x')));
+            $nk = 'x' . ($nums ? max($nums) + 1 : 1);
+            $nf = dlf_normalize($nk, ['name' => (string)$nw['name'], 'type' => (string)($nw['type'] ?? 'text'), 'options' => (string)($nw['options'] ?? ''), 'on' => 1, 'form' => 1, 'print' => 1], false);
+            if ($customN >= DOC_LINE_MAX_CUSTOM) {
+                $errors[] = 'Como mucho ' . DOC_LINE_MAX_CUSTOM . ' campos propios.';
+            } elseif ($nf['type'] === 'list' && !$nf['options']) {
+                $errors[] = 'El campo «' . $nf['name'] . '» es una lista: escribe sus opciones, separadas por comas.';
+            } else {
+                $lfNew[$nk] = $nf;
+                $names[mb_strtolower($nf['name'])][] = $nk;
+            }
+        }
+        foreach ($names as $nm => $ks) {
+            if (count($ks) > 1) {
+                $errors[] = 'Hay dos campos de las líneas con el nombre «' . $nm . '».';
+            }
+        }
         $defaults = [];
         foreach (DOC_SERIES_TYPES as $type => $label) {
             $id = (int)(($_POST['series'] ?? [])[$type] ?? 0);
             if ($id > 0) {
                 $s = $series[$id] ?? null;
+                if ($s && isset($_POST['s'][$id]) && empty($_POST['s'][$id]['active'])) {
+                    $s = null; // se está desactivando en esta misma pantalla
+                }
                 if (!$s || $s['doc_type'] !== $type) {
                     $errors[] = 'La serie por defecto de «' . $label . '» debe ser una serie activa de ese tipo.';
                 } else {
@@ -548,6 +610,8 @@ function admin_doc_params(): void
         }
         if (!$errors) {
             $db->beginTransaction();
+            series_apply($plan, $year);
+            docs_line_fields_save($lfNew);
             foreach ($v as $k => $val) {
                 save_setting('docp_' . $k, $val);
             }
@@ -571,6 +635,12 @@ function admin_doc_params(): void
             redirect('/admin/configuracion/parametros');
         }
     }
+    $allSeries = series_all();
+    $counters = [];
+    foreach ($allSeries as $sid => $_) {
+        $counters[$sid] = series_counters($sid);
+    }
     admin_render('doc_params', ['tariffs' => $tariffs, 'methods' => $methods, 'series' => $series, 'retail' => erp_retail_code(),
+        'allSeries' => $allSeries, 'counters' => $counters, 'year' => (int)date('Y'), 'lineFields' => docs_line_fields(),
         'errors' => $errors, 'old' => $old, 'cfg' => 'parametros', 'title' => 'Parámetros de documentos']);
 }

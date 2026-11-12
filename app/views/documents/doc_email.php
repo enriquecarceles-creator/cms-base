@@ -46,7 +46,7 @@ $td = 'padding:5px 6px;border-bottom:1px solid #e6e3dc;font-size:12px;font-famil
     <tr style="background:<?= e($color) ?>;color:#ffffff"><th align="left" style="<?= $td ?>;color:#fff">Artículo</th><th align="right" width="11%" style="<?= $td ?>;color:#fff">Uds.</th><th align="right" width="15%" style="<?= $td ?>;color:#fff">Precio</th><th align="right" width="9%" style="<?= $td ?>;color:#fff">Dto.</th><th align="right" width="17%" style="<?= $td ?>;color:#fff">Importe</th></tr>
     <?php foreach ($shown as $l): if ((int)($l['kind'] ?? 0) === 1): ?>
       <tr><td colspan="5" style="<?= $td ?>"><?= doc_line_html($l) ?></td></tr>
-    <?php continue; endif; $det = trim($l['size_txt'] . ($l['size_txt'] !== '' && $l['color_txt'] !== '' ? ' · ' : '') . $l['color_txt']); ?>
+    <?php continue; endif; $det = trim($l['size_txt'] . ($l['size_txt'] !== '' && $l['color_txt'] !== '' ? ' · ' : '') . $l['color_txt']); foreach (docs_extra_get($l) as $xk => $xv) { $det .= ($det !== '' ? ' · ' : '') . (docs_line_fields()[$xk]['name'] ?? 'Campo') . ': ' . $xv; } ?>
       <tr>
         <td style="<?= $td ?>"><?= e($l['ref']) ?> <?= doc_line_html($l) ?><?= $det !== '' ? '<br><span style="color:#6b665d">' . e($det) . '</span>' : '' ?></td>
         <td align="right" style="<?= $td ?>"><?= e(docs_qty_txt((int)$l['qty_u'])) ?></td>

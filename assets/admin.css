@@ -538,6 +538,7 @@ html:has(.savebar){scroll-padding-bottom:96px}
 .df-grid .df-c{width:5em}
 .df-grid .df-n{width:4.2em;text-align:right}
 .df-grid .df-d{width:3em;text-align:right}
+.if-grid col.k-e{width:6.4em}.df-grid .df-e{width:100%}
 .df-grid select{width:auto;max-width:5.6em;padding:2px 2px}
 .df-grid tr.df-text td{background:#faf8f2}
 .df-grid tr.df-text textarea{font-style:italic}
@@ -613,3 +614,25 @@ form.cfgf .checks-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)
 .df-dues td{padding:4px 10px;vertical-align:middle}
 .df-dues th{padding:8px 10px}
 .df-dues input{padding:4px 8px;margin:0;width:100%;height:30px}
+
+/* Parámetros de documentos: bloques plegables y campos de línea */
+form.cfgf details.blk{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:0 0 10px;padding:0 14px}
+form.cfgf details.blk>summary{cursor:pointer;font-weight:600;font-size:.88rem;padding:9px 0;list-style:none}
+form.cfgf details.blk>summary::-webkit-details-marker{display:none}
+form.cfgf details.blk>summary::before{content:"\25B8";display:inline-block;width:1.1em;color:var(--steel);transition:transform .12s}
+form.cfgf details.blk[open]>summary::before{transform:rotate(90deg)}
+form.cfgf details.blk[open]{padding-bottom:12px}
+form.cfgf .lg{display:block;font-size:.8rem;margin-bottom:4px}
+.lf-tbl td,.lf-tbl th{text-align:center}.lf-tbl td:first-child,.lf-tbl th:first-child,.lf-tbl td:nth-child(2),.lf-tbl th:nth-child(2){text-align:left}
+.lf-tbl input:not([type=checkbox]){min-width:7em}.lf-tbl select{margin-bottom:3px}
+.m-thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.m-thumbs{grid-template-columns:1fr}}
+.m-card{display:block;border:2px solid var(--line);border-radius:10px;padding:10px;text-align:center;cursor:pointer;background:var(--surface)}
+.m-card:has(input:checked){border-color:#3b6fb6;box-shadow:0 0 0 2px rgba(59,111,182,.18)}
+.m-card svg{display:block;margin:6px auto;height:auto;max-width:100%}
+.m-card input{width:auto;height:auto}
+
+/* Interruptor de módulo (arriba de Slider, Representantes y Páginas) */
+.modsw{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:8px 14px;margin:0 0 12px}
+.modsw.off{border-color:#d9a400;background:#fff8e1}
+.modsw small{flex-basis:100%;color:var(--steel);font-size:.76rem}

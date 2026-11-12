@@ -347,7 +347,7 @@ if ($step === 5) {
     foreach (timezone_identifiers_list() as $tz) {
         $tzs .= '<option' . ($tz === $d['timezone'] ? ' selected' : '') . '>' . e($tz) . '</option>';
     }
-    $h = '<h1>Opciones de la web</h1><p>Elige qué partes quieres usar. Se pueden cambiar cuando quieras en <em>Configuración → General</em>.</p>'
+    $h = '<h1>Opciones de la web</h1><p>Elige qué partes quieres usar. Se pueden cambiar cuando quieras en el panel (Web y Configuración).</p>'
         . '<form method="post" class="form">' . csrf_field()
         . '<fieldset><legend>Módulos</legend>' . $mods . '</fieldset>'
         . '<div class="two"><label>Prefijo telefónico del país <input name="phone_prefix" value="' . e($d['phone_prefix']) . '" inputmode="numeric" maxlength="4"><small>Se añade a los teléfonos para llamar desde el móvil. Vacío = sin prefijo.</small></label>'

@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 /** Valores por defecto de los ajustes de diseño (se guardan como doc_<clave> en settings). */
 require_once __DIR__ . '/docs_dues.php';
+require_once __DIR__ . '/doc_fields.php';
 
 const DOC_DEFAULTS = [
     'template' => 'classic',          // archivo app/views/documents/invoice_<plantilla>.php
@@ -182,14 +183,20 @@ function doc_line_html(array $l): string
 }
 
 /** Ancho fijo de cada columna de la tabla de líneas impresa (la descripción, sin ancho, se queda con el resto). */
-const DOC_COL_WIDTHS = ['code' => 12, 'size' => 6, 'color' => 9, 'qty' => 7, 'price' => 10, 'disc' => 6, 'amount' => 11, 'iva' => 6];
+const DOC_COL_WIDTHS = ['code' => 12, 'size' => 7, 'color' => 9, 'qty' => 7, 'price' => 10, 'disc' => 6, 'amount' => 11, 'iva' => 6];
 
 /** <colgroup> de la tabla de líneas: con table-layout:fixed las columnas de números siempre caben y la descripción parte las palabras largas. */
 function doc_colgroup(array $cols): string
 {
+    $w = [];
+    foreach ($cols as $c) {
+        $w[$c] = DOC_COL_WIDTHS[$c] ?? (str_starts_with($c, 'x:') ? 9 : 0);
+    }
+    $sum = array_sum($w);
+    $k = $sum > 70 ? 70 / $sum : 1; // con muchas columnas, las de datos se estrechan para que la descripción conserve al menos el 30 %
     $out = '<colgroup>';
     foreach ($cols as $c) {
-        $out .= isset(DOC_COL_WIDTHS[$c]) ? '<col style="width:' . DOC_COL_WIDTHS[$c] . '%">' : '<col>';
+        $out .= $w[$c] > 0 ? '<col style="width:' . round($w[$c] * $k, 2) . '%">' : '<col>';
     }
     return $out . '</colgroup>';
 }

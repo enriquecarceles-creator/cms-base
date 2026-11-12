@@ -1,4 +1,5 @@
 <div class="head"><h1>Slider de la portada</h1><a href="<?= e(url('/admin/pagina-inicio')) ?>">← Volver a Página de inicio</a></div>
+<?= admin_module_switch('slider', '/admin/slider') ?>
 <p class="hint">El slider se activa, se coloca y se decide si sustituye a la cabecera en <a href="<?= e(url('/admin/pagina-inicio#bloques')) ?>">Página de inicio</a>. Aquí se gestionan sus imágenes. Pase de imágenes grandes en la cabecera de la portada, con efecto y texto opcional. Si no hay ninguna diapositiva visible, la portada muestra el titular normal. Mejor imágenes anchas (por ejemplo 1920 × 800 px) y no demasiado claras, para que se lea el texto.</p>
 
 <form method="post" class="form">

@@ -3,6 +3,7 @@
   <h1>Páginas <small>(<?= count($rows) ?>)</small></h1>
   <a class="btn" href="<?= e(url('/admin/paginas/nueva')) ?>">+ Nueva página</a>
 </div>
+<?= admin_module_switch('map', '/admin/paginas') ?>
 <p class="hint">Páginas propias de la web (aviso legal, política de privacidad, «Sobre nosotros»…). Cada una tiene su dirección, por ejemplo <code><?= e(site_origin()) ?><?= e(url('/aviso-legal')) ?></code>. Las visibles salen en el pie de la web y en el mapa del sitio para Google.</p>
 
 <?php if (!$rows): ?>

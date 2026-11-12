@@ -1,4 +1,10 @@
 <div class="head"><h1>Representantes</h1></div>
+<?= admin_module_switch('reps', '/admin/representantes') ?>
+<form method="post" class="rep-edit" style="margin:0 0 10px">
+  <?= csrf_field() ?><input type="hidden" name="action" value="title">
+  <label>Título de la lista de representantes <input name="reps_title" value="<?= e($repsTitle) ?>" placeholder="<?= e(config_text_default('reps_title')) ?>" maxlength="200"></label>
+  <button class="btn small ghost" type="submit">Guardar título</button>
+</form>
 <p class="hint">Cada línea es una zona. Si varias zonas comparten representante, la web las agrupa sola en una única ficha (mismo nombre, dirección y teléfono).</p>
 
 <div class="table">

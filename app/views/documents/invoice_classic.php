@@ -18,7 +18,8 @@ $credit = (int)$inv['total_cents'] < 0;
 $fmtPct = fn($p) => $p === null ? '—' : rtrim(rtrim(number_format((float)$p, 1, ',', ''), '0'), ',') . ' %';
 $sizeTxt = fn(array $l) => $l['size_txt'] !== '' ? $l['size_txt'] : ((int)$l['size_no'] > 0 ? 'nº ' . $l['size_no'] : '');
 $colorTxt = fn(array $l) => $l['color_txt'] !== '' ? $l['color_txt'] : ((int)$l['color_no'] > 0 ? 'nº ' . $l['color_no'] : '');
-$cols = $d['cols'];
+$cols = doc_print_cols($d, (string)($docx['doc_type'] ?? 'factura'), $lines);
+$model = doc_model_for((string)($docx['doc_type'] ?? 'factura'), $public);
 $custName = $cust ? ($cust['trade_name'] !== '' ? $cust['trade_name'] : $cust['name']) : '';
 $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' ' . $cust['city']), $cust['province']], 'strlen') : [];
 ?><!doctype html>
@@ -78,6 +79,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 .dues td:last-child{text-align:right;font-weight:600;white-space:nowrap}
 .legal{margin-top:9mm;padding-top:4mm;border-top:1px solid var(--line);color:var(--muted);font-size:11px;text-align:center}
 .stamp{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);border:8px solid rgba(190,30,30,.28);color:rgba(190,30,30,.28);font-size:84px;font-weight:800;letter-spacing:.12em;padding:0 26px;pointer-events:none;white-space:nowrap}
+<?= doc_model_css($model) ?>
 @page{size:A4;margin:<?= (int)$d['margin_mm'] ?>mm}
 @media print{
   body{background:#fff}
@@ -111,7 +113,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <?php endif; ?>
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
-<div class="page"><article class="sheet">
+<div class="page"><article class="sheet m-<?= e($model) ?>">
   <?php if ($annulled): ?><div class="stamp" aria-hidden="true"><?= e($d['stamp']) ?></div><?php endif; ?>
   <header class="head">
     <div class="co">
@@ -155,7 +157,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <table class="lines">
     <?= doc_colgroup($cols) ?>
     <thead><tr>
-      <?php foreach ($cols as $c): ?><th<?= in_array($c, ['qty', 'price', 'disc', 'amount', 'iva'], true) ? ' class="num"' : '' ?>><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
+      <?php foreach ($cols as $c): ?><th<?= in_array($c, ['qty', 'price', 'disc', 'amount', 'iva'], true) ? ' class="num"' : '' ?>><?= e(doc_col_label($c)) ?></th><?php endforeach; ?>
     </tr></thead>
     <tbody>
     <?php if (!$lines): ?><tr><td colspan="<?= count($cols) ?>" class="muted">Esta factura no tiene líneas.</td></tr><?php endif; ?>
@@ -171,6 +173,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
           <?php elseif ($c === 'disc'): ?><td class="num"><?= (int)$l['disc_bp'] > 0 ? e($fmtPct($l['disc_bp'] / 100)) : '' ?></td>
           <?php elseif ($c === 'amount'): ?><td class="num"><?= e(erp_money((int)$l['amount_cents'])) ?></td>
           <?php elseif ($c === 'iva'): ?><td class="num"><?= $lineRate !== null ? e($fmtPct($lineRate)) : '—' ?></td>
+          <?php elseif (str_starts_with($c, 'x:')): ?><td><?= e(doc_line_extra_cell($c, $l)) ?></td>
           <?php endif; ?>
         <?php endforeach; endif; ?>
       </tr>

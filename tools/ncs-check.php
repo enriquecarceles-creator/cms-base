@@ -680,6 +680,42 @@ $check('vencimientos: y ninguna cuota sale a 0 €', $badZero === 0);
 $realPay = array_map('strval', array_keys(pay_codes_in_use()));
 $check('vencimientos: las formas de pago de NCS traídas nacen como contado (0) y se pueden editar', $realPay === [] || (dues_method_terms($realPay[0]) === [0]));
 
+/* 5h. Campos de las líneas y modelos de impresión */
+$section('Campos de las líneas y modelos de impresión');
+require_once $tmp . '/app/doc_fields.php';
+$ff = docs_line_fields();
+$check('campos de línea: de serie Talla, Color y Dto. activos', isset($ff['size'], $ff['color'], $ff['disc']) && $ff['size']['on'] === 1 && $ff['disc']['type'] === 'number');
+docs_line_fields_save($ff + ['x1' => dlf_normalize('x1', ['name' => 'Lote', 'type' => 'list', 'options' => 'A, B, A', 'on' => 1, 'form' => 1, 'print' => 1], false)]);
+$ff = docs_line_fields();
+$check('campo propio «Lote»: lista de opciones sin repetidos', ($ff['x1']['options'] ?? null) === ['A', 'B']);
+$lc = db()->query('SELECT 1')->fetchColumn(); // base temporal abierta
+$ex = docs_extra_from_post(['x' => ['x1' => 'B']], null, 'pedido');
+$check('campo propio: valor de la lista se guarda como JSON', $ex === '{"x1":"B"}', $ex);
+$ex = docs_extra_from_post(['x' => ['x1' => 'Z']], null, 'pedido');
+$check('campo propio: un valor fuera de la lista no se guarda', $ex === '', $ex);
+$ex = docs_extra_from_post(['x' => ['x1' => '']], ['extra' => '{"x1":"A"}'], 'pedido');
+$check('campo propio: vacío en el formulario lo quita', $ex === '', $ex);
+$d0 = doc_settings();
+$cols = doc_print_cols($d0, 'factura', [['size_txt' => '', 'color_txt' => '', 'disc_bp' => 0, 'extra' => '', 'kind' => 0]]);
+$check('hoja impresa: el campo propio sale tras la descripción', array_search('x:x1', $cols, true) === array_search('desc', $cols, true) + 1);
+$ffo = docs_line_fields();
+$ffo['color']['on'] = 0;
+docs_line_fields_save($ffo);
+$colsNew = doc_print_cols($d0, 'factura', [['size_txt' => '', 'color_txt' => '', 'disc_bp' => 0, 'extra' => '', 'kind' => 0]]);
+$colsOld = doc_print_cols($d0, 'factura', [['size_txt' => '', 'color_txt' => 'Rojo', 'disc_bp' => 0, 'extra' => '', 'kind' => 0]]);
+$check('campo desactivado: no sale en un documento nuevo', !in_array('color', $colsNew, true));
+$check('campo desactivado: el documento antiguo con valor lo sigue imprimiendo', in_array('color', $colsOld, true));
+$check('modelos: tres, y el clásico no cambia nada salvo el título de columna', count(DOC_MODELS) === 3 && !str_contains(doc_model_css('classic'), 'm-modern') && str_contains(doc_model_css('modern'), '.m-modern') && str_contains(doc_model_css('compact'), '.m-compact'));
+$check('modelos: una miniatura SVG por modelo', count(array_filter(array_keys(DOC_MODELS), fn($m) => str_starts_with(doc_model_thumb($m), '<svg'))) === 3);
+$wsum = 0;
+preg_match_all('/width:([0-9.]+)%/', doc_colgroup(['code', 'desc', 'size', 'color', 'x:x1', 'x:x2', 'x:x3', 'qty', 'price', 'disc', 'amount', 'iva']), $mw);
+foreach ($mw[1] as $w1) {
+    $wsum += (float)$w1;
+}
+$check('columnas: con muchas columnas la descripción conserva al menos el 30 %', $wsum <= 70.5, (string)$wsum);
+save_setting('docp_line_fields', '');
+unset($GLOBALS['dlf_cache']);
+
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();

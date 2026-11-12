@@ -29,6 +29,9 @@ $last = count($blocks) - 1;
   <?php /* Botón por defecto: al pulsar Intro en un campo se guarda, no se mueve ningún bloque */ ?>
   <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Guardar</button>
 
+  <h2>Buscadores</h2>
+  <label class="check"><input type="checkbox" name="noindex" value="1"<?= !empty($noindex) ? ' checked' : '' ?>> <span><b>Ocultar la web a Google</b> — para webs en pruebas. Desactívalo cuando la publiques.</span></label>
+
   <h2 id="bloques">Bloques</h2>
   <p class="muted" style="margin:0">Marca los bloques que quieres en la portada y ordénalos: con los números (el más bajo sale primero) o con las flechas.</p>
   <div class="tbl-wrap">

@@ -257,12 +257,12 @@ function docs_mirror(array $doc): void
     $db->prepare('INSERT INTO erp_invoices (' . implode(',', $cols) . ') VALUES (' . implode(',', array_fill(0, count($cols), '?')) . ')')->execute(array_values($row));
     $st->execute([(string)$doc['doc_code']]);
     $iid = (int)$st->fetchColumn();
-    $ins = $db->prepare('INSERT INTO erp_invoice_lines (invoice_id, src_key, line_no, article_code, title, qty_milli, price_cents, disc_bp, amount_cents, vat_code, size_no, color_no, size_txt, color_txt, kind, detail)
-        VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)');
+    $ins = $db->prepare('INSERT INTO erp_invoice_lines (invoice_id, src_key, line_no, article_code, title, qty_milli, price_cents, disc_bp, amount_cents, vat_code, size_no, color_no, size_txt, color_txt, kind, detail, extra)
+        VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?)');
     foreach ($lines as $i => $l) {
         $ins->execute([$iid, 'cms:' . (int)$l['id'], $i + 1, mb_substr((string)$l['ref'], 0, 191), (string)$l['title'], (int)round((int)$l['qty_u'] / 10),
             (int)round((int)$l['price_u'] / (DOCS_PRICE / 100)), (int)$l['disc_bp'], (int)round((int)$l['amount_u'] / (DOCS_AMOUNT / 100)),
-            vat_format_pct((int)$l['vat_bp']), (string)$l['size_txt'], (string)$l['color_txt'], (int)$l['kind'], (string)$l['detail']]);
+            vat_format_pct((int)$l['vat_bp']), (string)$l['size_txt'], (string)$l['color_txt'], (int)$l['kind'], (string)$l['detail'], (string)($l['extra'] ?? '')]);
     }
 }
 

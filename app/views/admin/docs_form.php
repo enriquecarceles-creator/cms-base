@@ -33,7 +33,9 @@ if (!$ro) { // filas vacías al final: de artículo y de texto
         $rows[] = ['l' => null, 'm' => $blankMeta, 'text' => true];
     }
 }
-$ncols = 11 + ($kind === 'pedido' && $hasDone ? 1 : 0); // columnas de la rejilla (para las filas de texto)
+$lf = docs_form_fields($kind); // campos de las líneas activos (Configuración → Parámetros): Talla, Color, Dto. y los propios
+$lfx = docs_form_custom($kind);
+$ncols = 8 + (isset($lf['size']) ? 1 : 0) + (isset($lf['color']) ? 1 : 0) + (isset($lf['disc']) ? 1 : 0) + count($lfx) + ($kind === 'pedido' && $hasDone ? 1 : 0); // columnas de la rejilla (para las filas de texto)
 $textOf = fn(?array $l) => $l === null ? '' : (string)$l['title'] . ((string)($l['detail'] ?? '') !== '' ? "\n" . $l['detail'] : '');
 $rowsOf = fn(string $t) => max(1, min(12, substr_count($t, "\n") + 1));
 $doneLabel = $inv ? 'Emitir' : 'Confirmar';
@@ -187,11 +189,11 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
   <?php if (!$isNew): ?>
   <div class="if-grid-wrap">
     <table class="if-grid df-grid">
-      <colgroup><col class="k-n"><col class="k-ref"><col><col class="k-s"><col class="k-c"><col class="k-q"><?php if ($kind === 'pedido' && $hasDone): ?><col class="k-q"><?php endif; ?><col class="k-p"><col class="k-d"><col class="k-v"><col class="k-a"><col class="k-x"></colgroup>
+      <colgroup><col class="k-n"><col class="k-ref"><col><?php if (isset($lf['size'])): ?><col class="k-s"><?php endif; ?><?php if (isset($lf['color'])): ?><col class="k-c"><?php endif; ?><?php foreach ($lfx as $_): ?><col class="k-e"><?php endforeach; ?><col class="k-q"><?php if ($kind === 'pedido' && $hasDone): ?><col class="k-q"><?php endif; ?><col class="k-p"><?php if (isset($lf['disc'])): ?><col class="k-d"><?php endif; ?><col class="k-v"><col class="k-a"><col class="k-x"></colgroup>
       <thead><tr>
-        <th class="c">Nº</th><th>Ref.</th><th>Descripción</th><th>Talla</th><th>Color</th><th class="r">Uds.</th>
+        <th class="c">Nº</th><th>Ref.</th><th>Descripción</th><?php if (isset($lf['size'])): ?><th>Talla</th><?php endif; ?><?php if (isset($lf['color'])): ?><th>Color</th><?php endif; ?><?php foreach ($lfx as $f): ?><th><?= e($f['name']) ?></th><?php endforeach; ?><th class="r">Uds.</th>
         <?php if ($kind === 'pedido' && $hasDone): ?><th class="r" title="Unidades ya servidas en albaranes">Serv.</th><?php endif; ?>
-        <th class="r">Precio</th><th class="r">Dto.%</th><th>IVA</th><th class="r">Importe</th><th class="c" title="Quitar la línea al guardar">Quitar</th>
+        <th class="r">Precio</th><?php if (isset($lf['disc'])): ?><th class="r">Dto.%</th><?php endif; ?><th>IVA</th><th class="r">Importe</th><th class="c" title="Quitar la línea al guardar">Quitar</th>
       </tr></thead>
       <tbody>
       <?php foreach ($rows as $i => $row):
@@ -217,14 +219,18 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
           <td><input class="df-ref" name="<?= $nm ?>[ref]" value="<?= e((string)($l['ref'] ?? '')) ?>" maxlength="100" list="dl-art" data-search="art" aria-label="Referencia de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly title="Línea servida o venida de un pedido: el artículo no se cambia"' : '' ?>>
             <?php if ($hasProd && !empty($m['prod']['id'])): ?><a class="df-plink" href="<?= e(url('/admin/articulo/' . (int)$m['prod']['id'])) ?>" target="_blank" rel="noopener" title="Abrir el artículo">↗</a><?php endif; ?></td>
           <td><textarea class="df-title" name="<?= $nm ?>[title]" rows="<?= $rowsOf($txt) ?>" aria-label="Descripción de la línea <?= $i + 1 ?>"<?= $hasProd && !$askTitle ? ' title="La primera línea es el nombre del artículo (se pone solo); escribe debajo lo que quieras añadir"' : '' ?>><?= e($txt) ?></textarea></td>
-          <td><input class="df-s" name="<?= $nm ?>[size]" value="<?= e((string)($l['size_txt'] ?? '')) ?>" maxlength="40" list="dl-s<?= $i ?>" aria-label="Talla de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly' : '' ?>>
-            <?php if ($m['opts']['sizes']): ?><datalist id="dl-s<?= $i ?>"><?php foreach ($m['opts']['sizes'] as $o): ?><option value="<?= e($o) ?>"><?php endforeach; ?></datalist><?php endif; ?></td>
-          <td><input class="df-c" name="<?= $nm ?>[color]" value="<?= e((string)($l['color_txt'] ?? '')) ?>" maxlength="60" list="dl-c<?= $i ?>" aria-label="Color de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly' : '' ?>>
-            <?php if ($m['opts']['colors']): ?><datalist id="dl-c<?= $i ?>"><?php foreach ($m['opts']['colors'] as $o): ?><option value="<?= e($o) ?>"><?php endforeach; ?></datalist><?php endif; ?></td>
+          <?php if (isset($lf['size'])): ?><td><input class="df-s" name="<?= $nm ?>[size]" value="<?= e((string)($l['size_txt'] ?? '')) ?>" maxlength="40" list="dl-s<?= $i ?>" aria-label="Talla de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly' : '' ?>>
+            <?php if ($m['opts']['sizes']): ?><datalist id="dl-s<?= $i ?>"><?php foreach ($m['opts']['sizes'] as $o): ?><option value="<?= e($o) ?>"><?php endforeach; ?></datalist><?php endif; ?></td><?php endif; ?>
+          <?php if (isset($lf['color'])): ?><td><input class="df-c" name="<?= $nm ?>[color]" value="<?= e((string)($l['color_txt'] ?? '')) ?>" maxlength="60" list="dl-c<?= $i ?>" aria-label="Color de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly' : '' ?>>
+            <?php if ($m['opts']['colors']): ?><datalist id="dl-c<?= $i ?>"><?php foreach ($m['opts']['colors'] as $o): ?><option value="<?= e($o) ?>"><?php endforeach; ?></datalist><?php endif; ?></td><?php endif; ?>
+          <?php if ($lfx): $lx = $l !== null ? docs_extra_get($l) : []; foreach ($lfx as $fk => $f): $fv = (string)($lx[$fk] ?? ''); ?>
+          <td><?php if ($f['type'] === 'list'): ?><select class="df-e" name="<?= $nm ?>[x][<?= e($fk) ?>]" aria-label="<?= e($f['name']) ?> de la línea <?= $i + 1 ?>"><option value=""></option><?php if ($fv !== '' && !in_array($fv, $f['options'], true)): ?><option value="<?= e($fv) ?>" selected><?= e($fv) ?></option><?php endif; ?><?php foreach ($f['options'] as $o): ?><option value="<?= e($o) ?>"<?= $o === $fv ? ' selected' : '' ?>><?= e($o) ?></option><?php endforeach; ?></select>
+            <?php else: ?><input class="df-e" name="<?= $nm ?>[x][<?= e($fk) ?>]" value="<?= e($fv) ?>" maxlength="60"<?= $f['type'] === 'number' ? ' inputmode="decimal"' : '' ?> aria-label="<?= e($f['name']) ?> de la línea <?= $i + 1 ?>"><?php endif; ?></td>
+          <?php endforeach; endif; ?>
           <td class="r"><input class="df-n" name="<?= $nm ?>[qty]" value="<?= $l !== null ? e($num((int)$l['qty_u'], DOCS_QTY, $decQ)) : '' ?>" inputmode="decimal" aria-label="Unidades de la línea <?= $i + 1 ?>" data-q<?= $inv && $l !== null && (int)($l['src_line_id'] ?? 0) > 0 ? ' readonly title="Unidades del albarán"' : '' ?>></td>
           <?php if ($kind === 'pedido' && $hasDone): ?><td class="r muted"><?= $l !== null && (int)$l['done_u'] > 0 ? e(docs_qty_txt((int)$l['done_u'])) : '' ?></td><?php endif; ?>
           <td class="r"><input class="df-n" name="<?= $nm ?>[price]" value="<?= $l !== null ? e($num((int)$l['price_u'], DOCS_PRICE, $decP)) : '' ?>" inputmode="decimal" aria-label="Precio de la línea <?= $i + 1 ?>" data-p<?= $hasProd && !$askPrice ? ' readonly title="El precio sale de la tarifa (Configuración → Parámetros: «Pedir siempre precio» desactivado)"' : '' ?>></td>
-          <td class="r"><input class="df-d" name="<?= $nm ?>[disc]" value="<?= $l !== null && (int)$l['disc_bp'] > 0 ? e($num((int)$l['disc_bp'], 100, 2)) : '' ?>" inputmode="decimal" aria-label="Descuento de la línea <?= $i + 1 ?>" data-d<?= !$askDisc ? ' readonly title="El descuento es el del cliente (Configuración → Parámetros: «Pedir siempre descuento» desactivado)"' : '' ?>></td>
+          <?php if (isset($lf['disc'])): ?><td class="r"><input class="df-d" name="<?= $nm ?>[disc]" value="<?= $l !== null && (int)$l['disc_bp'] > 0 ? e($num((int)$l['disc_bp'], 100, 2)) : '' ?>" inputmode="decimal" aria-label="Descuento de la línea <?= $i + 1 ?>" data-d<?= !$askDisc ? ' readonly title="El descuento es el del cliente (Configuración → Parámetros: «Pedir siempre descuento» desactivado)"' : '' ?>></td><?php else: ?><input type="hidden" data-d value="<?= $l !== null && (int)$l['disc_bp'] > 0 ? e($num((int)$l['disc_bp'], 100, 2)) : '' ?>"><?php endif; ?>
           <td><select name="<?= $nm ?>[vat]" aria-label="IVA de la línea <?= $i + 1 ?>">
             <?php $cur = (int)($l['vat_id'] ?? docs_vat_default()); if ($l !== null && !isset($rates[$cur])): ?><option value="<?= $cur ?>" selected><?= e($fmtPct((int)$l['vat_bp'] / 100)) ?> (desactivado)</option><?php endif; ?>
             <?php foreach ($rates as $rid => $r): ?><option value="<?= (int)$rid ?>"<?= $rid === $cur ? ' selected' : '' ?>><?= e(vat_format_pct((int)$r['pct_bp'])) ?> %</option><?php endforeach; ?>

@@ -23,6 +23,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/docs_dues.php';
+require_once __DIR__ . '/doc_fields.php';
 
 const DOCS_QTY = 10000;        // unidades × 10.000
 const DOCS_PRICE = 1000000;    // precio × 1.000.000
@@ -611,6 +612,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
     $custDisc = $cust ? max(0, min(10000, (int)$cust['disc_bp'])) : 0;
 
     // Líneas
+    $lineFields = docs_form_fields($kind);
     $lines = [];
     $meta = [];
     $kept = [];
@@ -639,6 +641,13 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
             $in['size'] = $old['size_txt'];
             $in['color'] = $old['color_txt'];
         }
+        // Campos de las líneas desactivados (Parámetros → Campos de las líneas): no salen en el formulario, así que se conserva lo guardado
+        if (!isset($lineFields['size'])) {
+            $in['size'] = $old ? $old['size_txt'] : '';
+        }
+        if (!isset($lineFields['color'])) {
+            $in['color'] = $old ? $old['color_txt'] : '';
+        }
         $fromNote = docs_is_invoice($kind) && $old && (int)$old['src_line_id'] > 0; // línea de un albarán facturado: unidades fijas
         if ($del) {
             if ($fromNote) {
@@ -657,7 +666,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
                 $errors[] = 'Línea ' . $n . ': escribe el texto o quita la línea.';
             }
             $vid = docs_vat_default();
-            $lines[] = ['id' => $lid, 'product_id' => 0, 'ref' => '', 'title' => $title, 'detail' => $detail, 'size_txt' => '', 'color_txt' => '', 'src_line_id' => $old ? (int)$old['src_line_id'] : 0,
+            $lines[] = ['id' => $lid, 'product_id' => 0, 'ref' => '', 'title' => $title, 'detail' => $detail, 'size_txt' => '', 'color_txt' => '', 'extra' => '', 'src_line_id' => $old ? (int)$old['src_line_id'] : 0,
                 'done_u' => $old ? (int)$old['done_u'] : 0, 'qty_u' => 0, 'price_u' => 0, 'disc_bp' => 0, 'vat_id' => $vid, 'vat_bp' => isset($rates[$vid]) ? (int)$rates[$vid]['pct_bp'] : 0,
                 'rec_bp' => isset($rates[$vid]) ? (int)$rates[$vid]['surcharge_bp'] : 0, 'amount_u' => 0, 'kind' => 1];
             $meta[] = ['prod' => null, 'locked' => false, 'opts' => ['sizes' => [], 'colors' => []]];
@@ -673,7 +682,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
             'id' => $lid, 'product_id' => $prod ? (int)$prod['id'] : 0, 'ref' => $prod ? (string)$prod['ref'] : $ref, 'title' => $title,
             'size_txt' => erp_txt($in['size'] ?? '', 40), 'color_txt' => erp_txt($in['color'] ?? '', 60),
             'src_line_id' => $old ? (int)$old['src_line_id'] : 0, 'done_u' => $old ? (int)$old['done_u'] : 0,
-            'kind' => 0, 'detail' => $detail,
+            'kind' => 0, 'detail' => $detail, 'extra' => docs_extra_from_post($in, $old, $kind),
         ];
         if ($prod && ($title === '' || $refChanged || !docp_bool('ask_title'))) {
             $l['title'] = (string)$prod['name'];
@@ -727,6 +736,9 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
             $l['disc_bp'] = $custDisc;
         } else {
             $l['disc_bp'] = (int)round(($d ?? 0) * 100);
+        }
+        if (!isset($lineFields['disc'])) { // Dto. desactivado: las líneas guardadas conservan el suyo y las nuevas no llevan
+            $l['disc_bp'] = $old && !$refChanged ? (int)$old['disc_bp'] : 0;
         }
         if ($l['disc_bp'] < 0 || $l['disc_bp'] > 10000) {
             $errors[] = 'Línea ' . $n . ': el descuento tiene que estar entre 0 y 100 %.';
@@ -812,7 +824,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
 
 const DOCS_HEAD_COLS = ['doc_day', 'cust_code', 'cust_name', 'cust_nif', 'cust_address', 'cust_postcode', 'cust_city', 'cust_province', 'cust_email',
     'pay_code', 'tariff', 'vat_incl', 'with_re', 'ref_text', 'notes', 'base_cents', 'vat_cents', 'rec_cents', 'total_cents', 'vat_json', 'op_day', 'vat_note', 'rect_text'];
-const DOCS_LINE_COLS = ['product_id', 'ref', 'title', 'size_txt', 'color_txt', 'qty_u', 'price_u', 'disc_bp', 'vat_id', 'vat_bp', 'rec_bp', 'amount_u', 'src_line_id', 'kind', 'detail'];
+const DOCS_LINE_COLS = ['product_id', 'ref', 'title', 'size_txt', 'color_txt', 'qty_u', 'price_u', 'disc_bp', 'vat_id', 'vat_bp', 'rec_bp', 'amount_u', 'src_line_id', 'kind', 'detail', 'extra'];
 
 /**
  * Guarda el documento (nuevo: saca su número de la serie dentro de la misma transacción). Las líneas existentes se actualizan
@@ -896,7 +908,7 @@ function docs_save(array $doc, array $lines, int $stamp = -1, string $eventKind 
         $ins = $db->prepare('INSERT INTO doc_lines (doc_id, line_no, ' . implode(',', DOCS_LINE_COLS) . ', done_u) VALUES (?, ?, ' . implode(',', array_fill(0, count(DOCS_LINE_COLS), '?')) . ', 0)');
         $upd = $db->prepare('UPDATE doc_lines SET line_no = ?, ' . implode(' = ?, ', DOCS_LINE_COLS) . ' = ? WHERE id = ? AND doc_id = ?');
         foreach (array_values($lines) as $i => $l) {
-            $vals = array_map(fn($c) => $l[$c], DOCS_LINE_COLS);
+            $vals = array_map(fn($c) => $l[$c] ?? ($c === 'extra' ? '' : null), DOCS_LINE_COLS);
             if ((int)$l['id'] > 0 && in_array((int)$l['id'], $have, true)) {
                 $upd->execute([$i + 1, ...$vals, (int)$l['id'], $id]);
                 $keep[(int)$l['id']] = true;

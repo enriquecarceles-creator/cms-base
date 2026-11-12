@@ -166,7 +166,8 @@ const SCHEMA_ERP_DDL = "
         size_txt {S} NOT NULL DEFAULT '',
         color_txt {S} NOT NULL DEFAULT '',
         kind {I} NOT NULL DEFAULT 0,
-        detail {T} NOT NULL DEFAULT ''
+        detail {T} NOT NULL DEFAULT '',
+        extra {T} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_erp_line_inv ON erp_invoice_lines(invoice_id);
     CREATE INDEX idx_erp_line_art ON erp_invoice_lines(article_code);
@@ -482,7 +483,8 @@ const SCHEMA_DOCS_DDL = "
         src_line_id {I} NOT NULL DEFAULT 0,
         done_u {BIG} NOT NULL DEFAULT 0,
         kind {I} NOT NULL DEFAULT 0,
-        detail {T} NOT NULL DEFAULT ''
+        detail {T} NOT NULL DEFAULT '',
+        extra {T} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_docl_doc ON doc_lines(doc_id, line_no);
     CREATE INDEX idx_docl_src ON doc_lines(src_line_id);
@@ -880,6 +882,14 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    // v35: campos libres de las líneas de documentos (Lote…): valores en JSON en la columna «extra»
+    if ($ver < 35) {
+        foreach (['doc_lines', 'erp_invoice_lines'] as $t) {
+            if (in_array($t, db_tables($pdo), true) && !in_array('extra', db_columns($pdo, $t), true)) {
+                db_add_column($pdo, $t, 'extra', "{T} NOT NULL DEFAULT ''");
+            }
         }
     }
     // v34: plazos de las formas de pago (terms), día(s) de pago del cliente, base de los vencimientos y tabla doc_dues
