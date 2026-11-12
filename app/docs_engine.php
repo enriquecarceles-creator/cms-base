@@ -1155,7 +1155,7 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
     }
     $invoices = docs_is_invoice($kind);
     if ($sub === 'buscar') {
-        docs_search_json();
+        docs_search_json($invoices ? 'factura' : $kind);
         return;
     }
     if ($sub === 'pruebas' && $invoices) {
@@ -1334,6 +1334,8 @@ function admin_docs_form(string $kind, ?array $saved): void
     $stamp = (int)$saved['rev']; // versión con la que se abre (en un POST, la que traía el formulario)
     $custResults = null;
     $custQuery = '';
+    $artQuery = '';
+    $artResults = null;
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $action = (string)($_POST['action'] ?? 'save');
@@ -1341,6 +1343,24 @@ function admin_docs_form(string $kind, ?array $saved): void
         if (str_starts_with($action, 'pick:')) { // sin JavaScript: botón de un resultado de la búsqueda de clientes
             $pick = mb_substr(substr($action, 5), 0, 191);
             $action = 'pick';
+        }
+        $addRef = '';
+        if (str_starts_with($action, 'addart:')) { // sin JavaScript: botón de un resultado de la búsqueda de artículos
+            $addRef = mb_substr(substr($action, 7), 0, 100);
+            $action = 'recalc';
+            $rowsIn = array_values((array)($_POST['l'] ?? []));
+            $done = false;
+            foreach ($rowsIn as $ri => $row) { // primera fila de artículo vacía
+                if ((int)($row['id'] ?? 0) === 0 && (int)($row['kind'] ?? 0) === 0 && trim((string)($row['ref'] ?? '')) === '' && trim((string)($row['title'] ?? '')) === '') {
+                    $rowsIn[$ri]['ref'] = $addRef;
+                    $done = true;
+                    break;
+                }
+            }
+            if (!$done) {
+                $rowsIn[] = ['id' => 0, 'kind' => 0, 'ref' => $addRef];
+            }
+            $_POST['l'] = $rowsIn;
         }
         if (isset($_POST['stamp'])) {
             $stamp = (int)$_POST['stamp'];
@@ -1405,7 +1425,7 @@ function admin_docs_form(string $kind, ?array $saved): void
         $warnings = $state['warnings'];
         $extra = max(DOCS_BLANK_LINES, min(DOCS_MAX_LINES, (int)($_POST['extra'] ?? DOCS_BLANK_LINES)));
         $extraText = max(0, min(50, (int)($_POST['extra_t'] ?? 0)));
-        $render = ['more', 'more_text', 'recalc', 'reprice', 'search', 'pick'];
+        $render = ['more', 'more_text', 'recalc', 'reprice', 'search', 'pick', 'artsearch'];
         if ($action === 'more') {
             $extra = min(DOCS_MAX_LINES, $extra + DOCS_MORE_LINES);
             $errors = [];
@@ -1415,6 +1435,10 @@ function admin_docs_form(string $kind, ?array $saved): void
         } elseif ($action === 'search') {
             $custQuery = mb_substr(trim((string)($_POST['cust_q'] ?? '')), 0, 60);
             $custResults = docs_customer_search($custQuery);
+            $errors = [];
+        } elseif ($action === 'artsearch') {
+            $artQuery = mb_substr(trim((string)($_POST['art_q'] ?? '')), 0, 60);
+            $artResults = docs_article_search($artQuery, (int)($_POST['h']['tariff'] ?? 0), (string)($_POST['h']['cust_code'] ?? ''), $kind);
             $errors = [];
         } elseif (in_array($action, $render, true)) { // recalcular, aplicar tarifa o elegir cliente: no guarda
             $errors = array_values(array_filter($errors, fn($e) => !str_starts_with($e, 'El documento no tiene líneas') && !str_starts_with($e, 'Falta el cliente')));
@@ -1446,7 +1470,7 @@ function admin_docs_form(string $kind, ?array $saved): void
     admin_render('docs_form', [
         'kind' => $kind, 'k' => $k, 'doc' => $doc, 'saved' => $saved, 'isNew' => $isNew, 'isDraft' => $isDraft, 'lines' => $lines, 'meta' => $meta, 'extra' => $extra, 'extraText' => $extraText,
         'tot' => $tot, 'errors' => $errors, 'warnings' => $warnings, 'locked' => $locked, 'self' => $self, 'series' => $series, 'stamp' => $stamp,
-        'custResults' => $custResults, 'custQuery' => $custQuery,
+        'custResults' => $custResults, 'custQuery' => $custQuery, 'artResults' => $artResults, 'artQuery' => $artQuery,
         'rates' => docs_vat_rates(), 'methods' => array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$doc['pay_code']),
         'tariffs' => array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$doc['tariff']),
         'nav' => $isNew ? [null, null] : docs_neighbors($saved),
@@ -1459,8 +1483,8 @@ function admin_docs_form(string $kind, ?array $saved): void
     ]);
 }
 
-/** Sugerencias para el formulario (con JavaScript): ?t=art|cli&q=… → JSON (como mucho 15). Solo con sesión y acceso a ventas. */
-function docs_search_json(): void
+/** Sugerencias para el formulario (con JavaScript): ?t=art|cli&q=… → JSON (clientes: 15; artículos: 20).  Solo con sesión y acceso a ventas. */
+function docs_search_json(string $kind = 'pedido'): void
 {
     header('Content-Type: application/json; charset=utf-8');
     $q = mb_strtolower(mb_substr(trim((string)($_GET['q'] ?? '')), 0, 60));
@@ -1476,17 +1500,78 @@ function docs_search_json(): void
                     'blocked' => (int)$r['blocked'] === 1 ? 'bloqueado' : ((int)$r['ended_day'] > 0 ? 'de baja' : '')];
             }
         } else {
-            $st = db()->prepare("SELECT id, ref, name FROM products WHERE LOWER(ref) LIKE ? ESCAPE '!' OR LOWER(name) LIKE ? ESCAPE '!'
-                ORDER BY CASE WHEN LOWER(ref) LIKE ? ESCAPE '!' THEN 0 ELSE 1 END, ref LIMIT 15");
-            $st->execute([$like, $like, $pre]);
-            foreach ($st->fetchAll() as $r) {
-                if ((string)$r['ref'] !== '') {
-                    $out[] = ['v' => $r['ref'], 'l' => $r['name']];
-                }
-            }
+            $out = docs_article_search($q, (int)($_GET['tariff'] ?? 0), (string)($_GET['cust'] ?? ''), $kind);
         }
     }
     echo json_encode($out, JSON_UNESCAPED_UNICODE);
+}
+
+/** Máximo de resultados del buscador de artículos de las líneas. */
+const DOCS_ART_SEARCH_MAX = 20;
+
+/**
+ * Buscador de artículos para las líneas: primero las referencias que empiezan por lo escrito y después las que lo contienen
+ * (en la referencia o en la descripción). Máx. 20. Devuelve referencia, descripción, precio de la tarifa, stock, si está bloqueado,
+ * tallas y colores, IVA por defecto y el descuento del cliente. Sin mayúsculas (LIKE sin LOWER para poder usar un índice de `ref`).
+ */
+function docs_article_search(string $q, int $tariff = 0, string $custCode = '', string $kind = 'pedido'): array
+{
+    $q = mb_substr(trim($q), 0, 60);
+    if (mb_strlen($q) < 2) {
+        return [];
+    }
+    $esc = strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']);
+    $db = db();
+    $max = DOCS_ART_SEARCH_MAX;
+    $rows = [];
+    $st = $db->prepare("SELECT id, ref, name, visible FROM products WHERE ref <> '' AND ref LIKE ? ESCAPE '!' ORDER BY ref LIMIT " . $max);
+    $st->execute([$esc . '%']);
+    foreach ($st->fetchAll() as $r) {
+        $rows[(int)$r['id']] = $r;
+    }
+    if (count($rows) < $max) {
+        $skip = $rows ? ' AND id NOT IN (' . implode(',', array_map('intval', array_keys($rows))) . ')' : '';
+        $st = $db->prepare("SELECT id, ref, name, visible FROM products WHERE ref <> '' AND (ref LIKE ? ESCAPE '!' OR name LIKE ? ESCAPE '!')" . $skip . ' ORDER BY ref LIMIT ' . ($max - count($rows)));
+        $st->execute(['%' . $esc . '%', '%' . $esc . '%']);
+        foreach ($st->fetchAll() as $r) {
+            $rows[(int)$r['id']] = $r;
+        }
+    }
+    if (!$rows) {
+        return [];
+    }
+    $ids = array_keys($rows);
+    if (!in_array($tariff, array_map(fn($t) => (int)$t['num'], tariffs_all()), true)) {
+        $tariff = docp_int('tariff');
+    }
+    $pf = docs_tariff_field($tariff);
+    $prices = $pf ? field_values_for((int)$pf['id'], $ids) : [];
+    $stockF = docs_field_named(['stock', 'existencias'], ['number', 'price', 'text']);
+    $stocks = $stockF ? field_values_for((int)$stockF['id'], $ids) : [];
+    $lf = docs_form_fields($kind);
+    $sizeF = isset($lf['size']) ? docs_field_named(['tallas', 'talla']) : null;
+    $colorF = isset($lf['color']) ? docs_field_named(['color', 'colores']) : null;
+    $sizes = $sizeF ? field_values_for((int)$sizeF['id'], $ids) : [];
+    $colors = $colorF ? field_values_for((int)$colorF['id'], $ids) : [];
+    $disc = 0;
+    if ($custCode !== '' && isset($lf['disc'])) {
+        $c = docs_customer($custCode);
+        $disc = $c ? max(0, min(10000, (int)$c['disc_bp'])) : 0;
+    }
+    $out = [];
+    foreach ($rows as $id => $r) {
+        $n = isset($prices[$id]) && $prices[$id] !== '' ? docs_parse_num($prices[$id]) : null;
+        $sk = isset($stocks[$id]) && $stocks[$id] !== '' ? docs_parse_num($stocks[$id]) : null;
+        $out[] = [
+            'v' => (string)$r['ref'], 'l' => (string)$r['name'],
+            'price' => $n === null ? '' : docs_price_txt((int)round($n * DOCS_PRICE)),
+            'stock' => $sk === null ? '' : rtrim(rtrim(number_format($sk, 2, ',', ''), '0'), ','),
+            'blocked' => (int)$r['visible'] !== 1,
+            'sizes' => docs_split_values((string)($sizes[$id] ?? '')), 'colors' => docs_split_values((string)($colors[$id] ?? '')),
+            'vat' => docs_vat_default(), 'disc' => $disc > 0 ? rtrim(rtrim(number_format($disc / 100, 2, ',', ''), '0'), ',') : '',
+        ];
+    }
+    return $out;
 }
 
 /** Documento impreso (hoja A4) con el diseño de Configuración → Diseño de documentos. */

@@ -186,6 +186,21 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
     </section>
   </div>
 
+  <?php if (!$isNew && !$ro): ?>
+  <div class="df-find df-artfind">
+    <noscript><label>Buscar artículo <small>(por referencia o descripción; al elegirlo se añade en la primera línea libre)</small>
+      <input type="search" name="art_q" value="<?= e($artQuery) ?>" placeholder="Escribe al menos 2 letras o números" autocomplete="off"></label>
+      <button class="btn small" type="submit" name="action" value="artsearch">Buscar</button></noscript>
+    <?php if ($artResults !== null): ?>
+    <ul class="df-res" aria-live="polite">
+      <?php foreach ($artResults as $r): ?>
+        <li><button type="submit" name="action" value="addart:<?= e($r['v']) ?>"><?= e($r['v']) ?> · <?= e($r['l']) ?><?= $r['price'] !== '' ? ' · ' . e($r['price']) . ' €' : '' ?><?= $r['stock'] !== '' ? ' · stock ' . e($r['stock']) : '' ?><?= $r['blocked'] ? ' — bloqueado' : '' ?></button></li>
+      <?php endforeach; ?>
+      <?php if (!$artResults): ?><li class="muted">Sin resultados<?= mb_strlen($artQuery) < 2 ? ' (escribe al menos 2 caracteres)' : '' ?>. Puedes escribir la línea a mano como texto libre.</li><?php endif; ?>
+    </ul>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
   <?php if (!$isNew): ?>
   <div class="if-grid-wrap">
     <table class="if-grid df-grid">
@@ -216,9 +231,9 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
             <input type="hidden" name="<?= $nm ?>[id]" value="<?= (int)($l['id'] ?? 0) ?>">
             <input type="hidden" name="<?= $nm ?>[kind]" value="0">
             <input type="hidden" name="<?= $nm ?>[oref]" value="<?= e((string)($l['ref'] ?? '')) ?>"></td>
-          <td><input class="df-ref" name="<?= $nm ?>[ref]" value="<?= e((string)($l['ref'] ?? '')) ?>" maxlength="100" list="dl-art" data-search="art" aria-label="Referencia de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly title="Línea servida o venida de un pedido: el artículo no se cambia"' : '' ?>>
+          <td><input class="df-ref" name="<?= $nm ?>[ref]" value="<?= e((string)($l['ref'] ?? '')) ?>" maxlength="100" data-search="art" autocomplete="off" aria-autocomplete="list" aria-controls="art-pop" aria-label="Referencia de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly title="Línea servida o venida de un pedido: el artículo no se cambia"' : '' ?>>
             <?php if ($hasProd && !empty($m['prod']['id'])): ?><a class="df-plink" href="<?= e(url('/admin/articulo/' . (int)$m['prod']['id'])) ?>" target="_blank" rel="noopener" title="Abrir el artículo">↗</a><?php endif; ?></td>
-          <td><textarea class="df-title" name="<?= $nm ?>[title]" rows="<?= $rowsOf($txt) ?>" aria-label="Descripción de la línea <?= $i + 1 ?>"<?= $hasProd && !$askTitle ? ' title="La primera línea es el nombre del artículo (se pone solo); escribe debajo lo que quieras añadir"' : '' ?>><?= e($txt) ?></textarea></td>
+          <td><textarea class="df-title" data-search="artd" aria-controls="art-pop" name="<?= $nm ?>[title]" rows="<?= $rowsOf($txt) ?>" aria-label="Descripción de la línea <?= $i + 1 ?>"<?= $hasProd && !$askTitle ? ' title="La primera línea es el nombre del artículo (se pone solo); escribe debajo lo que quieras añadir"' : '' ?>><?= e($txt) ?></textarea></td>
           <?php if (isset($lf['size'])): ?><td><input class="df-s" name="<?= $nm ?>[size]" value="<?= e((string)($l['size_txt'] ?? '')) ?>" maxlength="40" list="dl-s<?= $i ?>" aria-label="Talla de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly' : '' ?>>
             <?php if ($m['opts']['sizes']): ?><datalist id="dl-s<?= $i ?>"><?php foreach ($m['opts']['sizes'] as $o): ?><option value="<?= e($o) ?>"><?php endforeach; ?></datalist><?php endif; ?></td><?php endif; ?>
           <?php if (isset($lf['color'])): ?><td><input class="df-c" name="<?= $nm ?>[color]" value="<?= e((string)($l['color_txt'] ?? '')) ?>" maxlength="60" list="dl-c<?= $i ?>" aria-label="Color de la línea <?= $i + 1 ?>"<?= $lk ? ' readonly' : '' ?>>
@@ -243,7 +258,8 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       </tbody>
     </table>
   </div>
-  <datalist id="dl-art"></datalist>
+  <ul id="art-pop" class="df-pop" role="listbox" hidden></ul>
+  <p id="art-msg" class="df-warn" role="status" aria-live="polite" hidden></p>
   <?php if (!$ro): ?><p class="muted df-note"><small>Escribe la referencia y pulsa <strong>Recalcular</strong> (o Intro): se completan la descripción, el precio de la tarifa y el IVA. Sin referencia es un <strong>concepto</strong> (por ejemplo «Portes»: descripción, unidades y precio). «Añadir texto» pone una línea de <strong>texto libre</strong> sin unidades ni precio. La descripción admite varias líneas. <?= (int)$doc['vat_incl'] === 1 ? 'Importes con IVA incluido.' : 'Importes sin IVA.' ?></small></p><?php endif; ?>
   <div class="if-foot">
     <div class="if-tabs-wrap">
@@ -411,23 +427,108 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
     });
   }
 
-  // Sugerencias de artículos (la lista se rellena al escribir) e importe de la línea al momento
+  // Buscador de artículos en las líneas: lista bajo el campo, teclado (flechas, Intro, Esc) y ratón o dedo
+  var pop = document.getElementById('art-pop'), amsg = document.getElementById('art-msg');
+  var cur = null, items = [], act = -1, seq = 0;
+  function closePop() { pop.hidden = true; pop.textContent = ''; items = []; act = -1; cur = null; }
+  function mark(i) {
+    var lis = pop.querySelectorAll('li[role=option]');
+    lis.forEach(function (li, k) { li.classList.toggle('on', k === i); li.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
+    act = i;
+    if (lis[i]) { lis[i].scrollIntoView({block: 'nearest'}); }
+  }
+  function place(el) {
+    var r = el.getBoundingClientRect(), vw = document.documentElement.clientWidth, w = Math.min(600, vw - 16);
+    pop.style.width = w + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, vw - 8 - w)) + window.scrollX + 'px';
+    pop.style.top = (r.bottom + window.scrollY + 2) + 'px';
+  }
+  function setList(inp, list) {
+    var id = inp ? inp.getAttribute('list') : null;
+    if (!id) { return; }
+    var dl = document.getElementById(id);
+    if (!dl) { dl = document.createElement('datalist'); dl.id = id; inp.parentNode.appendChild(dl); }
+    dl.textContent = '';
+    list.forEach(function (o) { var op = document.createElement('option'); op.value = o; dl.appendChild(op); });
+  }
+  function choose(it) {
+    var el = cur;
+    if (!el) { return; }
+    var tr = el.closest('tr');
+    closePop();
+    var q = function (sel) { return tr.querySelector(sel); };
+    var ref = q('.df-ref'), ti = q('textarea.df-title'), pr = q('[data-p]'), di = q('[data-d]'), qt = q('[data-q]'), vs = q('select[name$="[vat]"]');
+    ref.value = it.v;
+    if (ti) { var nl = ti.value.indexOf('\n'); ti.value = it.l + (nl > -1 && ti.value.slice(0, nl).trim() === it.l ? ti.value.slice(nl) : ''); grow(ti); }
+    if (pr && it.price !== '') { pr.value = it.price; }
+    if (di && it.disc !== '' && !di.value) { di.value = it.disc; }
+    if (vs && it.vat && vs.querySelector('option[value="' + it.vat + '"]')) { vs.value = String(it.vat); }
+    if (qt && !qt.value.trim()) { qt.value = '1'; }
+    var sz = q('.df-s'), co = q('.df-c');
+    setList(sz, it.sizes || []); setList(co, it.colors || []);
+    if (pr) { pr.dispatchEvent(new Event('input', {bubbles: true})); }
+    if (amsg) {
+      amsg.hidden = !it.blocked;
+      amsg.textContent = it.blocked ? 'Aviso: el artículo ' + it.v + ' está bloqueado (oculto en el catálogo).' : '';
+    }
+    var next = (sz && !sz.readOnly && (it.sizes || []).length) ? sz : ((co && !co.readOnly && (it.colors || []).length) ? co : qt);
+    if (next) { next.focus(); if (next.select) { next.select(); } }
+  }
+  function render(el, list) {
+    pop.textContent = '';
+    items = list;
+    if (!list.length) {
+      var e0 = document.createElement('li'); e0.className = 'muted'; e0.textContent = 'Sin resultados: puedes seguir escribiendo como texto libre.'; pop.appendChild(e0);
+    }
+    list.forEach(function (it, k) {
+      var li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      if (it.blocked) { li.className = 'blk'; }
+      var a = document.createElement('span'); a.className = 'a-ref'; a.textContent = it.v;
+      var b = document.createElement('span'); b.className = 'a-name'; b.textContent = it.l + (it.blocked ? ' · BLOQUEADO' : '');
+      var c = document.createElement('span'); c.className = 'a-num'; c.textContent = it.price !== '' ? it.price + ' €' : 'sin precio';
+      var d = document.createElement('span'); d.className = 'a-num a-stock'; d.textContent = it.stock !== '' ? 'Stock ' + it.stock : '';
+      li.appendChild(a); li.appendChild(b); li.appendChild(c); li.appendChild(d);
+      li.addEventListener('mousedown', function (ev) { ev.preventDefault(); choose(it); });
+      pop.appendChild(li);
+    });
+    cur = el; place(el); pop.hidden = false;
+    if (list.length) { mark(0); }
+  }
+  function searchable(el) {
+    var tr = el.closest('tr');
+    if (el.readOnly || !tr) { return false; }
+    if (el.getAttribute('data-search') === 'artd') { var rf = tr.querySelector('.df-ref'); return !!rf && !rf.readOnly && rf.value.trim() === ''; }
+    return true;
+  }
+  form.addEventListener('keydown', function (ev) {
+    if (!pop || pop.hidden || ev.target !== cur) { return; }
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); if (items.length) { mark((act + 1) % items.length); } }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); if (items.length) { mark((act - 1 + items.length) % items.length); } }
+    else if (ev.key === 'Enter' && act > -1 && items[act]) { ev.preventDefault(); choose(items[act]); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); closePop(); }
+    else if (ev.key === 'Tab') { closePop(); }
+  });
+  form.addEventListener('focusout', function (ev) { if (ev.target === cur) { setTimeout(function () { if (document.activeElement !== cur) { closePop(); } }, 0); } });
+  window.addEventListener('resize', function () { if (cur && !pop.hidden) { place(cur); } });
+  // Importe de la línea al momento (y búsqueda de artículos mientras se escribe)
   form.addEventListener('input', function (ev) {
     var el = ev.target, t = el.getAttribute('data-search');
     if (el.matches && el.matches('textarea.df-title')) { grow(el); }
-    if (t === 'art') {
-      clearTimeout(timers[t]);
-      var q = el.value.trim();
-      if (q.length < 2) { return; }
-      timers[t] = setTimeout(function () {
-        fetch(base + '?t=art&q=' + encodeURIComponent(q), {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
-          .then(function (r) { return r.ok ? r.json() : []; })
-          .then(function (list) {
-            var dl = document.getElementById('dl-art');
-            dl.textContent = '';
-            list.forEach(function (it) { var o = document.createElement('option'); o.value = it.v; o.label = it.l; o.textContent = it.l; dl.appendChild(o); });
-          }).catch(function () {});
-      }, 200);
+    if (t && pop) {
+      clearTimeout(timers.art);
+      var q = el.value.split('\n')[0].trim();
+      if (q.length < 2 || !searchable(el)) { closePop(); }
+      else {
+        var my = ++seq;
+        timers.art = setTimeout(function () {
+          var tf = field('h[tariff]'), cc = field('h[cust_code]');
+          fetch(base + '?t=art&q=' + encodeURIComponent(q) + '&tariff=' + encodeURIComponent(tf ? tf.value : '') + '&cust=' + encodeURIComponent(cc ? cc.value : ''), {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) { if (my === seq && document.activeElement === el) { render(el, list); } })
+            .catch(function () {});
+        }, 250);
+      }
     }
     var tr = el.closest('tr');
     if (tr && (el.hasAttribute('data-q') || el.hasAttribute('data-p') || el.hasAttribute('data-d'))) {

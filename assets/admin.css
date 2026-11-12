@@ -716,3 +716,20 @@ a.db-card:hover{border-color:var(--db-accent)}
 @media (max-width:760px){.db-grid{grid-template-columns:1fr}.db-list li{grid-template-columns:minmax(0,1fr) auto}.db-who{grid-column:1/-1;order:3;white-space:normal}.db-n{font-size:1.3rem}}
 @media (max-width:420px){.db-kpis{grid-template-columns:1fr 1fr;gap:8px}.db-card{padding:8px 10px}}
 .db-chart{max-width:640px;margin:0 auto}.db-panel:not(.wide) .db-chart{max-width:520px}.db-panel.wide .db-chart{max-height:260px}
+
+/* Buscador de artículos en las líneas de los documentos */
+.df-pop{position:absolute;z-index:60;list-style:none;margin:0;padding:0;max-height:min(22em,60vh);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:.86rem}
+.df-pop li{display:grid;grid-template-columns:minmax(5.5em,auto) 1fr auto auto;gap:4px 10px;align-items:baseline;padding:8px 10px;border-bottom:1px solid #efede8;cursor:pointer;min-height:2.4em}
+.df-pop li.muted{display:block;cursor:default;padding:8px 10px}
+.df-pop li.on{background:#eef3fb}
+.df-pop li.blk{color:#8a3b12}
+.df-pop .a-ref{font-weight:700;white-space:nowrap}
+.df-pop .a-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.df-pop .a-num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.df-pop .a-stock{color:#666;min-width:5.5em}
+.df-warn{margin:6px 0;padding:6px 10px;border-radius:6px;background:#fff4e5;border:1px solid #f0c987;font-size:.88rem}
+.df-artfind{margin:6px 0}
+@media (max-width:640px){
+  .df-pop li{grid-template-columns:1fr auto;grid-template-areas:"r p" "n s"}
+  .df-pop .a-ref{grid-area:r}.df-pop .a-num{grid-area:p}.df-pop .a-name{grid-area:n;white-space:normal}.df-pop .a-stock{grid-area:s;min-width:0}
+}
