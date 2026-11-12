@@ -1,5 +1,5 @@
 <?php
-/** Configuración → Tarifas. Variables: $rows, $users (clientes por tarifa), $errors, $old. */
+/** Configuración → Tarifas. Variables: $rows, $users (clientes por tarifa), $errors, $old, $priceFields (campos de tipo precio), $defaultPrice. */
 $old = $old ?? null;
 ?>
 <div class="head"><h1>Tarifas</h1></div>
@@ -10,12 +10,17 @@ $old = $old ?? null;
   <fieldset>
     <legend>Tarifas</legend>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th scope="col">Nº</th><th scope="col">Nombre</th><th scope="col">Referencia externa</th><th scope="col">Activa</th><th scope="col">Clientes</th></tr></thead>
+      <thead><tr><th scope="col">Nº</th><th scope="col">Nombre</th><th scope="col">Precio del catálogo</th><th scope="col">Referencia externa</th><th scope="col">Activa</th><th scope="col">Clientes</th></tr></thead>
       <tbody>
       <?php foreach ($rows as $r): $id = (int)$r['id']; $in = $old['t'][$id] ?? null; ?>
         <tr>
           <td><strong><?= (int)$r['num'] ?></strong></td>
           <td><input name="t[<?= $id ?>][name]" value="<?= e($in['name'] ?? $r['name']) ?>" maxlength="40" aria-label="Nombre"></td>
+          <td><?php $pf = (int)($in['pf'] ?? $r['price_field'] ?? 0); ?>
+            <select name="t[<?= $id ?>][pf]" aria-label="Campo de precio del catálogo">
+              <option value="0"<?= $pf === 0 ? ' selected' : '' ?>>Precio público<?= $defaultPrice ? ' (' . e($defaultPrice['name']) . ')' : '' ?></option>
+              <?php foreach ($priceFields as $f): ?><option value="<?= (int)$f['id'] ?>"<?= $pf === (int)$f['id'] ? ' selected' : '' ?>><?= e($f['name']) ?><?= (int)$f['is_public'] === 1 ? '' : ' (interno)' ?></option><?php endforeach; ?>
+            </select></td>
           <td><input name="t[<?= $id ?>][ext]" value="<?= e($in['ext'] ?? $r['ext_ref']) ?>" maxlength="40" placeholder="Ej.: PVP<?= (int)$r['num'] ?>" aria-label="Referencia externa"></td>
           <td><input type="checkbox" name="t[<?= $id ?>][active]" value="1"<?= ($in !== null ? !empty($in['active']) : (int)$r['is_active'] === 1) ? ' checked' : '' ?> aria-label="Activa"></td>
           <td><small class="muted"><?= (int)($users[(int)$r['num']] ?? 0) ?></small></td>
@@ -23,7 +28,8 @@ $old = $old ?? null;
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <small>Las tarifas no se borran (los clientes guardan su número): se desactivan. Una tarifa que usan clientes o que es la de por defecto no se puede desactivar.</small>
+    <small>Las tarifas no se borran (los clientes guardan su número): se desactivan. Una tarifa que usan clientes o que es la de por defecto no se puede desactivar.
+      <strong>Precio del catálogo</strong>: de qué campo de precio de los artículos sale el precio de esa tarifa en pedidos y albaranes (los campos se crean en Catálogo → Características, de tipo «Precio»).</small>
   </fieldset>
   <fieldset>
     <legend>Nueva tarifa</legend>

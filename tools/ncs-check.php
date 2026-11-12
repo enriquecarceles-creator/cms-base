@@ -506,6 +506,56 @@ $check('parámetros: bloqueo de periodos con las fechas de las facturas importad
 save_setting('docp_lock_until', '0');
 setting('', '', true);
 
+/* 5g. Pedidos y albaranes (motor de documentos) con artículos y clientes reales de NCS */
+$section('Pedidos y albaranes');
+require_once $tmp . '/app/docs_engine.php';
+// Un artículo real de TART con tallas (T00, huecos de 4) y precio (PVP2), dado de alta aquí como lo haría el perfil de NCS
+// (en este punto de la batería el catálogo no está importado); de cada fila solo se toman CODIGO, DESCRIPCION, T00 y PVP2.
+$src = null;
+foreach ($readers['FALMACEN.MDB']->rows('TART') as $r) {
+    if (trim((string)($r['CODIGO'] ?? '')) !== '' && preg_match('/\S\s{2,}\S/', (string)($r['T00'] ?? '')) && (float)($r['PVP2'] ?? 0) > 0) {
+        $src = ['ref' => trim((string)$r['CODIGO']), 'name' => trim((string)($r['DESCRIPCION'] ?? '')), 't00' => (string)$r['T00'], 'pvp' => (string)$r['PVP2']];
+        break;
+    }
+}
+fields_all(true);
+$fPrecio = docs_field_named(['precio'], ['price'])['id'] ?? field_create('Precio', 'price', '€', 1);
+$fTallas = docs_field_named(['tallas'])['id'] ?? field_create('Tallas', 'text', '', 1);
+fields_all(true);
+$art = null;
+if ($src) {
+    $db->exec("INSERT INTO categories (name, slug, sort) VALUES ('Prueba pedidos', 'prueba-pedidos', 99)");
+    $catId = (int)$db->query("SELECT id FROM categories WHERE slug = 'prueba-pedidos'")->fetchColumn();
+    $db->prepare('INSERT INTO products (category_id, ref, name, slug, visible, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+        ->execute([$catId, $src['ref'], $src['name'] !== '' ? $src['name'] : $src['ref'], 'prueba-pedidos-1', date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+    $art = ['id' => (int)$db->query("SELECT id FROM products WHERE slug = 'prueba-pedidos-1'")->fetchColumn(), 'ref' => $src['ref']];
+    product_fields_save($art['id'], [$fPrecio => $src['pvp'], $fTallas => $src['t00']]);
+}
+$cust = $db->prepare('SELECT * FROM erp_customers WHERE tariff > 0 AND cust_code <> ? ORDER BY id LIMIT 1');
+$cust->execute([erp_retail_code()]);
+$cust = $cust->fetch();
+$opts = $art ? docs_product_options((int)$art['id']) : ['sizes' => []];
+$check('pedidos: las tallas de T00 (huecos de ancho fijo) se separan en valores sueltos', $art && count($opts['sizes']) >= 1 && !array_filter($opts['sizes'], fn($s) => preg_match('/\s{2,}/', $s)), count($opts['sizes']) . ' tallas');
+$check('pedidos: el artículo tiene precio en la tarifa del cliente', $art && $cust && docs_product_price((int)$art['id'], (int)$cust['tariff']) !== null);
+$blank = docs_blank('pedido');
+$post = ['h' => ['series_id' => $blank['series_id'], 'day' => date('Y-m-d'), 'cust_code' => $cust['cust_code'] ?? '', 'cust_prev' => '', 'vat_incl' => '1', 'tariff' => '1'],
+    'l' => [['id' => 0, 'oref' => '', 'ref' => strtolower((string)($art['ref'] ?? '')), 'qty' => '2', 'size' => $opts['sizes'][0] ?? '', 'vat' => (string)docs_vat_default()]]];
+$st = docs_from_post($blank, [], $post);
+$check('pedidos: el formulario completa el cliente real (datos, tarifa y forma de pago)', $st['errors'] === [] && $st['doc']['cust_name'] !== '' && (int)$st['doc']['tariff'] === (int)($cust['tariff'] ?? -1) && $st['doc']['pay_code'] === (string)($cust['pay_code'] ?? ''), implode(' ', $st['errors']));
+$check('pedidos: la referencia escrita en minúsculas se enlaza al artículo', ($st['lines'][0]['product_id'] ?? 0) === (int)($art['id'] ?? -1) && ($st['lines'][0]['ref'] ?? '') === (string)($art['ref'] ?? ''));
+$tot = docs_totals($st['lines'], true, false);
+$check('pedidos: con IVA incluido, base + cuota = suma de las líneas', $tot['total'] === (int)round(array_sum(array_column($st['lines'], 'amount_u')) / 100));
+$oid = docs_save($st['doc'], $st['lines']);
+$order = docs_get($oid);
+$check('pedidos: se guarda con su número de la serie P', (bool)preg_match('#^P\d{5}/\d{2}$#', (string)$order['doc_code']) && $order['status'] === 'pendiente', (string)$order['doc_code']);
+$aid = docs_serve($order);
+$check('pedidos: «Servir» crea el albarán y el pedido queda servido', docs_get($oid)['status'] === 'servido' && docs_get($aid)['doc_type'] === 'albaran' && (int)docs_get($aid)['total_cents'] === (int)$order['total_cents']);
+docs_annul(docs_get($aid));
+$check('pedidos: anular el albarán devuelve el pedido a pendiente', docs_get($oid)['status'] === 'pendiente' && docs_get($aid)['status'] === 'anulado');
+$check('pedidos: van con clientes y ventas (fuera de las copias salvo con la casilla)', !array_intersect(['doc_headers', 'doc_lines', 'doc_events'], DB_TABLES) && !array_diff(['doc_headers', 'doc_lines', 'doc_events'], ERP_TABLES));
+$sumNcs = $one('SELECT COUNT(*) FROM erp_invoices');
+$check('pedidos: no tocan las facturas de NCS', $sumNcs === $one('SELECT COUNT(*) FROM erp_invoices') && $one("SELECT COUNT(*) FROM erp_invoices WHERE origin <> 'ncs'") === 0);
+
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();

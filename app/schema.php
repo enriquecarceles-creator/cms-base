@@ -392,8 +392,87 @@ const SCHEMA_DOCPARAMS_DDL = "
         num {I} NOT NULL UNIQUE,
         name {S} NOT NULL DEFAULT '',
         ext_ref {S} NOT NULL DEFAULT '',
+        price_field {I} NOT NULL DEFAULT 0,
         is_active {I} NOT NULL DEFAULT 1
     );
+";
+
+/**
+ * Documentos propios del CMS (app/docs_engine.php): pedidos y albaranes (y, más adelante, facturas y rectificativas).
+ * En ERP_TABLES (llevan datos de clientes): solo van en las copias con «Incluir clientes y ventas».
+ *   doc_headers  doc_code = número con formato de la serie (único: las letras de serie son únicas entre todos los tipos).
+ *                status: pendiente | parcial | servido | facturado | anulado. Datos del cliente copiados al guardar.
+ *   doc_lines    qty_u y done_u × 10.000; price_u × 1.000.000; amount_u × 10.000; disc_bp, vat_bp, rec_bp × 100.
+ *                src_line_id = línea de la que viene (albarán ← pedido); done_u = unidades servidas de la línea.
+ */
+const SCHEMA_DOCS_DDL = "
+    CREATE TABLE doc_headers (
+        id {ID},
+        doc_type {S} NOT NULL,
+        series_id {I} NOT NULL DEFAULT 0,
+        yr {I} NOT NULL DEFAULT 0,
+        doc_no {I} NOT NULL DEFAULT 0,
+        doc_code {K} NOT NULL UNIQUE,
+        doc_day {I} NOT NULL DEFAULT 0,
+        status {S} NOT NULL DEFAULT 'pendiente',
+        cust_code {K} NOT NULL DEFAULT '',
+        cust_name {S} NOT NULL DEFAULT '',
+        cust_nif {S} NOT NULL DEFAULT '',
+        cust_address {S} NOT NULL DEFAULT '',
+        cust_postcode {S} NOT NULL DEFAULT '',
+        cust_city {S} NOT NULL DEFAULT '',
+        cust_province {S} NOT NULL DEFAULT '',
+        cust_email {S} NOT NULL DEFAULT '',
+        pay_code {S} NOT NULL DEFAULT '',
+        tariff {I} NOT NULL DEFAULT 0,
+        vat_incl {I} NOT NULL DEFAULT 0,
+        with_re {I} NOT NULL DEFAULT 0,
+        ref_text {S} NOT NULL DEFAULT '',
+        notes {T} NULL,
+        base_cents {BIG} NOT NULL DEFAULT 0,
+        vat_cents {BIG} NOT NULL DEFAULT 0,
+        rec_cents {BIG} NOT NULL DEFAULT 0,
+        total_cents {BIG} NOT NULL DEFAULT 0,
+        vat_json {T} NULL,
+        origin_id {I} NOT NULL DEFAULT 0,
+        created_at {BIG} NOT NULL DEFAULT 0,
+        created_by {S} NOT NULL DEFAULT '',
+        updated_at {BIG} NOT NULL DEFAULT 0,
+        updated_by {S} NOT NULL DEFAULT ''
+    );
+    CREATE INDEX idx_doch_type_day ON doc_headers(doc_type, doc_day);
+    CREATE INDEX idx_doch_cust ON doc_headers(cust_code);
+    CREATE TABLE doc_lines (
+        id {ID},
+        doc_id {I} NOT NULL,
+        line_no {I} NOT NULL DEFAULT 0,
+        product_id {I} NOT NULL DEFAULT 0,
+        ref {S} NOT NULL DEFAULT '',
+        title {S} NOT NULL DEFAULT '',
+        size_txt {S} NOT NULL DEFAULT '',
+        color_txt {S} NOT NULL DEFAULT '',
+        qty_u {BIG} NOT NULL DEFAULT 0,
+        price_u {BIG} NOT NULL DEFAULT 0,
+        disc_bp {I} NOT NULL DEFAULT 0,
+        vat_id {I} NOT NULL DEFAULT 0,
+        vat_bp {I} NOT NULL DEFAULT 0,
+        rec_bp {I} NOT NULL DEFAULT 0,
+        amount_u {BIG} NOT NULL DEFAULT 0,
+        src_line_id {I} NOT NULL DEFAULT 0,
+        done_u {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_docl_doc ON doc_lines(doc_id, line_no);
+    CREATE INDEX idx_docl_src ON doc_lines(src_line_id);
+    CREATE TABLE doc_events (
+        id {ID},
+        doc_id {I} NOT NULL,
+        kind {S} NOT NULL,
+        detail {S} NOT NULL DEFAULT '',
+        user_id {I} NOT NULL DEFAULT 0,
+        username {S} NOT NULL DEFAULT '',
+        created_at {BIG} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_doce_doc ON doc_events(doc_id);
 ";
 
 /** Valores iniciales de IVA (21, 10, 4, 0 con sus recargos de equivalencia) y tarifas 1-3; solo si las tablas están vacías. */
@@ -498,7 +577,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -596,6 +675,16 @@ function migrate_schema(CmsPdo $pdo): void
             foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
             }
+        }
+    }
+    if ($ver < 29) { // pedidos y albaranes; campo de precio de cada tarifa (si doc_tariffs aún no existe, la crea el bloque de la v28 ya con la columna)
+        if (!in_array('doc_headers', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_DOCS_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
+        }
+        if (in_array('doc_tariffs', db_tables($pdo), true) && !in_array('price_field', db_columns($pdo, 'doc_tariffs'), true)) {
+            db_add_column($pdo, 'doc_tariffs', 'price_field', '{I} NOT NULL DEFAULT 0');
         }
     }
     if ($ver < 28) {

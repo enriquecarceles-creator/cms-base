@@ -507,6 +507,43 @@ html:has(.savebar){scroll-padding-bottom:96px}
 @media (max-width:640px){.if-bar{position:static;margin:0 0 12px}.if-grid-wrap{max-height:none}}
 @media (max-width:640px){.if-totals .ir.big{font-size:1.35rem}}
 
+/* ---------- Documentos propios (pedidos y albaranes): formulario editable sobre el aspecto de la factura (.if-*) ---------- */
+.df-fs{border:0;margin:0;padding:0;min-width:0}
+.df-default{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.df-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 12px}
+.df-g label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--steel);text-transform:uppercase;letter-spacing:.03em;min-width:0}
+.df-g label.check{flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;font-size:.88rem;color:var(--ink)}
+.df-g .df-wide{grid-column:span 2}
+.df-g input,.df-g select{font:inherit;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink);padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;width:100%}
+.df-g input[readonly]{background:#f5f4f0;color:var(--steel)}
+.df-g input[type=checkbox]{width:auto;flex:0 0 auto;margin:0}
+.df-annul{color:var(--err)!important}
+.df-g small{text-transform:none;letter-spacing:0}
+.df-note{margin:6px 0 0}
+.df-grid td{padding:4px 5px;vertical-align:middle}
+.df-grid input,.df-grid select{font:inherit;font-size:.88rem;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;width:100%;min-width:0}
+.df-grid input[readonly]{background:#f5f4f0;color:var(--steel)}
+.df-grid input:focus,.df-grid select:focus,.df-g input:focus,.df-g select:focus{outline:2px solid var(--ink);outline-offset:0}
+.df-grid .df-ref{min-width:6.5em}
+.df-grid .df-title{min-width:9em}
+.df-grid .df-s{width:4.2em}
+.df-grid .df-c{width:6.5em}
+.df-grid .df-n{width:5.2em;text-align:right}
+.df-grid .df-d{width:3.8em;text-align:right}
+.df-grid select{width:auto}
+.df-grid .df-amt{min-width:5.5em}
+.df-grid tr.df-blank td{background:#fcfbf8}
+.df-plink{margin-left:4px;text-decoration:none;font-size:.85rem}
+.df-grid td:nth-child(2){white-space:nowrap}
+.df-grid td:nth-child(2) input{width:calc(100% - 1.4em)}
+.df-notes{display:flex;flex-direction:column;gap:4px;margin:0 0 14px;font-size:.85rem;color:var(--steel)}
+.df-notes textarea{font:inherit;color:var(--ink);padding:8px;border:1px solid var(--line);border-radius:8px}
+.df-h{font-size:.82rem;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);margin:0 0 8px}
+.df-warn{align-items:flex-start;margin:0 0 12px}
+.df-warn ul{margin:0;padding-left:18px}
+.df-side{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+@media (max-width:980px){.df-side{grid-template-columns:1fr}.df-g .df-wide{grid-column:auto}}
+
 /* ---------- Configuración compacta (tarea «Configuración»): submenú propio + pantallas densas tipo escritorio ---------- */
 .cfg{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:start}
 .cfg-nav{position:sticky;top:calc(var(--bar-h) + 14px);border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:6px 8px 10px}

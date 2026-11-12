@@ -150,10 +150,16 @@ function vat_fix_defaults(): void
     }
 }
 
-/** ¿Se usa este tipo en algún documento? (Cuando existan los documentos propios, aquí se comprobará.) */
+/** ¿Se usa este tipo en alguna línea de un documento propio (pedidos, albaranes…)? Entonces no se borra: se desactiva. */
 function vat_is_used(int $id): bool
 {
-    return false;
+    try {
+        $st = db()->prepare('SELECT COUNT(*) FROM doc_lines WHERE vat_id = ?');
+        $st->execute([$id]);
+        return (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
 }
 
 function admin_vat(): void
@@ -406,7 +412,12 @@ function admin_tariffs(): void
                     $errors[] = 'La tarifa ' . $r['num'] . ' la usan ' . $n . ' cliente' . ($n === 1 ? '' : 's') . ': no se puede desactivar.';
                 }
             }
-            $plan[$id] = ['name' => $name, 'ext' => mb_substr(trim(strip_tags((string)($in['ext'] ?? ''))), 0, 40), 'active' => $active];
+            $pf = (int)($in['pf'] ?? 0); // campo de precio del catálogo que usa la tarifa (0 = el precio público)
+            if ($pf !== 0 && !in_array($pf, array_column(docs_price_fields(), 'id'), true)) {
+                $errors[] = 'La tarifa ' . $r['num'] . ': el campo de precio elegido no existe o no es de tipo precio.';
+                $pf = 0;
+            }
+            $plan[$id] = ['name' => $name, 'ext' => mb_substr(trim(strip_tags((string)($in['ext'] ?? ''))), 0, 40), 'active' => $active, 'pf' => $pf];
         }
         $new = (array)($_POST['new'] ?? []);
         $newRow = null;
@@ -421,7 +432,7 @@ function admin_tariffs(): void
         if (!$errors) {
             $db->beginTransaction();
             foreach ($plan as $id => $p) {
-                $db->prepare('UPDATE doc_tariffs SET name = ?, ext_ref = ?, is_active = ? WHERE id = ?')->execute([$p['name'], $p['ext'], $p['active'], $id]);
+                $db->prepare('UPDATE doc_tariffs SET name = ?, ext_ref = ?, is_active = ?, price_field = ? WHERE id = ?')->execute([$p['name'], $p['ext'], $p['active'], $p['pf'], $id]);
             }
             if ($newRow) {
                 $db->prepare('INSERT INTO doc_tariffs (num, name, ext_ref, is_active) VALUES (?, ?, ?, 1)')->execute([$newRow['num'], $newRow['name'], $newRow['ext']]);
@@ -436,7 +447,8 @@ function admin_tariffs(): void
     foreach ($rows as $r) {
         $users[(int)$r['num']] = tariff_customers((int)$r['num']);
     }
-    admin_render('tariffs', ['rows' => $rows, 'users' => $users, 'errors' => $errors, 'old' => $old, 'cfg' => 'tarifas', 'title' => 'Tarifas']);
+    admin_render('tariffs', ['rows' => $rows, 'users' => $users, 'errors' => $errors, 'old' => $old, 'priceFields' => docs_price_fields(),
+        'defaultPrice' => field_price_public() ?? (docs_price_fields()[0] ?? null), 'cfg' => 'tarifas', 'title' => 'Tarifas']);
 }
 
 /* ---------- Parámetros ---------- */
