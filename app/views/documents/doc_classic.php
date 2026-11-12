@@ -5,6 +5,7 @@
  * $d, $co (empresa), $payLabel, $isRetail.
  */
 $annulled = $doc['status'] === 'anulado';
+$draft = $doc['status'] === 'borrador'; // factura aún sin emitir: vista previa sin número
 $fmtPct = fn($p) => rtrim(rtrim(number_format((float)$p, 2, ',', ''), '0'), ',') . ' %';
 $cols = $d['cols'];
 $sumRec = array_sum(array_column($vat, 'rec'));
@@ -78,7 +79,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
 <div class="page"><article class="sheet">
-  <?php if ($annulled): ?><div class="stamp" aria-hidden="true">ANULADO</div><?php endif; ?>
+  <?php if ($annulled || $draft): ?><div class="stamp" aria-hidden="true"><?= $draft ? 'BORRADOR' : 'ANULADO' ?></div><?php endif; ?>
   <header class="head">
     <div class="co">
       <?php if ($co['logo']): ?><img src="<?= e($co['logo']) ?>" alt="<?= e($co['legal'] !== '' ? $co['legal'] : site_name()) ?>"><?php endif; ?>
@@ -91,7 +92,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <div class="box">
       <h2><?= e($k['print']) ?></h2>
       <dl>
-        <dt>Número</dt><dd><?= e($doc['doc_code']) ?></dd>
+        <dt>Número</dt><dd><?= $draft ? '(al emitir)' : e($doc['doc_code']) ?></dd>
         <dt>Fecha</dt><dd><?= e(erp_day((int)$doc['doc_day'])) ?></dd>
         <?php if ($payLabel !== ''): ?><dt>Forma de pago</dt><dd><?= e($payLabel) ?></dd><?php endif; ?>
         <?php if ($doc['ref_text'] !== ''): ?><dt>Referencia</dt><dd><?= e($doc['ref_text']) ?></dd><?php endif; ?>

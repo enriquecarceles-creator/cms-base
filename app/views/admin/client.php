@@ -131,7 +131,7 @@ $ended = (int)$c['ended_day'] > 0;
                   <?php endforeach; ?>
                 </tbody></table></div>
                 <?php endif; ?>
-                <p class="muted" style="margin:6px 0 0"><a href="<?= e(url('/admin/ventas/' . rawurlencode($i['inv_number']))) ?>">Abrir la factura completa →</a></p>
+                <p class="muted" style="margin:6px 0 0"><a href="<?= e(url('/admin/ventas/' . erp_inv_seg($i['inv_number']))) ?>">Abrir la factura completa →</a></p>
               </div>
             </details>
           <?php endforeach; ?>

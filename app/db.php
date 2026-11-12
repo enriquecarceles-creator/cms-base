@@ -24,7 +24,7 @@ const DB_ENGINES = [
 /** Tablas de la aplicación en orden de dependencias (padres antes que hijas). */
 const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'user_recovery_codes', 'settings', 'categories', 'products',
     'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages', 'data_history', 'doc_series', 'doc_series_counters', 'doc_vat_rates', 'doc_pay_methods', 'doc_tariffs',
-    'doc_headers', 'doc_lines', 'doc_events'];
+    'doc_headers', 'doc_lines', 'doc_events', 'doc_register'];
 
 /* doc_headers, doc_lines y doc_events (pedidos y albaranes) van SIEMPRE en las copias aunque lleven datos de clientes (decidido el 12/11/2026): no se recuperan sincronizando. */
 /* mail_log (últimos 50 correos, con direcciones) y backup_log (descargas de copias) quedan fuera de DB_TABLES a propósito: no viajan en las copias. */
@@ -392,6 +392,7 @@ function db_copy_all(CmsPdo $from, CmsPdo $to, bool $withErp = false): void
     if (in_array('doc_series', db_tables($to), true)) {
         require_once __DIR__ . '/schema.php';
         schema_seed_series($to);
+        schema_seed_simplified($to); // copias anteriores a los tiques: serie T
     }
     if (in_array('doc_vat_rates', db_tables($to), true)) {
         require_once __DIR__ . '/schema.php';

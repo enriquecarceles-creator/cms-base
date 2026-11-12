@@ -306,7 +306,7 @@ $db->prepare('UPDATE erp_invoices SET annulled = 0 WHERE inv_number = ?')->execu
 /* 5c. Formulario de factura: datos propios del CMS (nunca los de NCS) */
 $section('Formulario de factura (datos propios del CMS)');
 $check('etiquetas: se limpian, sin repetir y máximo 10', erp_tags_list('Reclamar, <b>urgente</b>, reclamar, a,b,c,d,e,f,g,h,i,j,k') === ['Reclamar', 'urgente', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
-$check('solo las facturas con origen «cms» son editables; las de NCS, no', erp_invoice_editable(['origin' => 'cms']) && !erp_invoice_editable(['origin' => 'ncs']) && !erp_invoice_editable([]));
+$check('desde Ventas no se editan los datos fiscales de ninguna factura (NCS: en NCS; CMS emitida: inalterable, con rectificativa)', !erp_invoice_editable(['origin' => 'cms']) && !erp_invoice_editable(['origin' => 'ncs']) && !erp_invoice_editable([]));
 $check('fecha de cobro: ida y vuelta del campo de fecha', erp_day_from_input('2022-03-15') === 20220315 && erp_day_from_input('2022-02-31') === 0 && erp_day_to_input(20220315) === '2022-03-15');
 $cand = erp_preload_candidates();
 $done = erp_preload_paid();
@@ -452,9 +452,9 @@ require_once $tmp . '/app/doc_series.php';
 $ncsLetters = array_keys(series_ncs_letters());
 $check('series: las letras de las facturas importadas se leen de erp_invoices', $ncsLetters !== [] && count(array_filter($ncsLetters, fn($l) => preg_match('/^[A-Z]+$/', $l))) === count($ncsLetters), implode(',', $ncsLetters));
 $seed = array_column($db->query('SELECT letter FROM doc_series ORDER BY id')->fetchAll(), 'letter');
-$check('series: F, R, A y P sembradas', $seed === ['F', 'R', 'A', 'P']);
+$check('series: F, R, A, P y T (tiques) sembradas', $seed === ['F', 'R', 'A', 'P', 'T']);
 $errs = [];
-$postS = ['s' => [], 'default' => [], 'new' => ['type' => 'factura', 'letter' => $ncsLetters[0] ?? 'V', 'digits' => 5, 'with_year' => '']];
+$postS = ['s' => [], 'default' => [], 'new' => ['type' => 'albaran', 'letter' => $ncsLetters[0] ?? 'V', 'digits' => 5, 'with_year' => '']];
 foreach (series_all() as $sid => $sr) {
     $postS['s'][$sid] = ['descr' => $sr['descr'], 'active' => '1', 'letter' => $sr['letter'], 'digits' => $sr['digits'], 'with_year' => $sr['with_year']];
 }
@@ -464,6 +464,10 @@ $postS['new']['with_year'] = '1';
 $errs = [];
 series_plan($postS, series_ncs_letters(), (int)date('Y'), $errs);
 $check('series: con año se permite (y se avisa en pantalla)', $errs === []);
+$postS['new']['type'] = 'factura';
+$errs = [];
+series_plan($postS, series_ncs_letters(), (int)date('Y'), $errs);
+$check('series: una serie de FACTURAS no puede usar la letra de NCS ni con año (conviven sin mezclarse)', count($errs) === 1 && str_contains($errs[0], 'necesita otra letra'));
 $fid = (int)$db->query("SELECT id FROM doc_series WHERE letter = 'F'")->fetchColumn();
 $db->beginTransaction();
 $n1 = series_next_number($fid, 2026)['number'];
@@ -509,6 +513,7 @@ setting('', '', true);
 /* 5g. Pedidos y albaranes (motor de documentos) con artículos y clientes reales de NCS */
 $section('Pedidos y albaranes');
 require_once $tmp . '/app/docs_engine.php';
+require_once $tmp . '/app/docs_invoices.php';
 // Un artículo real de TART con tallas (T00, huecos de 4) y precio (PVP2), dado de alta aquí como lo haría el perfil de NCS
 // (en este punto de la batería el catálogo no está importado); de cada fila solo se toman CODIGO, DESCRIPCION, T00 y PVP2.
 $src = null;
@@ -561,7 +566,45 @@ $inBackup = (int)$bkPdo->query('SELECT COUNT(*) FROM doc_headers')->fetchColumn(
 $bkPdo = null;
 @unlink($bkDocs);
 $check('pedidos: la copia por defecto (sin la casilla) los lleva', $inBackup === $one('SELECT COUNT(*) FROM doc_headers') && $inBackup > 0, "$inBackup documentos");
+// Facturas del CMS con un cliente real (con NIF y dirección): emitir, convivir con la sincronización de NCS y rectificar
+if (trim(setting('tax_id', '', true)) === '' || trim(setting('company_name')) === '') {
+    save_setting('company_name', 'Empresa inventada para la prueba');
+    save_setting('tax_id', 'B00000000'); // inventado
+    setting('', '', true);
+}
+$custF = $db->prepare("SELECT * FROM erp_customers WHERE nif <> '' AND address <> '' AND cust_code <> ? ORDER BY id LIMIT 1");
+$custF->execute([erp_retail_code()]);
+$custF = $custF->fetch();
+$blankF = docs_blank('factura');
+$stF = docs_from_post($blankF, [], ['h' => ['series_id' => $blankF['series_id'], 'day' => date('Y-m-d'), 'cust_code' => $custF['cust_code'] ?? '', 'cust_prev' => '', 'vat_incl' => '1', 'tariff' => '1'],
+    'l' => [['id' => 0, 'oref' => '', 'ref' => (string)($art['ref'] ?? ''), 'qty' => '1', 'vat' => (string)docs_vat_default()]]]);
+$fidF = $stF['errors'] === [] ? docs_save($stF['doc'], $stF['lines']) : 0;
+$codeF = '';
+try {
+    $codeF = $fidF > 0 ? docs_issue($fidF) : '';
+} catch (Throwable $e) {
+    $codeF = 'ERROR: ' . $e->getMessage();
+}
+$check('facturas: borrador con un cliente real y emisión con el número de la serie F', (bool)preg_match('#^F\d{5}/\d{2}$#', $codeF), $codeF . implode(' ', $stF['errors']));
+$check('facturas: la emitida queda en Ventas con origen CMS y en el registro encadenado', $one("SELECT COUNT(*) FROM erp_invoices WHERE origin = 'cms'") === 1 && docs_register_verify() === ['n' => 1, 'problems' => []]);
+$resF = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
+erp_job_clear();
+$check('facturas: sincronizar con NCS no las cuenta como «ya no están» ni cambia nada', $resF['counts']['inv']['gone'] === 0 && $resF['counts']['inv']['new'] + $resF['counts']['inv']['changed'] === 0, json_encode($resF['counts']['inv']));
+$ridF = $fidF > 0 ? docs_rectify(docs_get($fidF), 'diferencias', 'R1', 'Devolución') : 0;
+$codeR = '';
+try {
+    $codeR = $ridF > 0 ? docs_issue($ridF) : '';
+} catch (Throwable $e) {
+    $codeR = 'ERROR: ' . $e->getMessage();
+}
+$check('facturas: rectificativa por diferencias (R1) con total negativo', (bool)preg_match('#^R\d{5}/\d{2}$#', $codeR) && (int)docs_get($ridF)['total_cents'] === -(int)docs_get($fidF)['total_cents'], $codeR);
+$book = [];
+docs_sii_book_write(function (array $row) use (&$book) { $book[] = $row; }, (int)date('Y0101'), (int)date('Ymd'));
+$check('facturas: libro de facturas expedidas con F1 y R1', count($book) === 3 && $book[1][3] === 'F1' && $book[2][3] === 'R1' && $book[2][4] === 'I' && $book[2][5] === $codeF, json_encode(array_map(fn($r) => array_slice($r, 0, 6), $book)));
 // Se quitan los de esta prueba: llevan el nombre de un cliente real y la prueba siguiente comprueba que la copia no lleva clientes de NCS
+$db->exec('DELETE FROM doc_register');
+$db->exec("DELETE FROM erp_invoice_lines WHERE src_key LIKE 'cms:%'");
+$db->exec("DELETE FROM erp_invoices WHERE origin = 'cms'");
 $db->exec('DELETE FROM doc_events');
 $db->exec('DELETE FROM doc_lines');
 $db->exec('DELETE FROM doc_headers');

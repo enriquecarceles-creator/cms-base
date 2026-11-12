@@ -348,6 +348,7 @@ const SCHEMA_SERIES_DDL = "
 /** Series iniciales (solo si no hay ninguna): F facturas, R rectificativas, A albaranes y P pedidos. */
 const SCHEMA_SERIES_SEED = [
     ['factura', 'F', 'Facturas'], ['rectificativa', 'R', 'Facturas rectificativas'], ['albaran', 'A', 'Albaranes'], ['pedido', 'P', 'Pedidos'],
+    ['simplificada', 'T', 'Facturas simplificadas (tiques)'],
 ];
 
 function schema_seed_series(CmsPdo $pdo): void
@@ -438,7 +439,19 @@ const SCHEMA_DOCS_DDL = "
         created_at {BIG} NOT NULL DEFAULT 0,
         created_by {S} NOT NULL DEFAULT '',
         updated_at {BIG} NOT NULL DEFAULT 0,
-        updated_by {S} NOT NULL DEFAULT ''
+        updated_by {S} NOT NULL DEFAULT '',
+        issued_at {BIG} NOT NULL DEFAULT 0,
+        issued_by {S} NOT NULL DEFAULT '',
+        op_day {I} NOT NULL DEFAULT 0,
+        rect_of {I} NOT NULL DEFAULT 0,
+        rect_mode {S} NOT NULL DEFAULT '',
+        rect_reason {S} NOT NULL DEFAULT '',
+        rect_text {S} NOT NULL DEFAULT '',
+        sii_type {S} NOT NULL DEFAULT '',
+        vat_note {S} NOT NULL DEFAULT '',
+        cash_crit {I} NOT NULL DEFAULT 0,
+        billed_by {I} NOT NULL DEFAULT 0,
+        reg_hash {S} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_doch_type_day ON doc_headers(doc_type, doc_day);
     CREATE INDEX idx_doch_cust ON doc_headers(cust_code);
@@ -474,6 +487,49 @@ const SCHEMA_DOCS_DDL = "
     );
     CREATE INDEX idx_doce_doc ON doc_events(doc_id);
 ";
+
+/** v30 (facturas propias): columnas nuevas de doc_headers para las bases de datos creadas con la v29. */
+const SCHEMA_DOCS_V30_COLUMNS = [
+    'issued_at' => '{BIG} NOT NULL DEFAULT 0', 'issued_by' => "{S} NOT NULL DEFAULT ''", 'op_day' => '{I} NOT NULL DEFAULT 0',
+    'rect_of' => '{I} NOT NULL DEFAULT 0', 'rect_mode' => "{S} NOT NULL DEFAULT ''", 'rect_reason' => "{S} NOT NULL DEFAULT ''",
+    'rect_text' => "{S} NOT NULL DEFAULT ''", 'sii_type' => "{S} NOT NULL DEFAULT ''", 'vat_note' => "{S} NOT NULL DEFAULT ''",
+    'cash_crit' => '{I} NOT NULL DEFAULT 0', 'billed_by' => '{I} NOT NULL DEFAULT 0', 'reg_hash' => "{S} NOT NULL DEFAULT ''",
+];
+
+/**
+ * Registro de facturas emitidas (doc_register): una fila por factura al emitirla, nunca se modifica ni se borra. Cada fila guarda
+ * los datos fiscales (payload, JSON) y su huella sha256 encadenada con la anterior (hash = sha256(prev_hash . payload)): si alguien
+ * alterase una factura o el registro, la cadena dejaría de cuadrar (docs_register_verify()). En DB_TABLES (va en las copias).
+ */
+const SCHEMA_INVOICES_DDL = "
+    CREATE TABLE doc_register (
+        id {ID},
+        doc_id {I} NOT NULL,
+        doc_code {K} NOT NULL UNIQUE,
+        issued_at {BIG} NOT NULL DEFAULT 0,
+        payload {T} NULL,
+        prev_hash {S} NOT NULL DEFAULT '',
+        hash {S} NOT NULL DEFAULT ''
+    );
+";
+
+/** Serie de tiques (facturas simplificadas) para webs que ya tenían series: T, o TQ / TK si la T está ocupada; nada si ya hay una. */
+function schema_seed_simplified(CmsPdo $pdo): void
+{
+    $st = $pdo->prepare('SELECT COUNT(*) FROM doc_series WHERE doc_type = ?');
+    $st->execute(['simplificada']);
+    if ((int)$st->fetchColumn() > 0) {
+        return;
+    }
+    $used = array_map('strtoupper', $pdo->query('SELECT letter FROM doc_series')->fetchAll(PDO::FETCH_COLUMN));
+    foreach (['T', 'TQ', 'TK'] as $letter) {
+        if (!in_array($letter, $used, true)) {
+            $pdo->prepare('INSERT INTO doc_series (doc_type, letter, descr, digits, with_year, is_default, is_active, created_at) VALUES (?, ?, ?, 5, 1, 1, 1, ?)')
+                ->execute(['simplificada', $letter, 'Facturas simplificadas (tiques)', time()]);
+            return;
+        }
+    }
+}
 
 /** Valores iniciales de IVA (21, 10, 4, 0 con sus recargos de equivalencia) y tarifas 1-3; solo si las tablas están vacías. */
 function schema_seed_doc_params(CmsPdo $pdo): void
@@ -577,7 +633,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL . SCHEMA_INVOICES_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -685,6 +741,24 @@ function migrate_schema(CmsPdo $pdo): void
         }
         if (in_array('doc_tariffs', db_tables($pdo), true) && !in_array('price_field', db_columns($pdo, 'doc_tariffs'), true)) {
             db_add_column($pdo, 'doc_tariffs', 'price_field', '{I} NOT NULL DEFAULT 0');
+        }
+    }
+    if ($ver < 30) { // facturas propias: columnas de factura, registro encadenado y serie T de tiques
+        if (in_array('doc_headers', db_tables($pdo), true)) {
+            $have = db_columns($pdo, 'doc_headers');
+            foreach (SCHEMA_DOCS_V30_COLUMNS as $col => $def) {
+                if (!in_array($col, $have, true)) {
+                    db_add_column($pdo, 'doc_headers', $col, $def);
+                }
+            }
+        }
+        if (!in_array('doc_register', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_INVOICES_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
+        }
+        if (in_array('doc_series', db_tables($pdo), true)) {
+            schema_seed_simplified($pdo);
         }
     }
     if ($ver < 28) {

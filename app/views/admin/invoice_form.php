@@ -20,14 +20,15 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
 
 <div class="if-bar" role="toolbar" aria-label="Acciones de la factura">
   <div class="if-grp">
-    <?php if ($nb['prev'] !== null): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['prev']))) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="btn small ghost dis">‹ Anterior</span><?php endif; ?>
-    <?php if ($nb['next'] !== null): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['next']))) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="btn small ghost dis">Siguiente ›</span><?php endif; ?>
+    <?php if ($nb['prev'] !== null): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['prev']))) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="btn small ghost dis">‹ Anterior</span><?php endif; ?>
+    <?php if ($nb['next'] !== null): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['next']))) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="btn small ghost dis">Siguiente ›</span><?php endif; ?>
   </div>
   <div class="if-grp">
     <a class="btn small" href="<?= e(url($self . '/ver')) ?>" target="_blank" rel="noopener">Imprimir</a>
     <a class="btn small ghost" href="<?= e(url($self . '/modificar')) ?>">Modificar</a>
     <a class="btn small ghost" href="<?= e(url($self . '/enviar')) ?>">Enviar por email</a>
-    <?php if ($cust): ?><a class="btn small ghost" href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
+    <?php if (!empty($docx)): ?><a class="btn small ghost" href="<?= e(url('/admin/facturas/' . (int)$docx['id'])) ?>" title="Documento del CMS: rectificar, ver albaranes y registro">Documento / Rectificar</a><?php endif; ?>
+    <?php if ($cust && $cust['cust_code'] !== ''): ?><a class="btn small ghost" href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
     <a class="btn small ghost" href="<?= e(url('/admin/ventas')) ?>">Volver</a>
   </div>
 </div>
@@ -36,7 +37,7 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
   <h1>Factura <?= e($inv['inv_number']) ?></h1>
   <p class="cf-tags">
     <span class="tag">Origen: <?= e(strtoupper((string)$inv['origin'])) ?></span>
-    <?php if ($annulled): ?><span class="tag tag-off">Anulada</span><?php endif; ?>
+    <?php if ($annulled): ?><span class="tag tag-off"><?= (string)$inv['origin'] === 'cms' ? 'Sustituida' : 'Anulada' ?></span><?php endif; ?>
     <?php if ((int)$inv['total_cents'] < 0): ?><span class="tag tag-off">Devolución</span><?php endif; ?>
     <?php if ((int)$sent['n'] > 0): ?><span class="tag tag-ok" title="<?= (int)$sent['n'] ?> envío(s)">Enviada <?= e(date('d/m/Y', (int)$sent['last'])) ?></span><?php endif; ?>
     <?php if ($paid): ?><span class="tag tag-ok">Cobrada <?= e(erp_day((int)$state['paid_day'])) ?></span><?php else: ?><span class="tag">Pendiente de cobro</span><?php endif; ?>
@@ -57,7 +58,7 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
     </dl>
   </section>
   <section class="if-box" aria-label="Cliente">
-    <h2>Cliente <?php if ($cust && !$isRetail): ?><a class="if-link" href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver ficha →</a><?php endif; ?></h2>
+    <h2>Cliente <?php if ($cust && !$isRetail && $cust['cust_code'] !== ''): ?><a class="if-link" href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver ficha →</a><?php endif; ?></h2>
     <?php if ($isRetail || !$cust): ?>
       <p class="if-retail">Cliente de contado</p>
     <?php else: ?>

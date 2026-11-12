@@ -32,6 +32,7 @@ function erp_sales_filters(array $src): array
         'art' => mb_substr(trim((string)($src['art'] ?? '')), 0, 60),
         'fam' => (int)($src['fam'] ?? 0) > 0 ? (int)$src['fam'] : 0,
         'por' => ($src['por'] ?? '') === 'importe' ? 'importe' : '',
+        'origen' => in_array($src['origen'] ?? '', ['ncs', 'cms'], true) ? (string)$src['origen'] : '',
     ];
     return array_filter($f, fn($v) => $v !== '' && $v !== 0);
 }
@@ -54,6 +55,10 @@ function erp_sales_cond(array $f): array
     if (!empty($f['mes'])) {
         $w .= ' AND i.inv_month = ?';
         $a[] = $f['mes'];
+    }
+    if (!empty($f['origen'])) { // facturas importadas de NCS o emitidas en el CMS
+        $w .= ' AND i.origin = ?';
+        $a[] = $f['origen'];
     }
     $retail = erp_retail_code();
     if (($f['ambito'] ?? '') === 'mostrador') {
@@ -78,6 +83,9 @@ function admin_sales(string $tab): void
         return;
     }
     $tab = isset(ERP_SALES_TABS[$tab]) ? $tab : 'facturas';
+    if (function_exists('docs_mirror_sync')) {
+        docs_mirror_sync(); // facturas del CMS que falten aquí (p. ej. tras restaurar una copia sin clientes y ventas)
+    }
     $f = erp_sales_filters($_GET);
     $v = ['tab' => $tab, 'f' => $f, 'years' => erp_sales_years(), 'retail' => erp_retail_code(), 'totals' => erp_totals(), 'title' => $tab === 'facturas' ? 'Facturas' : 'Informes'];
     [$cond, $args] = erp_sales_cond($f);
@@ -88,8 +96,8 @@ function admin_sales(string $tab): void
         $a = $args;
         if (($f['q'] ?? '') !== '') {
             $like = '%' . $f['q'] . '%';
-            $w .= ' AND (i.inv_number LIKE ? OR i.cust_code LIKE ? OR c.name LIKE ? OR c.trade_name LIKE ?)';
-            array_push($a, $like, $like, $like, $like);
+            $w .= ' AND (i.inv_number LIKE ? OR i.cust_code LIKE ? OR c.name LIKE ? OR c.trade_name LIKE ? OR d.cust_name LIKE ?)';
+            array_push($a, $like, $like, $like, $like, $like);
         }
         if (($f['ver'] ?? '') === 'dev') {
             $w .= ' AND i.total_cents < 0';
@@ -98,7 +106,7 @@ function admin_sales(string $tab): void
         }
         $st = $db->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN i.annulled = 0 THEN i.total_cents ELSE 0 END), 0) AS tot, COALESCE(SUM(CASE WHEN i.annulled = 0 THEN i.base_cents ELSE 0 END), 0) AS base,
                 COALESCE(SUM(CASE WHEN i.annulled = 0 THEN i.vat_cents ELSE 0 END), 0) AS vat
-            FROM erp_invoices i LEFT JOIN erp_customers c ON c.cust_code = i.cust_code WHERE 1=1' . $w);
+            FROM erp_invoices i LEFT JOIN erp_customers c ON c.cust_code = i.cust_code LEFT JOIN doc_headers d ON d.doc_code = i.inv_number WHERE 1=1' . $w);
         $st->execute($a);
         $sum = $st->fetch();
         $pages = max(1, (int)ceil((int)$sum['n'] / ERP_PER_PAGE));
@@ -106,8 +114,8 @@ function admin_sales(string $tab): void
         $sortKey = $f['orden'] ?? 'fecha';
         $dir = ($f['dir'] ?? '') === 'asc' ? 'ASC' : 'DESC';
         $order = ERP_INV_SORTS[$sortKey] . ' ' . $dir . ($sortKey === 'fecha' ? ', i.id ' . $dir : ', i.inv_day DESC, i.id DESC');
-        $st = $db->prepare('SELECT i.id, i.inv_number, i.inv_day, i.cust_code, i.base_cents, i.vat_cents, i.total_cents, i.annulled, c.name AS cname, c.trade_name AS ctrade
-            FROM erp_invoices i LEFT JOIN erp_customers c ON c.cust_code = i.cust_code WHERE 1=1' . $w . ' ORDER BY ' . $order . ' LIMIT ' . ERP_PER_PAGE . ($page > 1 ? ' OFFSET ' . (($page - 1) * ERP_PER_PAGE) : ''));
+        $st = $db->prepare('SELECT i.id, i.inv_number, i.inv_day, i.cust_code, i.base_cents, i.vat_cents, i.total_cents, i.annulled, i.origin, COALESCE(c.name, d.cust_name) AS cname, c.trade_name AS ctrade
+            FROM erp_invoices i LEFT JOIN erp_customers c ON c.cust_code = i.cust_code LEFT JOIN doc_headers d ON d.doc_code = i.inv_number WHERE 1=1' . $w . ' ORDER BY ' . $order . ' LIMIT ' . ERP_PER_PAGE . ($page > 1 ? ' OFFSET ' . (($page - 1) * ERP_PER_PAGE) : ''));
         $st->execute($a);
         $v += ['rows' => $st->fetchAll(), 'sum' => $sum, 'page' => $page, 'pages' => $pages];
     } elseif ($tab === 'meses') {

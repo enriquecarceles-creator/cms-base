@@ -4,6 +4,14 @@
  * posicionamiento moderno. Variables: las de erp_invoice_doc_vars() + $message (texto), $linkUrl, $expires, $maxLines.
  */
 $annulled = (int)$inv['annulled'] === 1;
+$docx = $docx ?? null; // factura emitida en el CMS (doc_headers): título según el tipo, menciones legales y sin el pie de «copia de NCS»
+if ($docx) {
+    $d['title'] = ['factura' => 'FACTURA', 'simplificada' => 'FACTURA SIMPLIFICADA', 'rectificativa' => 'FACTURA RECTIFICATIVA'][$docx['doc_type']] ?? $d['title'];
+    $d['stamp'] = 'SUSTITUIDA'; // una factura del CMS solo deja de contar si se rectifica por sustitución
+    if ($d['footer'] === DOC_DEFAULTS['footer']) {
+        $d['footer'] = '';
+    }
+}
 $fmtPct = fn($p) => $p === null ? '—' : rtrim(rtrim(number_format((float)$p, 1, ',', ''), '0'), ',') . ' %';
 $sizeTxt = fn(array $l) => $l['size_txt'] !== '' ? $l['size_txt'] : ((int)$l['size_no'] > 0 ? 'nº ' . $l['size_no'] : '');
 $colorTxt = fn(array $l) => $l['color_txt'] !== '' ? $l['color_txt'] : ((int)$l['color_no'] > 0 ? 'nº ' . $l['color_no'] : '');

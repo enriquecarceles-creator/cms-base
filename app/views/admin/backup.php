@@ -7,7 +7,7 @@
   <?= csrf_field() ?>
   <p class="muted" style="margin:0">Descarga un ZIP con la base de datos (artículos, <?= e(term('families', true)) ?>, usuarios, textos, portada) y todas las fotos. Hazlo antes de actualizar la web.</p>
   <label class="check"><input type="checkbox" name="with_erp" value="1"> <span>Incluir clientes y ventas (datos personales)</span></label>
-  <p class="muted" style="margin:0">Por defecto la copia <strong>no</strong> lleva los clientes ni las facturas de NCS, ni las claves de la doble verificación. <strong>Los pedidos y albaranes van siempre</strong> (se crean aquí y no se recuperan de otro sitio) y llevan nombre, NIF y dirección de los clientes: guarda la copia con cuidado. Si restauras una copia, los clientes y ventas se vuelven a traer sincronizando con NCS, pero <strong>las notas internas de los clientes no</strong> (las escribe la gente aquí): si las quieres conservar, marca la casilla.</p>
+  <p class="muted" style="margin:0">Por defecto la copia <strong>no</strong> lleva los clientes ni las facturas de NCS, ni las claves de la doble verificación. <strong>Los pedidos, albaranes y facturas del CMS van siempre</strong> (se crean aquí y no se recuperan de otro sitio) y llevan nombre, NIF y dirección de los clientes: guarda la copia con cuidado. Si restauras una copia, los clientes y ventas se vuelven a traer sincronizando con NCS, pero <strong>las notas internas de los clientes no</strong> (las escribe la gente aquí): si las quieres conservar, marca la casilla.</p>
   <div class="buttons"><button class="btn" type="submit">Descargar copia de seguridad</button></div>
 </form>
 

@@ -273,7 +273,7 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
         $haveC[$r[0]] = $r[1];
     }
     $haveI = [];
-    foreach ($db->query('SELECT inv_number, row_hash FROM erp_invoices')->fetchAll(PDO::FETCH_NUM) as $r) {
+    foreach ($db->query("SELECT inv_number, row_hash FROM erp_invoices WHERE origin = 'ncs'")->fetchAll(PDO::FETCH_NUM) as $r) { // las del CMS no vienen de NCS
         $haveI[$r[0]] = $r[1];
     }
 

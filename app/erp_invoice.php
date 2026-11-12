@@ -17,10 +17,63 @@ const ERP_EVENT_LABELS = [
 ];
 const ERP_NCS_LOCK_MSG = 'Factura de NCS: para cambiarla, haz una rectificativa en NCS.';
 
-/** ¿Se pueden editar los datos fiscales? Solo las facturas propias del CMS (origin = 'cms'); las de NCS son de solo lectura. */
+const ERP_CMS_LOCK_MSG = 'Factura emitida en el CMS: no se puede modificar. Para corregirla, haz una rectificativa desde su documento.';
+
+/**
+ * ¿Se pueden editar los datos fiscales desde Ventas? Nunca: las de NCS se corrigen en NCS y las emitidas en el CMS son inalterables
+ * (se corrigen con rectificativa; los borradores se editan en /admin/facturas). Aquí solo se tocan los datos propios (cobro…).
+ */
 function erp_invoice_editable(array $inv): bool
 {
-    return (string)($inv['origin'] ?? 'ncs') === 'cms';
+    return false;
+}
+
+/** Número de factura → trozo de dirección: la «/» de «F00001/26» se escribe «~» (una barra, aunque vaya codificada, rompe la dirección). */
+function erp_inv_seg(string $num): string
+{
+    return rawurlencode(str_replace('/', '~', $num));
+}
+
+/** Trozo de dirección → número de factura (deshace erp_inv_seg; un número que de verdad lleve «~» se busca tal cual primero). */
+function erp_inv_from_seg(string $seg): string
+{
+    if (!str_contains($seg, '~')) {
+        return $seg;
+    }
+    $st = db()->prepare('SELECT COUNT(*) FROM erp_invoices WHERE inv_number = ?');
+    $st->execute([$seg]);
+    return (int)$st->fetchColumn() > 0 ? $seg : str_replace('~', '/', $seg);
+}
+
+/**
+ * Cliente de una factura para enseñarla: el de la ficha (erp_customers) o, si la factura es del CMS, los datos guardados en el
+ * propio documento al emitirla (puede ser un cliente sin ficha, y una factura no cambia aunque cambie la ficha).
+ */
+function erp_invoice_customer(array $inv): ?array
+{
+    if ((string)($inv['origin'] ?? '') === 'cms') {
+        $doc = erp_invoice_cms_doc($inv);
+        if ($doc && trim((string)$doc['cust_name']) !== '') {
+            return ['cust_code' => (string)$doc['cust_code'], 'name' => (string)$doc['cust_name'], 'trade_name' => '', 'nif' => (string)$doc['cust_nif'],
+                'address' => (string)$doc['cust_address'], 'postcode' => (string)$doc['cust_postcode'], 'city' => (string)$doc['cust_city'],
+                'province' => (string)$doc['cust_province'], 'email' => (string)$doc['cust_email'], 'country' => ''];
+        }
+        return null;
+    }
+    $st = db()->prepare('SELECT * FROM erp_customers WHERE cust_code = ?');
+    $st->execute([$inv['cust_code']]);
+    return $st->fetch() ?: null;
+}
+
+/** Documento del CMS de una factura emitida en el CMS (o null). */
+function erp_invoice_cms_doc(array $inv): ?array
+{
+    if ((string)($inv['origin'] ?? '') !== 'cms') {
+        return null;
+    }
+    $st = db()->prepare("SELECT * FROM doc_headers WHERE doc_code = ? AND status = 'emitida'");
+    $st->execute([(string)$inv['inv_number']]);
+    return $st->fetch() ?: null;
 }
 
 /** Anota un hecho en el historial de la factura (con el usuario de la sesión; 'enlace' si no hay sesión). */
@@ -103,6 +156,7 @@ function admin_invoice(string $num, string $sub = ''): void
     if (!erp_guard()) {
         return;
     }
+    $num = erp_inv_from_seg($num); // «F00001~26» → «F00001/26»
     if ($sub === 'ver') {
         admin_invoice_view($num);
         return;
@@ -116,7 +170,7 @@ function admin_invoice(string $num, string $sub = ''): void
         return;
     }
     $id = (int)$inv['id'];
-    $self = '/admin/ventas/' . rawurlencode($num);
+    $self = '/admin/ventas/' . erp_inv_seg($num);
 
     $sendForm = null;
     $sendErrors = [];
@@ -190,9 +244,7 @@ function admin_invoice(string $num, string $sub = ''): void
         }
     }
 
-    $st = $db->prepare('SELECT * FROM erp_customers WHERE cust_code = ?');
-    $st->execute([$inv['cust_code']]);
-    $cust = $st->fetch() ?: null;
+    $cust = erp_invoice_customer($inv);
     $st = $db->prepare('SELECT * FROM erp_invoice_lines WHERE invoice_id = ? ORDER BY line_no, id');
     $st->execute([$id]);
     $lines = $st->fetchAll();
@@ -203,7 +255,7 @@ function admin_invoice(string $num, string $sub = ''): void
     $st->execute([$id]);
     $sent = $st->fetch();
     $v = [
-        'inv' => $inv, 'lines' => $lines, 'cust' => $cust, 'isRetail' => erp_retail_code() === (string)$inv['cust_code'], 'vat' => $vat,
+        'inv' => $inv, 'lines' => $lines, 'cust' => $cust, 'isRetail' => (string)$inv['origin'] === 'cms' ? $cust === null : erp_retail_code() === (string)$inv['cust_code'], 'docx' => erp_invoice_cms_doc($inv), 'vat' => $vat,
         'lineRate' => count($withBase) === 1 && $withBase[0]['pct'] !== null ? (int)$withBase[0]['pct'] : null,
         'serie' => erp_serie((string)$inv['inv_number']), 'payLabel' => erp_pay_label((string)$inv['pay_code']),
         'map' => erp_family_map(), 'nb' => erp_invoice_neighbours($inv), 'state' => $state, 'sent' => $sent, 'self' => $self,

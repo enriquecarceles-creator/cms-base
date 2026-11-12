@@ -59,6 +59,11 @@ $chk = fn(string $k) => $old !== null ? !empty($old[$k]) : docp_bool($k);
       <label class="check"><input type="checkbox" name="warn_stock_min" value="1"<?= $chk('warn_stock_min') ? ' checked' : '' ?>> <span>Avisar si el stock queda por debajo del mínimo</span></label>
       <label class="check"><input type="checkbox" name="warn_blocked" value="1"<?= $chk('warn_blocked') ? ' checked' : '' ?>> <span>Avisar si el artículo está bloqueado</span></label>
     </fieldset>
+    <fieldset>
+      <legend>Facturas simplificadas (tiques)</legend>
+      <label class="check"><input type="checkbox" name="retail_trade" value="1"<?= $chk('retail_trade') ? ' checked' : '' ?>> <span>Comercio minorista: tiques de hasta 3.000 € (si no, hasta 400 €), IVA incluido</span></label>
+      <small>Por encima del tope hay que hacer factura completa. Si dudas, consúltalo con tu gestor.</small>
+    </fieldset>
   </div>
 
   <div class="savebar"><button class="btn" type="submit">Guardar</button><span class="muted">IVA, formas de pago y tarifas, en sus propias pantallas.</span></div>

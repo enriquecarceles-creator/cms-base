@@ -18,8 +18,10 @@ declare(strict_types=1);
  * Nada de esto es específico de NCS: las letras importadas se leen de erp_invoices.
  */
 
-const DOC_SERIES_TYPES = ['factura' => 'Factura', 'rectificativa' => 'Factura rectificativa', 'albaran' => 'Albarán', 'pedido' => 'Pedido'];
-const DOC_SERIES_TYPES_PL = ['factura' => 'Facturas', 'rectificativa' => 'Facturas rectificativas', 'albaran' => 'Albaranes', 'pedido' => 'Pedidos'];
+const DOC_SERIES_TYPES = ['factura' => 'Factura', 'rectificativa' => 'Factura rectificativa', 'simplificada' => 'Factura simplificada (tique)', 'albaran' => 'Albarán', 'pedido' => 'Pedido'];
+/** Tipos que son facturas: sus series no pueden usar una letra de las facturas importadas (conviven con NCS sin mezclarse). */
+const DOC_INVOICE_TYPES = ['factura', 'rectificativa', 'simplificada'];
+const DOC_SERIES_TYPES_PL = ['factura' => 'Facturas', 'rectificativa' => 'Facturas rectificativas', 'simplificada' => 'Facturas simplificadas (tiques)', 'albaran' => 'Albaranes', 'pedido' => 'Pedidos'];
 const SERIES_DIGITS_MIN = 3;
 const SERIES_DIGITS_MAX = 8;
 
@@ -329,12 +331,14 @@ function series_plan(array $post, array $ncs, int $year, array &$errors): array
             $errors[] = 'La letra «' . $letter . '» está repetida: cada serie necesita una letra distinta.';
         }
     }
-    $all = array_map(fn($e) => ['letter' => $e['letter'], 'with_year' => $e['with_year']], $plan['edit']);
+    $all = array_map(fn($e) => ['letter' => $e['letter'], 'with_year' => $e['with_year'], 'type' => $rows[$e['id']]['doc_type']], $plan['edit']);
     if ($plan['new']) {
-        $all[] = ['letter' => $plan['new']['letter'], 'with_year' => $plan['new']['with_year']];
+        $all[] = ['letter' => $plan['new']['letter'], 'with_year' => $plan['new']['with_year'], 'type' => $plan['new']['doc_type']];
     }
     foreach ($all as $s) { // una serie sin año con la letra de las facturas importadas podría repetir un número ya existente
-        if ($s['with_year'] === 0 && isset($ncs[$s['letter']])) {
+        if (in_array($s['type'], DOC_INVOICE_TYPES, true) && isset($ncs[$s['letter']])) { // facturas propias y de NCS conviven sin mezclarse
+            $errors[] = 'La letra «' . $s['letter'] . '» ya la usan facturas importadas: una serie de facturas del CMS necesita otra letra para no mezclarse con ellas.';
+        } elseif ($s['with_year'] === 0 && isset($ncs[$s['letter']])) {
             $errors[] = 'La letra «' . $s['letter'] . '» ya la usan facturas importadas y la serie no lleva año: podría repetir un número existente. Marca «con año» o usa otra letra.';
         }
     }

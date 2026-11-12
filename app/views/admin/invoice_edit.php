@@ -6,7 +6,7 @@ $paid = (int)$state['paid'] === 1;
 <div class="head"><h1>Modificar factura <?= e($inv['inv_number']) ?></h1><a href="<?= e(url($self)) ?>">← Volver a la factura</a></div>
 
 <?php if (!$editable): ?>
-  <p class="alert warn"><?= admin_icon('alert') ?><span><strong><?= e(ERP_NCS_LOCK_MSG) ?></strong> Aquí solo puedes cambiar los datos propios del CMS (cobro, etiquetas y correo de envío); las notas se escriben en la pestaña «Notas internas».</span></p>
+  <p class="alert warn"><?= admin_icon('alert') ?><span><strong><?= e((string)$inv['origin'] === 'cms' ? ERP_CMS_LOCK_MSG : ERP_NCS_LOCK_MSG) ?></strong> Aquí solo puedes cambiar los datos propios del CMS (cobro, etiquetas y correo de envío); las notas se escriben en la pestaña «Notas internas».</span></p>
 <?php else: ?>
   <p class="alert"><?= admin_icon('info') ?><span>Factura propia del CMS (origen CMS): sus datos fiscales podrán editarse aquí.</span></p>
 <?php endif; ?>

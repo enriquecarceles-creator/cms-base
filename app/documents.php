@@ -143,14 +143,12 @@ function erp_invoice_doc_vars(string $num): ?array
     $st = $db->prepare('SELECT * FROM erp_invoice_lines WHERE invoice_id = ? ORDER BY line_no, id');
     $st->execute([(int)$inv['id']]);
     $lines = $st->fetchAll();
-    $st = $db->prepare('SELECT * FROM erp_customers WHERE cust_code = ?');
-    $st->execute([$inv['cust_code']]);
-    $cust = $st->fetch() ?: null;
+    $cust = erp_invoice_customer($inv);
     $vat = erp_invoice_vat($inv);
     $withBase = array_values(array_filter($vat, fn($r) => (int)$r['base'] !== 0));
     $d = doc_settings();
     return [
-        'inv' => $inv, 'lines' => $lines, 'cust' => $cust, 'isRetail' => erp_retail_code() === (string)$inv['cust_code'],
+        'inv' => $inv, 'lines' => $lines, 'cust' => $cust, 'isRetail' => (string)$inv['origin'] === 'cms' ? $cust === null : erp_retail_code() === (string)$inv['cust_code'], 'docx' => erp_invoice_cms_doc($inv),
         'vat' => $vat, 'lineRate' => count($withBase) === 1 && $withBase[0]['pct'] !== null ? (int)$withBase[0]['pct'] : null,
         'serie' => erp_serie((string)$inv['inv_number']), 'payLabel' => erp_pay_label((string)$inv['pay_code']),
         'map' => erp_family_map(), 'nb' => erp_invoice_neighbours($inv), 'd' => $d, 'co' => doc_company(),

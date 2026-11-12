@@ -20,7 +20,7 @@ const DOCP_DEFAULTS = [
     'dec_qty' => '2', 'dec_price' => '2', 'dec_amount' => '2',
     'ask_discount' => '0', 'ask_price' => '1', 'ask_tariff' => '0', 'ask_title' => '0',
     'warn_stock_min' => '1', 'warn_blocked' => '1',
-    'vat_incl' => '1', 'cash_criterion' => '0',
+    'vat_incl' => '1', 'cash_criterion' => '0', 'retail_trade' => '0',
     'lock_until' => '0',
 ];
 
@@ -507,7 +507,7 @@ function admin_doc_params(): void
             foreach ($v as $k => $val) {
                 save_setting('docp_' . $k, $val);
             }
-            foreach (['ask_discount', 'ask_price', 'ask_tariff', 'ask_title', 'warn_stock_min', 'warn_blocked'] as $k) {
+            foreach (['ask_discount', 'ask_price', 'ask_tariff', 'ask_title', 'warn_stock_min', 'warn_blocked', 'retail_trade'] as $k) {
                 save_setting('docp_' . $k, !empty($_POST[$k]) ? '1' : '0');
             }
             save_setting('erp_retail_customer', mb_substr($retail, 0, 40)); // una sola fuente: el mismo ajuste que usa la sincronización

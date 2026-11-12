@@ -51,4 +51,15 @@ $meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agost
   <label class="check"><input type="checkbox" name="lineas" value="1"> <span>Incluir las líneas de cada factura (el archivo tendrá muchas más filas)</span></label>
   <div class="buttons"><button class="btn" type="submit"<?= $totals['invoices'] === 0 ? ' disabled' : '' ?>>Descargar CSV de ventas</button></div>
 </form>
+
+<h2 id="libro-sii">Libro de facturas expedidas (SII)</h2>
+<form method="post" action="<?= e(url('/admin/exportar')) ?>" class="form">
+  <?= csrf_field() ?><input type="hidden" name="what" value="libro_sii">
+  <p class="muted" style="margin:0">Solo las facturas <strong>emitidas en el CMS</strong> (las de NCS las declara NCS o quien las lleve). Una fila por factura y tipo de IVA, con la clave del SII (F1 completa, F2 simplificada, R1–R5 rectificativas), la factura rectificada y la huella del registro. Para quien presenta el SII (asesoría o programa de contabilidad): hay 4 días hábiles desde la emisión.</p>
+  <div class="two">
+    <label>Desde <input type="date" name="desde" value="<?= e(date('Y-m-01')) ?>"></label>
+    <label>Hasta <input type="date" name="hasta" value="<?= e(date('Y-m-d')) ?>"></label>
+  </div>
+  <div class="buttons"><button class="btn" type="submit">Descargar libro (CSV)</button></div>
+</form>
 <?php endif; ?>

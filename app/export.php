@@ -13,14 +13,14 @@ declare(strict_types=1);
  * Cada exportación tiene una función *_write() que solo escribe filas en un «$put» (se prueba sin HTTP) y otra que hace la descarga.
  */
 
-const EXPORT_WHATS = ['articulos' => 'Artículos', 'clientes' => 'Clientes', 'ventas' => 'Ventas'];
+const EXPORT_WHATS = ['articulos' => 'Artículos', 'clientes' => 'Clientes', 'ventas' => 'Ventas', 'libro_sii' => 'Libro de facturas expedidas (SII)'];
 
 /** ¿Puede este rol pedir esa exportación? */
 function export_allowed(string $what, string $role): bool
 {
     return match ($what) {
         'articulos' => in_array($role, ['admin', 'catalogo'], true),
-        'clientes', 'ventas' => in_array($role, ['admin', 'erp'], true),
+        'clientes', 'ventas', 'libro_sii' => in_array($role, ['admin', 'erp'], true),
         default => false,
     };
 }
@@ -84,7 +84,7 @@ function admin_export(): void
         if (!erp_guard()) { // clientes y ventas: datos personales → doble verificación si está exigida
             return;
         }
-        $what === 'clientes' ? export_customers() : export_sales();
+        $what === 'clientes' ? export_customers() : ($what === 'libro_sii' ? export_sii_book() : export_sales());
         return;
     }
     $db = db();
@@ -260,6 +260,24 @@ function export_sales(): never
     }, $done);
     [$out, $put] = export_open('ventas' . (!empty($f['anio']) ? '-' . $f['anio'] . (!empty($f['mes']) ? '-' . sprintf('%02d', $f['mes']) : '') : ''));
     export_sales_write($put, $f, $withLines, $count, $invoices);
+    fclose($out);
+    $done = true;
+    exit;
+}
+
+/* ---------- Libro de facturas expedidas (facturas emitidas en el CMS, para el SII) ---------- */
+
+function export_sii_book(): never
+{
+    $from = erp_day_from_input((string)($_POST['desde'] ?? '')) ?: (int)(date('Y') . '0101');
+    $to = erp_day_from_input((string)($_POST['hasta'] ?? '')) ?: (int)date('Ymd');
+    $n = 0;
+    $done = false;
+    export_log_at_end('ventas', function () use (&$n, $from, $to) {
+        return 'Libro SII: ' . $n . ' factura' . ($n === 1 ? '' : 's') . ' del ' . erp_day($from) . ' al ' . erp_day($to);
+    }, $done);
+    [$out, $put] = export_open('libro-facturas-expedidas-' . $from . '-' . $to);
+    $n = docs_sii_book_write($put, $from, $to);
     fclose($out);
     $done = true;
     exit;

@@ -14,7 +14,7 @@ $th = function (string $key, string $label) use ($base, $sortKey, $asc) {
 $pageUrl = fn(int $p) => erp_sales_url('facturas', $base, $p > 1 ? ['pag' => (string)$p] : []);
 ?>
 <form class="filters lf" method="get" action="<?= e(url('/admin/ventas')) ?>">
-  <?php foreach (array_intersect_key($f, ['anio' => 1, 'mes' => 1, 'ambito' => 1, 'orden' => 1, 'dir' => 1]) as $k => $val): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e((string)$val) ?>"><?php endforeach; ?>
+  <?php foreach (array_intersect_key($f, ['anio' => 1, 'mes' => 1, 'ambito' => 1, 'origen' => 1, 'orden' => 1, 'dir' => 1]) as $k => $val): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e((string)$val) ?>"><?php endforeach; ?>
   <label class="lf-q"><span class="sr-only">Buscar</span><input type="search" name="q" value="<?= e($f['q'] ?? '') ?>" placeholder="Número de factura, código o nombre de cliente"></label>
   <label><span class="sr-only">Estado</span><select name="ver"><option value="">Todas</option><option value="dev"<?= ($f['ver'] ?? '') === 'dev' ? ' selected' : '' ?>>Devoluciones</option><option value="anul"<?= ($f['ver'] ?? '') === 'anul' ? ' selected' : '' ?>>Anuladas</option></select></label>
   <button class="btn small" type="submit">Buscar</button>
@@ -34,9 +34,9 @@ $pageUrl = fn(int $p) => erp_sales_url('facturas', $base, $p > 1 ? ['pag' => (st
   <tbody>
   <?php foreach ($rows as $r): $isR = $retail !== '' && $r['cust_code'] === $retail; $nm = $r['ctrade'] !== null && $r['ctrade'] !== '' ? $r['ctrade'] : (string)$r['cname']; ?>
     <tr<?= (int)$r['annulled'] === 1 ? ' class="off"' : '' ?>>
-      <td><a href="<?= e(url('/admin/ventas/' . rawurlencode($r['inv_number']))) ?>"><?= e($r['inv_number']) ?></a><?= (int)$r['annulled'] === 1 ? ' <small class="review-flag">anulada</small>' : '' ?><?= (int)$r['total_cents'] < 0 ? ' <small class="review-flag">devolución</small>' : '' ?></td>
+      <td><a href="<?= e(url('/admin/ventas/' . erp_inv_seg($r['inv_number']))) ?>"><?= e($r['inv_number']) ?></a><?= (string)$r['origin'] === 'cms' ? ' <small class="tag">CMS</small>' : '' ?><?= (int)$r['annulled'] === 1 ? ' <small class="review-flag">' . ((string)$r['origin'] === 'cms' ? 'sustituida' : 'anulada') . '</small>' : '' ?><?= (int)$r['total_cents'] < 0 ? ' <small class="review-flag">devolución</small>' : '' ?></td>
       <td class="t-date"><?= e(erp_day((int)$r['inv_day'])) ?></td>
-      <td><?php if ($isR): ?><span class="muted">Cliente de contado</span><?php else: ?><a href="<?= e(url('/admin/clientes/' . rawurlencode($r['cust_code']))) ?>"><?= e($nm !== '' ? $nm : $r['cust_code']) ?></a><?php endif; ?></td>
+      <td><?php if ($isR): ?><span class="muted">Cliente de contado</span><?php elseif ($r['cust_code'] === ''): ?><?= e($nm !== '' ? $nm : '—') ?><?php else: ?><a href="<?= e(url('/admin/clientes/' . rawurlencode($r['cust_code']))) ?>"><?= e($nm !== '' ? $nm : $r['cust_code']) ?></a><?php endif; ?></td>
       <td><?= e(erp_money((int)$r['base_cents'])) ?></td>
       <td><?= e(erp_money((int)$r['vat_cents'])) ?></td>
       <td><strong><?= e(erp_money((int)$r['total_cents'])) ?></strong></td>

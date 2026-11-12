@@ -6,6 +6,14 @@
  */
 $public = !empty($public); // enlace público enviado por correo: sin nada del panel
 $annulled = (int)$inv['annulled'] === 1;
+$docx = $docx ?? null; // factura emitida en el CMS (doc_headers): título según el tipo, menciones legales y sin el pie de «copia de NCS»
+if ($docx) {
+    $d['title'] = ['factura' => 'FACTURA', 'simplificada' => 'FACTURA SIMPLIFICADA', 'rectificativa' => 'FACTURA RECTIFICATIVA'][$docx['doc_type']] ?? $d['title'];
+    $d['stamp'] = 'SUSTITUIDA'; // una factura del CMS solo deja de contar si se rectifica por sustitución
+    if ($d['footer'] === DOC_DEFAULTS['footer']) {
+        $d['footer'] = '';
+    }
+}
 $credit = (int)$inv['total_cents'] < 0;
 $fmtPct = fn($p) => $p === null ? '—' : rtrim(rtrim(number_format((float)$p, 1, ',', ''), '0'), ',') . ' %';
 $sizeTxt = fn(array $l) => $l['size_txt'] !== '' ? $l['size_txt'] : ((int)$l['size_no'] > 0 ? 'nº ' . $l['size_no'] : '');
@@ -83,12 +91,12 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <div class="grp"><button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button></div>
   <?php else: ?>
   <div class="grp">
-    <a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$inv['inv_number']))) ?>">← Formulario</a>
-    <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['prev']) . '/ver')) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
-    <?php if ($nb['next'] !== null): ?><a href="<?= e(url('/admin/ventas/' . rawurlencode((string)$nb['next']) . '/ver')) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="dis"><a>Siguiente ›</a></span><?php endif; ?>
+    <a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$inv['inv_number']))) ?>">← Formulario</a>
+    <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['prev']) . '/ver')) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
+    <?php if ($nb['next'] !== null): ?><a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['next']) . '/ver')) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="dis"><a>Siguiente ›</a></span><?php endif; ?>
   </div>
   <div class="grp">
-    <?php if ($cust): ?><a href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
+    <?php if ($cust && $cust['cust_code'] !== ''): ?><a href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
     <a href="<?= e(url('/admin/ventas')) ?>">Ventas</a>
     <button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button>
   </div>
@@ -112,6 +120,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
         <dt>Número</dt><dd><?= e($inv['inv_number']) ?></dd>
         <?php if ($serie !== ''): ?><dt>Serie</dt><dd><?= e($serie) ?></dd><?php endif; ?>
         <dt>Fecha</dt><dd><?= e(erp_day((int)$inv['inv_day'])) ?></dd>
+        <?php if ($docx && (int)$docx['op_day'] > 0 && (int)$docx['op_day'] !== (int)$inv['inv_day']): ?><dt>Fecha de operación</dt><dd><?= e(erp_day((int)$docx['op_day'])) ?></dd><?php endif; ?>
         <?php if ($payLabel !== ''): ?><dt>Forma de pago</dt><dd><?= e($payLabel) ?></dd><?php endif; ?>
         <?php if ($inv['rectifies'] !== ''): ?><dt>Rectifica a</dt><dd><?= e($inv['rectifies']) ?></dd><?php endif; ?>
       </dl>
@@ -130,7 +139,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
         <?php foreach ($custAddr as $line): ?><p><?= e($line) ?></p><?php endforeach; ?>
       <?php endif; ?>
     </div>
-    <?php if ($cust && !$isRetail && !$public): ?>
+    <?php if ($cust && !$isRetail && !$public && $cust['cust_code'] !== ''): ?>
       <div style="text-align:right"><p>Código <strong><?= e($cust['cust_code']) ?></strong></p><p class="toolbar-hide"><a href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver ficha del cliente</a></p></div>
     <?php endif; ?>
   </section>
@@ -160,6 +169,22 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     </tbody>
   </table>
   <?php if ((int)$inv['iva_incl'] === 1): ?><p class="note-incl">Importes de las líneas con IVA incluido.</p><?php endif; ?>
+  <?php if ($docx): // menciones legales de las facturas emitidas en el CMS
+      $origDoc = (int)$docx['rect_of'] > 0 ? (function (int $id) { $st = db()->prepare('SELECT doc_code, doc_day FROM doc_headers WHERE id = ?'); $st->execute([$id]); return $st->fetch() ?: null; })((int)$docx['rect_of']) : null;
+      $mentions = [];
+      if ($docx['doc_type'] === 'rectificativa') {
+          $mentions[] = 'Factura rectificativa ' . ($docx['rect_mode'] === 'sustitucion' ? 'por sustitución' : 'por diferencias') . ' de la factura ' . ($origDoc ? $origDoc['doc_code'] . ' del ' . erp_day((int)$origDoc['doc_day']) : $inv['rectifies'])
+              . '. Motivo: ' . ($docx['rect_text'] !== '' ? $docx['rect_text'] : $docx['rect_reason']) . '.';
+      }
+      if ((int)$docx['cash_crit'] === 1) {
+          $mentions[] = 'Régimen especial del criterio de caja.';
+      }
+      if (trim((string)$docx['vat_note']) !== '') {
+          $mentions[] = (string)$docx['vat_note'];
+      }
+      if ($mentions): ?>
+    <div class="note-incl" style="margin-top:8px"><?php foreach ($mentions as $mt): ?><p style="margin:2px 0"><?= e($mt) ?></p><?php endforeach; ?></div>
+  <?php endif; endif; ?>
 
   <section class="foot">
     <div>
