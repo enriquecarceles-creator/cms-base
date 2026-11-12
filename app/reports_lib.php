@@ -338,3 +338,108 @@ function rep_sales_rows(string $dim, array $sel): array
     }
     return $out;
 }
+
+/* ---------- Compras: por proveedor, artículo y familia ---------- */
+
+/** Importe SIN IVA de un grupo de líneas (céntimos): si el documento lleva el IVA incluido, se le quita. */
+function rep_purch_net(int $cents, int $vatIncl, int $vatBp, int $recBp, int $withRe): int
+{
+    return $vatIncl === 1 ? (int)round($cents * 10000 / (10000 + $vatBp + ($withRe === 1 ? $recBp : 0))) : $cents;
+}
+
+/**
+ * $dim = 'proveedor' | 'articulo' | 'familia'. Unidades e importe (sin IVA) de las facturas recibidas CERRADAS (las rectificativas restan),
+ * entre fechas. Las compras no tocan el stock.
+ */
+function rep_purch_define(string $dim): array
+{
+    $titles = ['proveedor' => 'Compras por proveedor', 'articulo' => 'Compras por artículo', 'familia' => 'Compras por ' . mb_strtolower(term('family'))];
+    $detail = ['proveedor' => 'Proveedor y artículo', 'articulo' => 'Artículo y proveedor', 'familia' => 'Familia y artículo'];
+    return [
+        'id' => 'compras-' . $dim, 'title' => $titles[$dim], 'section' => 'Compras', 'order' => ['proveedor' => 10, 'articulo' => 20, 'familia' => 30][$dim],
+        'perm' => 'purch', 'history' => 'compras',
+        'help' => 'Unidades e importe sin IVA de las facturas recibidas cerradas entre fechas. Las rectificativas recibidas restan.',
+        'filters' => [
+            ['name' => 'fecha', 'label' => 'Fecha de factura', 'type' => 'date'],
+            ['name' => 'proveedor', 'label' => 'Proveedor', 'type' => 'code', 'lookup' => 'proveedor'],
+            ['name' => 'articulo', 'label' => 'Artículo', 'type' => 'code', 'lookup' => 'articulo'],
+            ['name' => 'familia', 'label' => term('family'), 'type' => 'select', 'options' => 'rep_families'],
+            ['name' => 'pago', 'label' => 'Forma de pago', 'type' => 'select', 'options' => 'rep_pay_options'],
+        ],
+        'variants' => ['resumen' => 'Una fila por ' . $dim, 'detalle' => $detail[$dim]],
+        'groups' => array_filter(['proveedor' => ['label' => 'Proveedor', 'field' => '_proveedor'], 'mes' => ['label' => 'Mes', 'field' => '_mes'], 'familia' => ['label' => term('family'), 'field' => '_familia']], fn($g, $k) => $k !== $dim, ARRAY_FILTER_USE_BOTH),
+        'orders' => ['importe' => ['label' => 'Importe (mayor primero)', 'by' => ['_ni']], 'unidades' => ['label' => 'Unidades (mayor primero)', 'by' => ['_nq']], 'nombre' => ['label' => 'Nombre', 'by' => ['_nombre']]],
+        'options' => [],
+        'columns' => function (string $v) use ($dim): array {
+            $cols = [];
+            foreach (rep_purch_dims($dim, $v) as $d) {
+                if ($d === 'sup') {
+                    $cols[] = ['key' => 'cod', 'label' => 'Cód. proveedor', 'w' => 14];
+                    $cols[] = ['key' => 'nombre', 'label' => 'Proveedor', 'w' => 32];
+                } elseif ($d === 'art') {
+                    $cols[] = ['key' => 'ref', 'label' => 'Artículo', 'w' => 16];
+                    $cols[] = ['key' => 'desc', 'label' => 'Descripción', 'w' => 34];
+                } else {
+                    $cols[] = ['key' => 'familia', 'label' => term('family'), 'w' => 28];
+                }
+            }
+            return [...$cols, ['key' => 'uds', 'label' => 'Unidades', 'type' => 'qty', 'sum' => true], ['key' => 'importe', 'label' => 'Importe sin IVA', 'type' => 'money', 'sum' => true]];
+        },
+        'rows' => fn(array $sel) => rep_purch_rows($dim, $sel),
+    ];
+}
+
+function rep_purch_dims(string $dim, string $variant): array
+{
+    $main = ['proveedor' => 'sup', 'articulo' => 'art', 'familia' => 'fam'][$dim];
+    return $variant !== 'detalle' ? [$main] : [$main, ['proveedor' => 'art', 'articulo' => 'sup', 'familia' => 'art'][$dim]];
+}
+
+function rep_purch_rows(string $dim, array $sel): array
+{
+    $f = $sel['f'];
+    $w = " WHERE h.doc_type IN ('factura_c', 'rectificativa_c') AND h.status = 'emitida' AND l.kind = 0";
+    $a = [];
+    rep_cond_date($w, $a, 'h.doc_day', $f['fecha']);
+    rep_cond_code($w, $a, 'h.cust_code', $f['proveedor']);
+    rep_cond_code($w, $a, 'l.ref', $f['articulo']);
+    if ($f['pago'] !== '') {
+        $w .= ' AND h.pay_code = ?';
+        $a[] = $f['pago'];
+    }
+    $st = db()->prepare('SELECT h.cust_code, MAX(h.cust_name) AS sname, l.ref, MAX(l.title) AS title, h.doc_day, h.vat_incl, h.with_re, l.vat_bp, l.rec_bp, SUM(l.qty_u) AS q, SUM(l.amount_u) AS a
+        FROM doc_lines l JOIN doc_headers h ON h.id = l.doc_id' . $w . ' GROUP BY h.cust_code, l.ref, h.doc_day, h.vat_incl, h.with_re, l.vat_bp, l.rec_bp');
+    $st->execute($a);
+    $map = erp_family_map();
+    $dims = rep_purch_dims($dim, $sel['v']);
+    $keyDims = $dims;
+    foreach ([['mes', 'ym'], ['proveedor', 'sup'], ['familia', 'fam']] as [$gk, $gd]) {
+        if ($sel['g'] === $gk && !in_array($gd, $keyDims, true)) {
+            $keyDims[] = $gd;
+        }
+    }
+    $fam = (int)($f['familia'] ?? 0);
+    $agg = [];
+    foreach ($st->fetchAll() as $r) {
+        $m = $map[mb_strtolower((string)$r['ref'])] ?? null;
+        if ($fam > 0 && ($m['fam_id'] ?? 0) !== $fam) {
+            continue;
+        }
+        $vals = ['sup' => (string)$r['cust_code'] . "\x1e" . (string)$r['sname'], 'art' => (string)$r['ref'], 'fam' => (string)($m['fam'] ?? ''), 'ym' => rep_month_key((int)$r['doc_day'])];
+        $key = implode("\x1f", array_map(fn($d) => $vals[$d], $keyDims));
+        $net = rep_purch_net((int)round((int)$r['a'] / 100), (int)$r['vat_incl'], (int)$r['vat_bp'], (int)$r['rec_bp'], (int)$r['with_re']);
+        $agg[$key] ??= ['v' => $vals, 'q' => 0, 'a' => 0, 'title' => (string)$r['title']];
+        $agg[$key]['q'] += (int)$r['q'];
+        $agg[$key]['a'] += $net;
+    }
+    $out = [];
+    foreach ($agg as $x) {
+        [$scode, $sname] = array_pad(explode("\x1e", $x['v']['sup'], 2), 2, '');
+        $sname = $sname !== '' ? $sname : $scode;
+        $row = ['cod' => $scode, 'nombre' => $sname, 'ref' => $x['v']['art'], 'desc' => $x['title'], 'familia' => $x['v']['fam'], 'uds' => $x['q'] / DOCS_QTY, 'importe' => $x['a'],
+            '_ni' => -$x['a'], '_nq' => -$x['q'], '_proveedor' => $scode . ' · ' . $sname, '_mes' => $x['v']['ym'], '_familia' => $x['v']['fam']];
+        $row['_nombre'] = $dims[0] === 'sup' ? $sname : ($dims[0] === 'art' ? $x['v']['art'] : $x['v']['fam']);
+        $out[] = $row;
+    }
+    return $out;
+}

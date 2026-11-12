@@ -756,3 +756,90 @@ a.db-card:hover{border-color:var(--db-accent)}
 .rep-index{list-style:none;padding:0;margin:0 0 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .rep-index a{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;text-decoration:none;color:inherit;height:100%}
 .rep-index a:hover{border-color:var(--steel)}.rep-index span{font-size:.84rem;color:var(--steel)}
+
+/* ==========================================================================
+   Tema con el color de la empresa (brand_theme_style() define las variables):
+   --brand (color), --brand-soft (fondo ~8 %), --brand-hover (~5 %), --brand-mid (bordes ~30 %),
+   --brand-ink (texto «de marca»: se oscurece hasta contraste ≥ 7:1), --brand-bar (gráficas, ≥ 3:1).
+   Moderado: el texto sigue siendo oscuro y los avisos mantienen sus colores (rojo vencido, verde pagado).
+   ========================================================================== */
+:root{--brand:#3b6fb6;--brand-soft:#f0f4f9;--brand-hover:#f6f8fb;--brand-mid:#c4d4e9;--brand-ink:#24437a;--brand-bar:#3b6fb6}
+
+/* Menú lateral: la página actual con fondo suave y filo de color (sin bloque oscuro) */
+.side a.side-top[aria-current]{background:var(--brand-soft);color:var(--ink);box-shadow:inset 3px 0 0 var(--brand)}
+.side-group li a[aria-current]{background:var(--brand-soft);box-shadow:inset 3px 0 0 var(--brand)}
+.side-group.on>summary{color:var(--ink)}
+.cfg-nav a[aria-current]{background:var(--brand-soft);color:var(--ink);box-shadow:inset 3px 0 0 var(--brand);font-weight:600}
+.pager-l .cur{background:var(--brand-soft);color:var(--ink);border:1px solid var(--brand-mid)}
+.pager-l a:hover{border-color:var(--brand)}
+
+/* Cabecera de las tablas */
+.tbl th,.if-grid thead th{background:var(--brand-soft);color:var(--ink);border-bottom:1px solid var(--brand-mid)}
+.tbl.list th a,.tbl.list th a:hover{color:var(--ink)}
+.tbl tfoot th,.tbl tfoot td{background:var(--brand-hover)}
+
+/* Fila al pasar el ratón o con el foco dentro (y la seleccionada) */
+.tbl.list tbody tr:hover td,.tbl tbody tr:focus-within td,.tbl tbody tr.sel td,.tbl tbody tr[aria-selected=true] td{background:var(--brand-hover)}
+.if-grid tbody tr:nth-child(even){background:var(--brand-hover)}
+.if-grid tbody tr:hover{background:var(--brand-soft)}
+.db-list li:hover{background:var(--brand-hover)}
+
+/* Distintivos de estado: Borrador (neutro), Emitida/Cerrada y el resto (color de la empresa), Pagada (verde suave), Vencida/Anulada (rojo suave) */
+.tag{background:var(--brand-soft);border-color:var(--brand-mid);color:var(--ink)}
+.tag-draft{background:#f1f0ec;border-color:#dddad2;color:#5d5951}
+.tag-ok{background:#e4f4ea;border-color:#c9e6d3;color:#1f5a3c}
+.tag-off{background:#fbeceb;border-color:#f1d2cf;color:#8f2f27}
+.tag-label{background:var(--brand-soft);border-color:var(--brand-mid);color:var(--ink)}
+.db-st{background:var(--brand-soft);border-color:var(--brand-mid);color:var(--ink)}
+
+/* Pestañas: la activa con fondo suave y filo de color */
+.cf-tabs a[aria-current],.ptabs a[aria-current="true"]{background:var(--brand-soft);color:var(--ink);border-bottom-color:var(--brand)}
+.cc-filter a[aria-current],.cc-filter a:hover{background:var(--brand-soft);border-color:var(--brand-mid);color:var(--ink)}
+.cc-nav a{color:var(--ink)}
+.cc-nav a:hover{color:var(--brand-ink)}
+
+/* Fichas: código, nombre y NIF destacados */
+.cc-code,.cc-id h1{color:var(--brand-ink)}
+.cc-code{font-weight:700}
+.cc-meta strong{color:var(--brand-ink)}
+.cfld.bold .cv,.cfld.bold input{color:var(--brand-ink);font-weight:700}
+.cc-card h2{border-bottom:1px solid var(--brand-mid)}
+.cc-quick{background:var(--brand-soft);border-color:var(--brand-mid)}
+.cc-quick strong{color:var(--brand-ink)}
+.cc-quick strong.warn{color:var(--warn)}
+.cc-head{border-bottom-color:var(--brand-mid)}
+.if-title h1{color:var(--ink)}
+.if-box h2{color:var(--brand-ink)}
+.if-box{border-color:var(--brand-mid)}
+
+/* Totales de los documentos: fondo suave y la cifra en el color de la empresa */
+.if-totals{background:var(--brand-soft);border-color:var(--brand-mid)}
+.if-totals .ir.big{border-top-color:var(--brand-mid);color:var(--brand-ink)}
+
+/* Tarjetas del cuadro de mandos */
+.db-card,.stat{background:var(--brand-soft);border-color:var(--brand-mid)}
+.db-card:hover,.stat:hover{border-color:var(--brand)}
+.db-n,.stat-n{color:var(--brand-ink)}
+.db-card.bad{background:#fdf3f2;border-color:#e0a7a3}.db-card.bad .db-n{color:var(--err)}
+.db-card.test{background:#fffaf0;border-color:#ecd49a}.db-card.test .db-n{color:var(--ink)}
+.stat.warn .stat-n{color:var(--warn)}
+.db-panel{border-color:var(--brand-mid)}
+.db-panel.bad{border-color:#e0a7a3}
+.db-bar{fill:var(--brand-bar)}.db-bar.neg{fill:var(--err)}.db-bar.b{fill:#8b96ab}
+.db-s0{fill:var(--brand-bar)}
+
+/* Informes */
+.rep-box{border-color:var(--brand-mid)}
+.rep-box legend{color:var(--brand-ink)}
+.rep-tbl .rep-gh th{background:var(--brand-hover);color:var(--ink)}
+.rep-tbl .rep-sub td{background:var(--brand-hover)}
+.rep-tbl .rep-total td{background:var(--brand-soft);border-top:2px solid var(--brand);color:var(--brand-ink)}
+.rep-pop li.on,.df-pop li.on{background:var(--brand-soft)}
+.rep-index a:hover{border-color:var(--brand)}
+
+/* Configuración y formularios */
+.blk>summary{background:var(--brand-soft)}
+.savebar{border-top:1px solid var(--brand-mid)}
+.btn.ghost:hover{background:var(--brand-soft)}
+a{color:var(--ink)}
+.tbl a,.cc-card a,.db-list a{color:var(--brand-ink)}

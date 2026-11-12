@@ -19,7 +19,8 @@ const DOC_LINE_BUILTIN = ['size' => ['Talla', 'text'], 'color' => ['Color', 'tex
 const DOC_LINE_TYPES = ['text' => 'Texto', 'number' => 'Número', 'list' => 'Lista'];
 const DOC_LINE_MAX_CUSTOM = 6;
 /** Tipo de documento → grupo en el que se configura el campo (las simplificadas y rectificativas cuentan como factura). */
-const DOC_GROUPS = ['pedido' => 'pedido', 'albaran' => 'albaran', 'factura' => 'factura', 'simplificada' => 'factura', 'rectificativa' => 'factura'];
+const DOC_GROUPS = ['pedido' => 'pedido', 'albaran' => 'albaran', 'factura' => 'factura', 'simplificada' => 'factura', 'rectificativa' => 'factura',
+    'pedido_c' => 'pedido', 'albaran_c' => 'albaran', 'factura_c' => 'factura', 'rectificativa_c' => 'factura'];
 const DOC_GROUP_LABELS = ['pedido' => 'Pedido', 'albaran' => 'Albarán', 'factura' => 'Factura'];
 
 /** Un campo con todos sus valores completos y validados. */
@@ -227,7 +228,7 @@ function doc_model_for(string $docType, bool $public = false): string
 /** Capa de CSS del modelo (se añade DESPUÉS del CSS base de la plantilla; el clásico no cambia nada). */
 function doc_model_css(string $model): string
 {
-    $base = '.lines th{overflow-wrap:normal;word-break:normal;overflow:hidden}'; // los títulos de columna no se parten por la mitad («TALL/A»)
+    $base = '.lines th{overflow-wrap:normal;word-break:normal;overflow:hidden}.total{background:#faf9f6;background:color-mix(in srgb,var(--doc-color) 7%,#fff)}'; // los títulos de columna no se parten por la mitad («TALL/A»)
     if ($model === 'modern') {
         return $base . '.m-modern .head{background:var(--doc-color);color:#fff;padding:7mm 8mm;border-radius:5px;align-items:center}'
             . '.m-modern .co img{max-height:calc(var(--logo-h) * 1.7);max-width:78mm;background:#fff;padding:5px 8px;border-radius:4px}'

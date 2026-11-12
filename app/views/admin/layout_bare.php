@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title><?= e($title ?? 'Panel') ?></title>
 <link rel="stylesheet" href="<?= e(asset('admin.css')) ?>">
+<?= brand_theme_style() ?>
 </head>
 <body class="bare">
 <main class="narrow">

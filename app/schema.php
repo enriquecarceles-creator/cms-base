@@ -468,7 +468,8 @@ const SCHEMA_DOCS_DDL = "
         reg_hash {S} NOT NULL DEFAULT '',
         is_test {I} NOT NULL DEFAULT 0,
         rev {I} NOT NULL DEFAULT 0,
-        dues_key {S} NOT NULL DEFAULT ''
+        dues_key {S} NOT NULL DEFAULT '',
+        sup_ref {S} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_doch_type_day ON doc_headers(doc_type, doc_day);
     CREATE INDEX idx_doch_cust ON doc_headers(cust_code);
@@ -597,6 +598,64 @@ function schema_seed_simplified(CmsPdo $pdo): void
     }
 }
 
+
+/**
+ * v38: módulo de compras. Proveedores (erp_suppliers: va en DB_TABLES porque NO se recupera sincronizando con nada) y el número de la
+ * factura del proveedor en doc_headers (sup_ref). Las notas internas de un proveedor usan erp_notes con el código «prov:<código>».
+ */
+const SCHEMA_SUPPLIERS_DDL = "
+    CREATE TABLE erp_suppliers (
+        id {ID},
+        sup_code {K} NOT NULL UNIQUE,
+        name {S} NOT NULL DEFAULT '',
+        trade_name {S} NOT NULL DEFAULT '',
+        nif {S} NOT NULL DEFAULT '',
+        address {S} NOT NULL DEFAULT '',
+        city {S} NOT NULL DEFAULT '',
+        postcode {S} NOT NULL DEFAULT '',
+        province {S} NOT NULL DEFAULT '',
+        country {S} NOT NULL DEFAULT '',
+        phone {S} NOT NULL DEFAULT '',
+        phone2 {S} NOT NULL DEFAULT '',
+        email {S} NOT NULL DEFAULT '',
+        contact {S} NOT NULL DEFAULT '',
+        pay_code {S} NOT NULL DEFAULT '',
+        pay_days {S} NOT NULL DEFAULT '',
+        tariff {I} NOT NULL DEFAULT 0,
+        disc_bp {I} NOT NULL DEFAULT 0,
+        blocked {I} NOT NULL DEFAULT 0,
+        created_day {I} NOT NULL DEFAULT 0,
+        ended_day {I} NOT NULL DEFAULT 0,
+        def_series {I} NOT NULL DEFAULT 0,
+        doc_notes {T} NOT NULL DEFAULT '',
+        rev {I} NOT NULL DEFAULT 0,
+        updated_by {S} NOT NULL DEFAULT '',
+        updated_at {BIG} NOT NULL DEFAULT 0
+    );
+";
+
+/** Series de compras (solo si no hay): PC pedidos, AC albaranes, RE facturas recibidas (número de registro RE00001/26), RC rectificativas recibidas. La R de ventas ya está ocupada. */
+const SCHEMA_PURCHASE_SERIES = [['pedido_c', 'PC', 'Pedidos a proveedor'], ['albaran_c', 'AC', 'Albaranes de compra'], ['factura_c', 'RE', 'Facturas recibidas (registro)'], ['rectificativa_c', 'RC', 'Rectificativas recibidas']];
+
+function schema_seed_purchase_series(CmsPdo $pdo): void
+{
+    $used = array_map('strtoupper', $pdo->query('SELECT letter FROM doc_series')->fetchAll(PDO::FETCH_COLUMN));
+    foreach (SCHEMA_PURCHASE_SERIES as [$type, $letter, $descr]) {
+        $st = $pdo->prepare('SELECT COUNT(*) FROM doc_series WHERE doc_type = ?');
+        $st->execute([$type]);
+        if ((int)$st->fetchColumn() > 0) {
+            continue;
+        }
+        foreach ([$letter, $letter . 'X', $letter . 'Y'] as $l) {
+            if (!in_array($l, $used, true)) {
+                $pdo->prepare('INSERT INTO doc_series (doc_type, letter, descr, digits, with_year, is_default, is_active, created_at) VALUES (?, ?, ?, 5, 1, 1, 1, ?)')->execute([$type, $l, $descr, time()]);
+                $used[] = $l;
+                break;
+            }
+        }
+    }
+}
+
 /** Valores iniciales de IVA (21, 10, 4, 0 con sus recargos de equivalencia) y tarifas 1-3; solo si las tablas están vacías. */
 function schema_seed_doc_params(CmsPdo $pdo): void
 {
@@ -699,7 +758,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL . SCHEMA_INVOICES_DDL . SCHEMA_DUES_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL . SCHEMA_INVOICES_DDL . SCHEMA_DUES_DDL . SCHEMA_SUPPLIERS_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -708,6 +767,7 @@ function install_schema(CmsPdo $pdo): void
         $pdo->rawExec($st);
     }
     schema_seed_series($pdo);
+    schema_seed_purchase_series($pdo);
     schema_seed_doc_params($pdo);
     db_set_schema_version($pdo, SCHEMA_VERSION);
 }
@@ -890,6 +950,20 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    // v38: compras: proveedores, número de factura del proveedor y series de compra
+    if ($ver < 38) {
+        if (!in_array('erp_suppliers', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_SUPPLIERS_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
+        }
+        if (in_array('doc_headers', db_tables($pdo), true) && !in_array('sup_ref', db_columns($pdo, 'doc_headers'), true)) {
+            db_add_column($pdo, 'doc_headers', 'sup_ref', "{S} NOT NULL DEFAULT ''");
+        }
+        if (in_array('doc_series', db_tables($pdo), true)) {
+            schema_seed_purchase_series($pdo);
         }
     }
     // v37: clientes traspasados editables: cuándo se traspasaron, cuándo se modificaron en el CMS (la sincronización no los pisa) y el código que tenían en NCS

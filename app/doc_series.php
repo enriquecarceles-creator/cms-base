@@ -18,10 +18,12 @@ declare(strict_types=1);
  * Nada de esto es específico de NCS: las letras importadas se leen de erp_invoices.
  */
 
-const DOC_SERIES_TYPES = ['factura' => 'Factura', 'rectificativa' => 'Factura rectificativa', 'simplificada' => 'Factura simplificada (tique)', 'albaran' => 'Albarán', 'pedido' => 'Pedido'];
+const DOC_SERIES_TYPES = ['factura' => 'Factura', 'rectificativa' => 'Factura rectificativa', 'simplificada' => 'Factura simplificada (tique)', 'albaran' => 'Albarán', 'pedido' => 'Pedido',
+    'pedido_c' => 'Pedido a proveedor', 'albaran_c' => 'Albarán de compra', 'factura_c' => 'Factura recibida (registro)', 'rectificativa_c' => 'Rectificativa recibida'];
 /** Tipos que son facturas: sus series no pueden usar una letra de las facturas importadas (conviven con NCS sin mezclarse). */
 const DOC_INVOICE_TYPES = ['factura', 'rectificativa', 'simplificada'];
-const DOC_SERIES_TYPES_PL = ['factura' => 'Facturas', 'rectificativa' => 'Facturas rectificativas', 'simplificada' => 'Facturas simplificadas (tiques)', 'albaran' => 'Albaranes', 'pedido' => 'Pedidos'];
+const DOC_SERIES_TYPES_PL = ['factura' => 'Facturas', 'rectificativa' => 'Facturas rectificativas', 'simplificada' => 'Facturas simplificadas (tiques)', 'albaran' => 'Albaranes', 'pedido' => 'Pedidos',
+    'pedido_c' => 'Pedidos a proveedor', 'albaran_c' => 'Albaranes de compra', 'factura_c' => 'Facturas recibidas (registro)', 'rectificativa_c' => 'Rectificativas recibidas'];
 const SERIES_DIGITS_MIN = 3;
 const SERIES_DIGITS_MAX = 8;
 

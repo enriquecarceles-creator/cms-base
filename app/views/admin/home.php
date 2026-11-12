@@ -41,6 +41,23 @@ $docList = function (array $rows, string $empty, bool $dueMode = false) use ($st
 
 <?php if ($salesNote !== ''): ?><p class="alert warn keep"><?= admin_icon('info') ?><span><?= e($salesNote) ?></span></p><?php endif; ?>
 
+<?php if ($purchNote !== ''): ?><p class="alert warn keep"><?= admin_icon('info') ?><span><?= e($purchNote) ?></span></p><?php endif; ?>
+
+<?php if ($purch): ?>
+<section class="db-kpis" aria-label="Compras">
+  <div class="db-card"><span class="db-l">Compras del mes</span><strong class="db-n"><?= e(erp_money($pd['month'])) ?></strong><?= $delta($pd['month'], $pd['month_prev']) ?><span class="db-s">sin IVA</span></div>
+  <div class="db-card"><span class="db-l">Compras del año</span><strong class="db-n"><?= e(erp_money($pd['year'])) ?></strong><?= $delta($pd['year'], $pd['year_prev']) ?><span class="db-s">sin IVA</span></div>
+  <a class="db-card" href="<?= e(url('/admin/listados/pagos')) ?>"><span class="db-l">Pagos pendientes</span><strong class="db-n"><?= e(erp_money($pd['pending'])) ?></strong><span class="db-s"><?= e($n($pd['pending_n'])) ?> factura<?= $pd['pending_n'] === 1 ? '' : 's' ?> recibida<?= $pd['pending_n'] === 1 ? '' : 's' ?></span></a>
+  <a class="db-card<?= $pd['overdue'] > 0 ? ' bad' : '' ?>" href="<?= e(url('/admin/listados/pagos?v=vencidos&salida=pantalla')) ?>"><span class="db-l">Pagos vencidos</span><strong class="db-n"><?= e(erp_money($pd['overdue'])) ?></strong><span class="db-s"><?= $pd['overdue_n'] > 0 ? e($n($pd['overdue_n'])) . ' factura' . ($pd['overdue_n'] === 1 ? '' : 's') . ' con cuotas vencidas' : 'nada vencido' ?></span></a>
+</section>
+<section class="db-grid" aria-label="Compras y ventas por mes">
+  <article class="db-panel wide"><h2><?= $pd['with_sales'] ? 'Ventas y compras por mes' : 'Compras por mes' ?> <small>(12 meses, sin IVA)</small></h2>
+    <?= dash_svg_sales_purch($pd['months'], (bool)$pd['with_sales'], $pd['with_sales'] ? 'Ventas y compras de los últimos 12 meses' : 'Compras de los últimos 12 meses') ?>
+    <table class="db-data sr-only"><caption>Ventas y compras por mes</caption><tbody><?php foreach ($pd['months'] as $mo): ?><tr><th><?= e($mo['title']) ?></th><td><?= e(erp_money($mo['sales'])) ?></td><td><?= e(erp_money($mo['purch'])) ?></td></tr><?php endforeach; ?></tbody></table></article>
+  <article class="db-panel<?= $pd['overdue'] > 0 ? ' bad' : '' ?>"><h2>Próximos pagos</h2><?= $docList($pd['next'], 'No hay pagos pendientes.', true) ?></article>
+</section>
+<?php endif; ?>
+
 <?php if ($sales): ?>
 <section class="db-kpis" aria-label="Indicadores">
   <div class="db-card"><span class="db-l">Ventas del mes</span><strong class="db-n"><?= e(erp_money($dash['month'])) ?></strong><?= $delta($dash['month'], $dash['month_prev']) ?><span class="db-s">sin IVA</span></div>

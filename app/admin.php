@@ -6,6 +6,7 @@ require_once __DIR__ . '/erp.php';
 require_once __DIR__ . '/history.php';
 require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/reports.php';
+require_once __DIR__ . '/purchases.php';
 require_once __DIR__ . '/import_wizard.php';
 require_once __DIR__ . '/doc_series.php';
 require_once __DIR__ . '/doc_params.php';
@@ -75,7 +76,11 @@ function admin_dispatch(array $segs): void
         if ($page === '' || !in_array($page, [...ERP_PAGES, ...ERP_SHARED_PAGES, 'clave'], true)) {
             redirect('/admin/clientes');
         }
-    } elseif ($role !== 'admin' && in_array($page, ERP_PAGES, true)) {
+    } elseif ($role === 'compras') { // el rol Compras solo ve Inicio (sus cifras), Compras, Proveedores, los informes y su cuenta (separado de Ventas)
+        if ($page !== '' && !in_array($page, [...PURCH_PAGES, 'historial', 'listados', 'clave'], true)) {
+            redirect('/admin');
+        }
+    } elseif ($role !== 'admin' && in_array($page, [...ERP_PAGES, ...PURCH_PAGES], true)) {
         flash('Tu usuario no tiene acceso a esa sección.', 'err');
         redirect('/admin');
     }
@@ -157,6 +162,12 @@ function admin_dispatch(array $segs): void
         case 'albaranes':
         case 'facturas':
             admin_docs(DOCS_PAGE_KIND[$page], (string)($segs[2] ?? ''), (string)($segs[3] ?? ''));
+            break;
+        case 'compras':
+            admin_purchases((string)($segs[2] ?? ''), (string)($segs[3] ?? ''), (string)($segs[4] ?? ''));
+            break;
+        case 'proveedores':
+            admin_suppliers((string)($segs[2] ?? ''));
             break;
         case 'informes':
             $tab = (string)($segs[2] ?? 'meses');
@@ -301,6 +312,7 @@ function admin_icon(string $name): string
         'download' => '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
         'alert' => '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5"/><path d="M12 17.5v.01"/>',
         'info' => '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/>',
+        'cart' => '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M3 4h2.5l2.2 11h11l2-8H6.3"/>',
         'sales' => '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/>',
         'settings' => '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
         'chevron' => '<path d="M9 6l6 6-6 6"/>',
@@ -320,6 +332,9 @@ function admin_menu_allows(string $who, string $role): bool
         'all' => true,
         'catalog' => in_array($role, ['admin', 'catalogo'], true),
         'erp' => in_array($role, ['admin', 'erp'], true),
+        'purch' => in_array($role, ['admin', 'compras'], true),
+        'home' => in_array($role, ['admin', 'catalogo', 'compras'], true),
+        'nopurch' => $role !== 'compras', // Importar y Exportar no son para el rol Compras
         default => $role === 'admin',
     };
 }
@@ -327,7 +342,7 @@ function admin_menu_allows(string $who, string $role): bool
 function admin_menu(): array
 {
     $menu = [
-        'home' => ['Inicio', 'home', [['Inicio', '/admin', [''], 'catalog']]],
+        'home' => ['Inicio', 'home', [['Inicio', '/admin', [''], 'home']]],
         'sales' => ['Ventas', 'sales', [
             ['Pedidos', '/admin/pedidos', ['pedidos'], 'erp'],
             ['Albaranes', '/admin/albaranes', ['albaranes'], 'erp'],
@@ -335,6 +350,12 @@ function admin_menu(): array
             ['Análisis de ventas', '/admin/informes', ['informes'], 'erp'],
         ]],
         'reports' => ['Informes', 'sales', reports_menu_pages()],
+        'purchases' => ['Compras', 'cart', [
+            ['Pedidos a proveedor', '/admin/compras/pedidos', ['compras/pedidos'], 'purch'],
+            ['Albaranes de compra', '/admin/compras/albaranes', ['compras/albaranes'], 'purch'],
+            ['Facturas recibidas', '/admin/compras/facturas', ['compras/facturas', 'compras'], 'purch'],
+            ['Proveedores', '/admin/proveedores', ['proveedores'], 'purch'],
+        ]],
         'clients' => ['Clientes', 'users', [['Clientes', '/admin/clientes', ['clientes'], 'erp']]],
         'catalog' => ['Catálogo', 'catalog', [
             ['Artículos', '/admin/articulos', ['articulos', 'articulo'], 'catalog'],
@@ -343,11 +364,11 @@ function admin_menu(): array
             ['Fotos', '/admin/fotos', ['fotos'], 'catalog'],
         ]],
         'data' => ['Datos', 'import', [
-            ['Importar', '/admin/importar', ['importar', 'importar/carpetas', 'ftp'], 'all'],
+            ['Importar', '/admin/importar', ['importar', 'importar/carpetas', 'ftp'], 'nopurch'],
             ['Sincronización', '/admin/sincronizacion', ['sincronizacion', 'erp'], 'erp'],
             ['Perfiles', '/admin/perfiles', ['perfiles'], 'catalog'],
             ['Historial', '/admin/historial', ['historial'], 'all'],
-            ['Exportar', '/admin/exportar', ['exportar'], 'all'],
+            ['Exportar', '/admin/exportar', ['exportar'], 'nopurch'],
         ]],
         'web' => ['Web', 'web', [
             ['Página de inicio', '/admin/pagina-inicio', ['pagina-inicio'], 'admin'],
@@ -550,7 +571,7 @@ function admin_home(): void
     if (is_admin() && ($mailErr = mail_last_error())) {
         $alerts[] = ['err', 'No se pudo enviar un correo el ' . date('d/m/Y H:i', $mailErr['at']) . ': ' . $mailErr['error'], '/admin/configuracion/correo', 'Revisar el correo'];
     }
-    $broken = admin_broken_photos();
+    $broken = in_array(current_role(), ['admin', 'catalogo', 'erp'], true) ? admin_broken_photos() : 0; // el rol Compras no gestiona fotos
     if ($broken > 0) {
         $alerts[] = ['err', $broken . ' foto' . ($broken === 1 ? '' : 's') . ' de artículos apunta' . ($broken === 1 ? '' : 'n') . ' a un archivo que ya no existe (se ven rotas).', '/admin/ftp', 'Revisar'];
     }
@@ -572,8 +593,21 @@ function admin_home(): void
         $sales = $has2fa;
         $salesNote = $has2fa ? '' : 'Hace falta la doble verificación para ver las ventas del cuadro de mandos: actívala en «Mi cuenta».';
     }
+    $purch = false;
+    $purchNote = '';
+    if (in_array($role, ['admin', 'compras'], true)) {
+        $has2fa = true;
+        if (purch_2fa_required()) {
+            $st = $db->prepare('SELECT totp_enabled FROM users WHERE id = ?');
+            $st->execute([(int)($_SESSION['uid'] ?? 0)]);
+            $has2fa = (int)$st->fetchColumn() === 1;
+        }
+        $purch = $has2fa;
+        $purchNote = $has2fa ? '' : 'Hace falta la doble verificación para ver las compras del cuadro de mandos: actívala en «Mi cuenta».';
+    }
     $period = dash_period($_GET);
     admin_render('home', [
+        'purch' => $purch, 'purchNote' => $purchNote, 'pd' => $purch ? dash_purch_data($sales) : null,
         'stats' => $stats, 'pf' => $pf, 'lastImport' => $lastImport, 'alerts' => $alerts, 'recent' => $recent, 'title' => 'Inicio',
         'sales' => $sales, 'salesNote' => $salesNote, 'catalog' => in_array($role, ['admin', 'catalogo'], true),
         'period' => $period, 'dash' => $sales ? dash_sales_data($period) : null, 'lists' => $sales ? dash_lists() : null, 'sys' => is_admin() ? dash_system() : null,
@@ -2172,7 +2206,7 @@ function admin_totp_post(array $me, array &$errors): void
 
 /* ---------- Usuarios (solo administradores) ---------- */
 
-const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'Gestión de catálogo', 'erp' => 'ERP (clientes y ventas)'];
+const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'Gestión de catálogo', 'erp' => 'ERP (clientes y ventas)', 'compras' => 'Compras (proveedores y compras)'];
 
 /** Secciones del ERP (clientes y ventas de NCS): solo rol «erp» y administradores. */
 const ERP_PAGES = ['clientes', 'ventas', 'pedidos', 'albaranes', 'facturas', 'informes', 'erp', 'sincronizacion'];
@@ -2207,6 +2241,26 @@ function admin_users(): void
                 }
             }
             redirect('/admin/configuracion/usuarios#erp');
+        }
+        if ($act === 'purch_2fa') { // lo mismo para Compras (ajuste purch_require_2fa)
+            $want = !empty($_POST['purch_2fa']);
+            if ($want && !purch_2fa_required()) {
+                save_setting('purch_require_2fa', '1');
+                flash('Doble verificación de Compras activada.');
+            } elseif (!$want && purch_2fa_required()) {
+                $st = $db->prepare('SELECT username, pass_hash FROM users WHERE id = ?');
+                $st->execute([$me]);
+                $mine = $st->fetch();
+                if (!$mine || !password_verify((string)($_POST['purch_pass'] ?? ''), (string)$mine['pass_hash'])) {
+                    auth_register_failure($me);
+                    flash('No se ha desactivado la doble verificación de Compras: la contraseña no es correcta.', 'err');
+                } else {
+                    save_setting('purch_require_2fa', '0');
+                    erp_notify_2fa_off((string)$mine['username'], 'Compras');
+                    flash('Doble verificación de Compras desactivada. Se ha avisado por correo a los destinatarios de avisos del sistema.', 'err');
+                }
+            }
+            redirect('/admin/configuracion/usuarios#compras');
         }
         $admins = (int)$db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
         $id = (int)($_POST['id'] ?? 0);
@@ -2300,7 +2354,7 @@ function admin_users(): void
     }
     admin_render('users', [
         'users' => $db->query('SELECT id, username, role, email, locked_until, last_login_at, totp_enabled FROM users ORDER BY username COLLATE NOCASE')->fetchAll(),
-        'errors' => $errors, 'form' => $form, 'me' => $me, 'erp2fa' => erp_2fa_required(), 'cfg' => 'usuarios', 'title' => 'Usuarios y seguridad',
+        'errors' => $errors, 'form' => $form, 'me' => $me, 'erp2fa' => erp_2fa_required(), 'purch2fa' => purch_2fa_required(), 'cfg' => 'usuarios', 'title' => 'Usuarios y seguridad',
     ]);
 }
 

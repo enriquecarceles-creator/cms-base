@@ -452,7 +452,7 @@ require_once $tmp . '/app/doc_series.php';
 $ncsLetters = array_keys(series_ncs_letters());
 $check('series: las letras de las facturas importadas se leen de erp_invoices', $ncsLetters !== [] && count(array_filter($ncsLetters, fn($l) => preg_match('/^[A-Z]+$/', $l))) === count($ncsLetters), implode(',', $ncsLetters));
 $seed = array_column($db->query('SELECT letter FROM doc_series ORDER BY id')->fetchAll(), 'letter');
-$check('series: W (facturas del CMS), R, A, P y T (tiques) sembradas', $seed === ['W', 'R', 'A', 'P', 'T']);
+$check('series: W (facturas del CMS), R, A, P y T (tiques) sembradas, y las de compras (PC, AC, RE, RC)', $seed === ['W', 'R', 'A', 'P', 'T'] || $seed === ['W', 'R', 'A', 'P', 'T', 'PC', 'AC', 'RE', 'RC']);
 $errs = [];
 $postS = ['s' => [], 'default' => [], 'new' => ['type' => 'albaran', 'letter' => $ncsLetters[0] ?? 'V', 'digits' => 5, 'with_year' => '']];
 foreach (series_all() as $sid => $sr) {

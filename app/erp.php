@@ -88,17 +88,17 @@ function erp_guard(): bool
 }
 
 /** Avisa por correo a los administradores de que se ha desactivado la doble verificación de Clientes y Ventas. */
-function erp_notify_2fa_off(string $who): void
+function erp_notify_2fa_off(string $who, string $scope = 'Clientes y Ventas'): void
 {
     try {
-        $body = "Se ha desactivado la doble verificación exigida para Clientes y Ventas en el panel de " . site_name() . ".\r\n\r\n"
+        $body = "Se ha desactivado la doble verificación exigida para " . $scope . " en el panel de " . site_name() . ".\r\n\r\n"
             . "  Quién:   " . $who . "\r\n"
             . "  Cuándo:  " . date('d/m/Y H:i') . ' (' . date_default_timezone_get() . ")\r\n"
             . "  Desde:   " . ($_SERVER['REMOTE_ADDR'] ?? '') . "\r\n\r\n"
             . "Mientras esté desactivada, quien tenga el rol ERP o sea administrador puede ver los datos de clientes y ventas solo con su contraseña.\r\n"
             . "Si no lo esperabas, vuelve a activarla en Configuración → Usuarios y seguridad (" . site_origin() . url('/admin/configuracion/usuarios') . "#erp) y revisa los usuarios.\r\n";
         foreach (mail_notify_recipients() as $to) { // los de Web → Correo → Avisos del sistema o, por defecto, los administradores
-            app_mail($to, 'Doble verificación desactivada para Clientes y Ventas · ' . site_name(), $body);
+            app_mail($to, 'Doble verificación desactivada para ' . $scope . ' · ' . site_name(), $body);
         }
     } catch (Throwable $e) {
         error_log('Aviso 2FA ERP: ' . get_class($e)); // nunca impide cambiar el ajuste

@@ -27,7 +27,7 @@ return [
     'rows' => function (array $sel): array {
         $f = $sel['f'];
         $today = (int)date('Ymd');
-        $w = " WHERE h.status = 'emitida'" . (empty($sel['opt']['pruebas']) ? ' AND h.is_test = 0' : '');
+        $w = " WHERE h.status = 'emitida' AND h.doc_type = 'factura'" . (empty($sel['opt']['pruebas']) ? ' AND h.is_test = 0' : '');
         $a = [];
         rep_cond_date($w, $a, 'u.due_day', $f['fecha']);
         rep_cond_code($w, $a, 'h.cust_code', $f['cliente']);

@@ -6,7 +6,8 @@
  */
 $annulled = $doc['status'] === 'anulado';
 $draft = $doc['status'] === 'borrador'; // factura aún sin emitir: vista previa sin número
-$test = docs_is_invoice((string)$doc['doc_type']) && (docs_is_test($doc) || ($draft && docp_bool('test_mode'))); // documento de prueba: sin validez fiscal
+$purchase = docs_is_purchase((string)$doc['doc_type']);
+$test = !$purchase && docs_is_invoice((string)$doc['doc_type']) && (docs_is_test($doc) || ($draft && docp_bool('test_mode'))); // documento de prueba: sin validez fiscal
 $fmtPct = fn($p) => rtrim(rtrim(number_format((float)$p, 2, ',', ''), '0'), ',') . ' %';
 $cols = doc_print_cols($d, (string)$doc['doc_type'], $lines);
 $model = doc_model_for((string)$doc['doc_type']);
@@ -92,7 +93,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <a id="close" href="<?= e(url($k['path'] . '/' . (int)$doc['id'])) ?>">Cerrar</a>
     <?php if ($draft): ?><a href="<?= e(url($k['path'] . '/' . (int)$doc['id'])) ?>">Modificar</a><?php endif; ?>
     <button class="js-only" type="button" onclick="window.print()" hidden>Imprimir</button>
-    <?php if (!$draft && !$annulled && !docs_is_invoice((string)$doc['doc_type'])): ?><a href="<?= e(url($k['path'] . '/' . (int)$doc['id'] . '/enviar')) ?>">Enviar por correo</a><?php endif; ?>
+    <?php if (!$draft && !$annulled && !$purchase && !docs_is_invoice((string)$doc['doc_type'])): ?><a href="<?= e(url($k['path'] . '/' . (int)$doc['id'] . '/enviar')) ?>">Enviar por correo</a><?php endif; ?>
   </div>
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
@@ -111,7 +112,8 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <div class="box">
       <h2><?= e($k['print']) ?></h2>
       <dl>
-        <dt>Número</dt><dd><?= $draft ? (docs_is_invoice((string)$doc['doc_type']) ? '(al emitir)' : '(al confirmar)') : e($doc['doc_code']) ?></dd>
+        <dt>Número</dt><dd><?= $draft ? (docs_is_invoice((string)$doc['doc_type']) ? ($purchase ? '(al cerrar)' : '(al emitir)') : '(al confirmar)') : e($doc['doc_code']) ?></dd>
+        <?php if ($purchase && (string)$doc['sup_ref'] !== ''): ?><dt>Nº proveedor</dt><dd><?= e($doc['sup_ref']) ?></dd><?php endif; ?>
         <dt>Fecha</dt><dd><?= e(erp_day((int)$doc['doc_day'])) ?></dd>
         <?php if ($payLabel !== ''): ?><dt>Forma de pago</dt><dd><?= e($payLabel) ?></dd><?php endif; ?>
         <?php if ($doc['ref_text'] !== ''): ?><dt>Referencia</dt><dd><?= e($doc['ref_text']) ?></dd><?php endif; ?>
@@ -120,7 +122,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   </header>
 
   <section class="cust" aria-label="Cliente">
-    <h3>Cliente<?= $doc['cust_code'] !== '' && !$isRetail ? ' · ' . e($doc['cust_code']) : '' ?></h3>
+    <h3><?= $purchase ? 'Proveedor' : 'Cliente' ?><?= $doc['cust_code'] !== '' && !$isRetail ? ' · ' . e($doc['cust_code']) : '' ?></h3>
     <strong><?= e($doc['cust_name'] !== '' ? $doc['cust_name'] : ($isRetail ? 'Cliente de contado' : '')) ?></strong>
     <?php if ($doc['cust_nif'] !== ''): ?><p>NIF: <?= e($doc['cust_nif']) ?></p><?php endif; ?>
     <?php foreach ($custAddr as $line): ?><p><?= e($line) ?></p><?php endforeach; ?>

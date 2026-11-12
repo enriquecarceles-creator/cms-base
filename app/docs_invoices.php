@@ -49,7 +49,7 @@ function docs_test_purge(): int
     try {
         $ids = array_map('intval', $db->query('SELECT id FROM doc_headers WHERE is_test = 1')->fetchAll(PDO::FETCH_COLUMN));
         foreach ($ids as $id) {
-            foreach ($db->query("SELECT id FROM doc_headers WHERE doc_type = 'albaran' AND billed_by = " . $id)->fetchAll(PDO::FETCH_COLUMN) as $aid) {
+            foreach ($db->query("SELECT id FROM doc_headers WHERE doc_type IN ('albaran', 'albaran_c') AND billed_by = " . $id)->fetchAll(PDO::FETCH_COLUMN) as $aid) {
                 $db->prepare("UPDATE doc_headers SET status = 'pendiente', billed_by = 0 WHERE id = ?")->execute([(int)$aid]);
                 docs_event((int)$aid, 'liberado', 'Factura de prueba borrada');
                 docs_refresh_orders(docs_source_orders((int)$aid));
@@ -443,8 +443,8 @@ function docs_bill(array $albIds): int
     $albs = [];
     foreach ($albIds as $aid) {
         $a = docs_get($aid);
-        if (!$a || $a['doc_type'] !== 'albaran') {
-            throw new DomainException('Algún documento marcado no es un albarán.');
+        if (!$a || !in_array($a['doc_type'], ['albaran', 'albaran_c'], true) || ($albs && $a['doc_type'] !== $albs[0]['doc_type'])) {
+            throw new DomainException('Algún documento marcado no es un albarán (o mezclas albaranes de venta y de compra).');
         }
         if ($a['status'] !== 'pendiente' || (int)$a['billed_by'] > 0) {
             throw new DomainException('El albarán ' . $a['doc_code'] . ' ya está facturado, anulado o en otro borrador de factura.');
@@ -465,12 +465,14 @@ function docs_bill(array $albIds): int
     if (period_is_locked($today)) {
         throw new DomainException(period_lock_message($today));
     }
-    $s = series_default_for('factura');
+    $billType = docs_side((string)$first['doc_type'], 'factura');
+    $s = series_default_for($billType);
     if (!$s) {
-        throw new DomainException('No hay ninguna serie activa de facturas (Configuración → Series).');
+        throw new DomainException('No hay ninguna serie activa de ' . mb_strtolower(docs_kind($billType)['plural']) . ' (Configuración → Parámetros → Series).');
     }
     usort($albs, fn($x, $y) => [(int)$x['doc_day'], (int)$x['id']] <=> [(int)$y['doc_day'], (int)$y['id']]);
-    $doc = array_merge(docs_blank('factura'), array_intersect_key($first, array_flip(DOCS_HEAD_COLS)));
+    $doc = array_merge(docs_blank($billType), array_intersect_key($first, array_flip(DOCS_HEAD_COLS)));
+    $doc['sup_ref'] = '';
     $doc['series_id'] = (int)$s['id'];
     $doc['doc_day'] = $today;
     $doc['origin_id'] = (int)$first['id'];
@@ -497,7 +499,7 @@ function docs_bill(array $albIds): int
     $db->beginTransaction();
     try {
         $fid = docs_save($doc, $lines, -1, 'desde', 'Albaranes ' . implode(', ', array_column($albs, 'doc_code')));
-        $up = $db->prepare("UPDATE doc_headers SET billed_by = ? WHERE id = ? AND doc_type = 'albaran' AND status = 'pendiente' AND billed_by = 0");
+        $up = $db->prepare("UPDATE doc_headers SET billed_by = ? WHERE id = ? AND doc_type = '" . ($billType === 'factura_c' ? 'albaran_c' : 'albaran') . "' AND status = 'pendiente' AND billed_by = 0");
         foreach ($albs as $a) {
             $up->execute([$fid, (int)$a['id']]);
             if ($up->rowCount() !== 1) { // otra persona lo ha facturado a la vez

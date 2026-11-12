@@ -14,7 +14,7 @@ require_once __DIR__ . '/reports_lib.php';
 
 const REP_PER_PAGE = 100;      // líneas por página en pantalla
 const REP_MAX_ROWS = 100000;   // tope de filas de un informe
-const REP_SECTIONS = ['Ventas', 'Documentos', 'Clientes', 'Artículos', 'Fiscal'];
+const REP_SECTIONS = ['Ventas', 'Compras', 'Documentos', 'Clientes', 'Artículos', 'Fiscal'];
 
 /* ---------- Registro de informes ---------- */
 
@@ -47,8 +47,9 @@ function report_allowed(array $def, string $role): bool
 {
     return match ($def['perm']) {
         'erp' => in_array($role, ['admin', 'erp'], true),
+        'purch' => in_array($role, ['admin', 'compras'], true),
         'catalog' => in_array($role, ['admin', 'catalogo'], true),
-        'all' => in_array($role, ['admin', 'erp', 'catalogo'], true),
+        'all' => in_array($role, ['admin', 'erp', 'catalogo', 'compras'], true),
         default => $role === 'admin',
     };
 }
@@ -64,7 +65,7 @@ function reports_menu_pages(): array
 {
     $out = [['Todos los informes', '/admin/listados', ['listados'], 'all']];
     foreach (reports_all() as $d) {
-        $out[] = [$d['title'], '/admin/listados/' . $d['id'], ['listados/' . $d['id']], match ($d['perm']) { 'erp' => 'erp', 'catalog' => 'catalog', 'all' => 'all', default => 'admin' }];
+        $out[] = [$d['title'], '/admin/listados/' . $d['id'], ['listados/' . $d['id']], match ($d['perm']) { 'erp' => 'erp', 'purch' => 'purch', 'catalog' => 'catalog', 'all' => 'all', default => 'admin' }];
     }
     return $out;
 }
@@ -410,8 +411,10 @@ function admin_reports(string $id, string $sub): void
         not_found();
         return;
     }
-    if ($def['perm'] === 'erp' && !erp_guard()) { // datos de clientes y ventas: con la doble verificación si está exigida
-        return;
+    foreach ((array)($def['guards'] ?? [$def['perm']]) as $g) { // doble verificación si está exigida: Clientes y Ventas ('erp') y/o Compras ('purch')
+        if (($g === 'erp' && !erp_guard()) || ($g === 'purch' && !purch_guard())) {
+            return;
+        }
     }
     if ($sub === 'buscar') {
         rep_lookup_json($def);
@@ -499,6 +502,13 @@ function rep_lookup_json(array $def): void
             $st->execute(['%' . $esc . '%', '%' . $esc . '%', '%' . $esc . '%', $esc . '%']);
             foreach ($st->fetchAll() as $r) {
                 $out[] = ['v' => (string)$r['cust_code'], 'l' => rep_cust_label((string)$r['cust_code'], (string)$r['name'], (string)$r['trade_name'])];
+            }
+        } elseif (($_GET['l'] ?? '') === 'proveedor' && in_array(current_role(), ['admin', 'compras'], true)) {
+            $st = db()->prepare("SELECT sup_code, name, trade_name FROM erp_suppliers WHERE LOWER(sup_code) LIKE ? ESCAPE '!' OR LOWER(name) LIKE ? ESCAPE '!' OR LOWER(trade_name) LIKE ? ESCAPE '!'
+                ORDER BY CASE WHEN LOWER(sup_code) LIKE ? ESCAPE '!' THEN 0 ELSE 1 END, sup_code LIMIT 20");
+            $st->execute(['%' . $esc . '%', '%' . $esc . '%', '%' . $esc . '%', $esc . '%']);
+            foreach ($st->fetchAll() as $r) {
+                $out[] = ['v' => (string)$r['sup_code'], 'l' => rep_cust_label((string)$r['sup_code'], (string)$r['name'], (string)$r['trade_name'])];
             }
         } elseif (($_GET['l'] ?? '') === 'articulo') {
             $st = db()->prepare("SELECT ref, name FROM products WHERE ref <> '' AND (ref LIKE ? ESCAPE '!' OR name LIKE ? ESCAPE '!') ORDER BY CASE WHEN ref LIKE ? ESCAPE '!' THEN 0 ELSE 1 END, ref LIMIT 20");

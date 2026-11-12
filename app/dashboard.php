@@ -96,7 +96,7 @@ function dash_sales_data(array $period, ?int $today = null): array
     // Vencido: cuotas sin cobrar de facturas del CMS cuyo día ya pasó (los vencimientos de NCS no se guardan)
     $st = $db->prepare("SELECT COUNT(DISTINCT h.id) AS n, COALESCE(SUM(u.amount_cents), 0) AS t FROM doc_dues u JOIN doc_headers h ON h.id = u.doc_id
         LEFT JOIN erp_invoices i ON i.inv_number = h.doc_code LEFT JOIN erp_invoice_state s ON s.invoice_id = i.id
-        WHERE u.paid = 0 AND u.due_day < ? AND h.status = 'emitida' AND h.is_test = 0 AND COALESCE(s.paid, 0) = 0");
+        WHERE u.paid = 0 AND u.due_day < ? AND h.doc_type = 'factura' AND h.status = 'emitida' AND h.is_test = 0 AND COALESCE(s.paid, 0) = 0");
     $st->execute([$today]);
     $r = $st->fetch();
     $d['overdue_n'] = (int)$r['n'];
@@ -200,6 +200,119 @@ function dash_sales_data(array $period, ?int $today = null): array
     return $d;
 }
 
+/** Compras (base sin IVA, céntimos) entre dos días: facturas recibidas cerradas; las rectificativas recibidas restan. */
+function dash_purch(int $from, int $to): int
+{
+    $st = db()->prepare("SELECT COALESCE(SUM(base_cents), 0) FROM doc_headers WHERE doc_type IN ('factura_c', 'rectificativa_c') AND status = 'emitida' AND doc_day >= ? AND doc_day <= ?");
+    $st->execute([$from, $to]);
+    return (int)$st->fetchColumn();
+}
+
+/**
+ * Cifras de compras del cuadro de mandos: compras del mes y del año (frente al año anterior), pagos pendientes y vencidos, próximos pagos
+ * y la serie de 12 meses de compras (y de ventas si $withSales). Solo con permiso de Compras.
+ */
+function dash_purch_data(bool $withSales, ?int $today = null): array
+{
+    $db = db();
+    $today ??= (int)date('Ymd');
+    $y = intdiv($today, 10000);
+    $m = intdiv($today, 100) % 100;
+    $mStart = $y * 10000 + $m * 100 + 1;
+    $yStart = $y * 10000 + 101;
+    $d = ['month' => dash_purch($mStart, $today), 'month_prev' => dash_purch(dash_prev_year($mStart), dash_prev_year($today)),
+        'year' => dash_purch($yStart, $today), 'year_prev' => dash_purch(dash_prev_year($yStart), dash_prev_year($today))];
+    $st = $db->prepare("SELECT COUNT(DISTINCT h.id) AS n, COALESCE(SUM(u.amount_cents), 0) AS t, COALESCE(SUM(CASE WHEN u.due_day < ? THEN u.amount_cents ELSE 0 END), 0) AS o,
+            COUNT(DISTINCT CASE WHEN u.due_day < ? THEN h.id END) AS no
+        FROM doc_dues u JOIN doc_headers h ON h.id = u.doc_id WHERE u.paid = 0 AND h.doc_type IN ('factura_c', 'rectificativa_c') AND h.status = 'emitida'");
+    $st->execute([$today, $today]);
+    $r = $st->fetch();
+    $d['pending_n'] = (int)$r['n'];
+    $d['pending'] = (int)$r['t'];
+    $d['overdue'] = (int)$r['o'];
+    $d['overdue_n'] = (int)$r['no'];
+    $st = $db->prepare("SELECT u.due_day, u.amount_cents, h.id, h.doc_code, h.cust_name FROM doc_dues u JOIN doc_headers h ON h.id = u.doc_id
+        WHERE u.paid = 0 AND h.doc_type IN ('factura_c', 'rectificativa_c') AND h.status = 'emitida' ORDER BY u.due_day, h.id LIMIT 8");
+    $st->execute();
+    $d['next'] = [];
+    foreach ($st->fetchAll() as $r) {
+        $d['next'][] = ['code' => (string)$r['doc_code'], 'cust' => (string)$r['cust_name'], 'day' => (int)$r['due_day'], 'total' => (int)$r['amount_cents'], 'href' => '/admin/compras/facturas/' . (int)$r['id']];
+    }
+    // 12 meses que terminan en el actual: compras y (si se puede) ventas
+    $months = [];
+    for ($i = 11; $i >= 0; $i--) {
+        $t = $y * 12 + ($m - 1) - $i;
+        $months[] = ['y' => intdiv($t, 12), 'm' => $t % 12 + 1];
+    }
+    $lo = $months[0]['y'] * 10000 + $months[0]['m'] * 100 + 1;
+    $byP = [];
+    $st = $db->prepare("SELECT doc_day, base_cents FROM doc_headers WHERE doc_type IN ('factura_c', 'rectificativa_c') AND status = 'emitida' AND doc_day >= ? AND doc_day <= ?");
+    $st->execute([$lo, $today]);
+    foreach ($st->fetchAll() as $r) {
+        $k = intdiv((int)$r['doc_day'], 100);
+        $byP[$k] = ($byP[$k] ?? 0) + (int)$r['base_cents'];
+    }
+    $byS = [];
+    if ($withSales) {
+        $st = $db->prepare('SELECT inv_year, inv_month, SUM(base_cents) AS t FROM erp_invoices WHERE annulled = 0 AND inv_day >= ? AND inv_day <= ? GROUP BY inv_year, inv_month');
+        $st->execute([$lo, $today]);
+        foreach ($st->fetchAll() as $r) {
+            $byS[(int)$r['inv_year'] * 100 + (int)$r['inv_month']] = (int)$r['t'];
+        }
+    }
+    $d['months'] = [];
+    foreach ($months as $mo) {
+        $k = $mo['y'] * 100 + $mo['m'];
+        $d['months'][] = ['label' => erp_month_label($mo['y'], $mo['m']), 'title' => erp_month_label($mo['y'], $mo['m'], true), 'sales' => $byS[$k] ?? 0, 'purch' => $byP[$k] ?? 0];
+    }
+    $d['with_sales'] = $withSales;
+    return $d;
+}
+
+/** Barras agrupadas por mes: ventas y compras (sin IVA). $m: [['label','title','sales','purch']]. */
+function dash_svg_sales_purch(array $m, bool $withSales, string $aria): string
+{
+    $w = 480;
+    $h = 240;
+    $padL = 6;
+    $top = 16;
+    $bottom = 26;
+    $vals = [0];
+    foreach ($m as $x) {
+        $vals[] = (int)$x['purch'];
+        $vals[] = $withSales ? (int)$x['sales'] : 0;
+    }
+    $max = max($vals);
+    $min = min($vals);
+    $range = max($max - $min, 1);
+    $plot = $h - $top - $bottom;
+    $y0 = $top + $max / $range * $plot;
+    $sc = $plot / $range;
+    $n = max(1, count($m));
+    $slot = ($w - $padL * 2) / $n;
+    $bw = $slot * ($withSales ? 0.36 : 0.62);
+    $o = '<svg class="db-chart" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . e($aria) . '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">';
+    $o .= '<line class="db-zero" x1="' . $padL . '" y1="' . sprintf('%.1f', $y0) . '" x2="' . ($w - $padL) . '" y2="' . sprintf('%.1f', $y0) . '"/>';
+    foreach ($m as $i => $x) {
+        $x0 = $padL + $i * $slot + ($slot - $bw * ($withSales ? 2 : 1)) / 2;
+        foreach (array_filter([$withSales ? ['sales', 'db-bar'] : null, ['purch', 'db-bar b']]) as $j => [$k, $cls]) {
+            $v = (int)$x[$k];
+            $bh = max(abs($v) * $sc, $v !== 0 ? 1.5 : 0);
+            $by = $v >= 0 ? $y0 - $bh : $y0;
+            $o .= '<rect class="' . $cls . ($v < 0 ? ' neg' : '') . '" x="' . sprintf('%.1f', $x0 + $j * $bw) . '" y="' . sprintf('%.1f', $by) . '" width="' . sprintf('%.1f', $bw) . '" height="' . sprintf('%.1f', $bh) . '" rx="2"><title>'
+                . e($x['title'] . ' · ' . ($k === 'sales' ? 'Ventas' : 'Compras') . ': ' . erp_money($v)) . '</title></rect>';
+        }
+        if ($i % 2 === 1 || $i === $n - 1) {
+            $o .= '<text class="db-ax" x="' . sprintf('%.1f', $padL + $i * $slot + $slot / 2) . '" y="' . ($h - 8) . '" text-anchor="middle">' . e($x['label']) . '</text>';
+        }
+    }
+    if ($withSales) {
+        $o .= '<rect class="db-bar" x="8" y="2" width="10" height="10" rx="2"/><text class="db-lb" x="22" y="11">Ventas</text>';
+    }
+    $o .= '<rect class="db-bar b" x="' . ($withSales ? 84 : 8) . '" y="2" width="10" height="10" rx="2"/><text class="db-lb" x="' . ($withSales ? 98 : 22) . '" y="11">Compras</text>';
+    return $o . '</svg>';
+}
+
 /** Listas rápidas: últimos documentos, próximos vencimientos (7 días), vencidos y borradores. */
 function dash_lists(?int $today = null): array
 {
@@ -213,15 +326,15 @@ function dash_lists(?int $today = null): array
     };
     $cols = 'id, doc_type, doc_code, status, doc_day, cust_name, total_cents, is_test';
     $out = ['recent' => [], 'drafts' => [], 'soon' => [], 'overdue' => []];
-    foreach ($db->query("SELECT $cols FROM doc_headers WHERE status <> 'borrador' ORDER BY id DESC LIMIT 8")->fetchAll() as $r) {
+    foreach ($db->query("SELECT $cols FROM doc_headers WHERE status <> 'borrador' AND doc_type NOT LIKE '%!_c' ESCAPE '!' ORDER BY id DESC LIMIT 8")->fetchAll() as $r) {
         $out['recent'][] = $row($r);
     }
-    foreach ($db->query("SELECT $cols FROM doc_headers WHERE status = 'borrador' ORDER BY updated_at DESC, id DESC LIMIT 8")->fetchAll() as $r) {
+    foreach ($db->query("SELECT $cols FROM doc_headers WHERE status = 'borrador' AND doc_type NOT LIKE '%!_c' ESCAPE '!' ORDER BY updated_at DESC, id DESC LIMIT 8")->fetchAll() as $r) {
         $out['drafts'][] = $row($r);
     }
     $base = "SELECT u.due_day, u.amount_cents, h.id, h.doc_code, h.cust_name FROM doc_dues u JOIN doc_headers h ON h.id = u.doc_id
         LEFT JOIN erp_invoices i ON i.inv_number = h.doc_code LEFT JOIN erp_invoice_state s ON s.invoice_id = i.id
-        WHERE u.paid = 0 AND h.status = 'emitida' AND h.is_test = 0 AND COALESCE(s.paid, 0) = 0 AND ";
+        WHERE u.paid = 0 AND h.doc_type = 'factura' AND h.status = 'emitida' AND h.is_test = 0 AND COALESCE(s.paid, 0) = 0 AND ";
     foreach (['soon' => [$base . 'u.due_day >= ? AND u.due_day <= ? ORDER BY u.due_day, h.id LIMIT 8', [$today, $in7]],
               'overdue' => [$base . 'u.due_day < ? ORDER BY u.due_day, h.id LIMIT 8', [$today]]] as $k => [$sql, $args]) {
         $st = $db->prepare($sql);

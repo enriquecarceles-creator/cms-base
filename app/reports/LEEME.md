@@ -12,11 +12,12 @@ No hace falta tocar nada más: copia un informe parecido, cámbiale el `id` y ad
 return [
     'id'      => 'mi-informe',            // único, sin espacios: es la dirección /admin/listados/mi-informe
     'title'   => 'Mi informe',            // título en el menú y en la pantalla
-    'section' => 'Ventas',                // Ventas | Documentos | Clientes | Artículos | Fiscal (así se agrupa en la página de informes)
+    'section' => 'Ventas',                // Ventas | Compras | Documentos | Clientes | Artículos | Fiscal (así se agrupa en la página de informes)
     'order'   => 50,                      // posición dentro de la sección (menor = antes)
     'perm'    => 'erp',                   // quién lo ve: 'erp' (administradores y rol ERP: clientes y ventas, con la doble verificación
-                                          //   si está exigida), 'catalog' (admin y catálogo), 'all' (los tres roles) o 'admin'
-    'history' => 'ventas',                // qué se anota en Datos → Historial al exportar: ventas | clientes | articulos
+                                          //   si está exigida), 'purch' (administradores y rol Compras, con la doble verificación de Compras), 'catalog' (admin y catálogo),
+                                          //   'all' (todos los roles) o 'admin'. Con 'guards' => ['erp', 'purch'] se exigen las dos (p. ej. el modelo 347)
+    'history' => 'ventas',                // qué se anota en Datos → Historial al exportar: ventas | clientes | articulos | compras
     'help'    => 'Una frase que explica el informe.',
     'notice'  => '',                      // opcional: aviso destacado (pantalla, impresión, CSV y Excel); p. ej. «Revisar con el asesor…»
     'filters' => [ ... ],                 // ver abajo

@@ -365,7 +365,7 @@ function staff_logged_in(): bool
         return false;
     }
     start_session();
-    return !empty($_SESSION['uid']) && current_role() !== '' && current_role() !== 'erp'; // el rol ERP no edita la web
+    return !empty($_SESSION['uid']) && !in_array(current_role(), ['', 'erp', 'compras'], true); // los roles ERP y Compras no editan la web
 }
 
 /** Menú lateral del catálogo: familias y subfamilias. */
@@ -991,6 +991,75 @@ function brand_banner(): ?string
 function brand_favicon(): ?string
 {
     return brand_file('favicon') ?? brand_file('logo');
+}
+
+/* ---------- Tema del panel con el color de la empresa ---------- */
+
+/** Luminancia relativa (WCAG) de un color [r, g, b] 0-255. */
+function theme_lum(array $c): float
+{
+    $f = fn(int $v) => ($v /= 255) <= 0.03928 ? $v / 12.92 : (($v + 0.055) / 1.055) ** 2.4;
+    return 0.2126 * $f($c[0]) + 0.7152 * $f($c[1]) + 0.0722 * $f($c[2]);
+}
+
+/** Relación de contraste (1-21) entre dos colores. */
+function theme_contrast(array $a, array $b): float
+{
+    $x = theme_lum($a);
+    $y = theme_lum($b);
+    return (max($x, $y) + 0.05) / (min($x, $y) + 0.05);
+}
+
+/** Mezcla $a con $b: $pct % de $a. */
+function theme_mix(array $a, array $b, float $pct): array
+{
+    return array_map(fn($i) => (int)round($a[$i] * $pct / 100 + $b[$i] * (100 - $pct) / 100), [0, 1, 2]);
+}
+
+function theme_hex(array $c): string
+{
+    return sprintf('#%02x%02x%02x', max(0, min(255, $c[0])), max(0, min(255, $c[1])), max(0, min(255, $c[2])));
+}
+
+/** Oscurece un color hasta que tenga al menos $min de contraste con $bg (para que el texto se lea siempre, sea cual sea el color de la empresa). */
+function theme_darken_to(array $c, array $bg, float $min): array
+{
+    for ($i = 0; $i < 40 && theme_contrast($c, $bg) < $min; $i++) {
+        $c = array_map(fn($v) => (int)floor($v * 0.9), $c);
+    }
+    return $c;
+}
+
+/**
+ * Colores derivados del color de la empresa (brand_color; por defecto un azul): principal, tono muy suave (fondo 8 %), suave de pasar el
+ * ratón (5 %), medio para bordes (30 %), texto «de marca» (oscurecido hasta contraste ≥ 7:1 sobre el fondo suave) y color de gráficas (contraste ≥ 3:1).
+ * Devuelve hexadecimales ya calculados (para navegadores sin color-mix()).
+ */
+function brand_theme(?string $hex = null): array
+{
+    $hex = $hex ?? (string)setting('brand_color');
+    if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hex)) {
+        $hex = '#3b6fb6';
+    }
+    $c = [hexdec(substr($hex, 1, 2)), hexdec(substr($hex, 3, 2)), hexdec(substr($hex, 5, 2))];
+    $white = [255, 255, 255];
+    $soft = theme_mix($c, $white, 8);
+    return [
+        'brand' => theme_hex($c),
+        'soft' => theme_hex($soft),
+        'hover' => theme_hex(theme_mix($c, $white, 5)),
+        'mid' => theme_hex(theme_mix($c, $white, 30)),
+        'ink' => theme_hex(theme_darken_to($c, $soft, 7.0)),
+        'bar' => theme_hex(theme_darken_to($c, $white, 3.0)),
+    ];
+}
+
+/** Bloque <style> con las variables del tema (color-mix() cuando el navegador lo entiende; si no, los hexadecimales calculados). */
+function brand_theme_style(): string
+{
+    $t = brand_theme();
+    return '<style id="brand-theme">:root{--brand:' . $t['brand'] . ';--brand-soft:' . $t['soft'] . ';--brand-hover:' . $t['hover'] . ';--brand-mid:' . $t['mid'] . ';--brand-ink:' . $t['ink'] . ';--brand-bar:' . $t['bar'] . '}'
+        . '@supports (background:color-mix(in srgb,red 50%,white)){:root{--brand-soft:color-mix(in srgb,var(--brand) 8%,#fff);--brand-hover:color-mix(in srgb,var(--brand) 5%,#fff);--brand-mid:color-mix(in srgb,var(--brand) 30%,#fff)}}</style>';
 }
 
 /** Variables CSS con el color de marca (#RRGGBB) elegido en el panel. */

@@ -56,6 +56,7 @@ $logo = brand_logo();
 <?php if (!empty($refresh)): ?><meta http-equiv="refresh" content="1"><?php endif; ?>
 <title><?= e($title ?? 'Panel') ?></title>
 <link rel="stylesheet" href="<?= e(asset('admin.css')) ?>">
+<?= brand_theme_style() ?>
 </head>
 <body class="adm">
 <a class="skip" href="#contenido">Saltar al contenido</a>
@@ -66,7 +67,7 @@ $logo = brand_logo();
     <?php if ($logo): ?><img src="<?= e($logo) ?>" alt="" height="28"><?php else: ?><span class="brand-mark" aria-hidden="true"><?= e(mb_strtoupper(mb_substr(site_name(), 0, 1))) ?></span><?php endif; ?>
     <span class="brand-n"><?= e(site_name()) ?></span><span class="brand-p">panel</span>
   </a>
-  <?php if ($me['role'] !== 'erp'): ?><form class="qsearch" method="get" action="<?= e(url('/admin/articulos')) ?>" role="search">
+  <?php if (!in_array($me['role'], ['erp', 'compras'], true)): ?><form class="qsearch" method="get" action="<?= e(url('/admin/articulos')) ?>" role="search">
     <label for="qs" class="sr-only">Buscar artículos</label>
     <input id="qs" type="search" name="q" placeholder="Buscar artículo por nombre o referencia" value="<?= e($seg === 'articulos' ? (string)($_GET['q'] ?? '') : '') ?>">
     <button type="submit" title="Buscar"><?= admin_icon('search') ?><span class="sr-only">Buscar</span></button>
@@ -75,7 +76,7 @@ $logo = brand_logo();
   <details class="umenu">
     <summary><?= admin_icon('user') ?><span><?= e($me['username']) ?></span></summary>
     <div class="umenu-box">
-      <p class="muted"><?= e(['admin' => 'Administrador', 'erp' => 'ERP (clientes y ventas)'][$me['role']] ?? 'Gestión de catálogo') ?></p>
+      <p class="muted"><?= e(['admin' => 'Administrador', 'erp' => 'ERP (clientes y ventas)', 'compras' => 'Compras'][$me['role']] ?? 'Gestión de catálogo') ?></p>
       <a href="<?= e(url('/admin/clave')) ?>">Mi cuenta</a>
       <form method="post" action="<?= e(url('/admin/logout')) ?>"><?= csrf_field() ?><button class="link" type="submit">Salir</button></form>
     </div>

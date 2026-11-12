@@ -126,6 +126,19 @@ $open = $errors ? ' open' : ''; // con errores se abren todos los bloques
     </div>
   </details>
 
+  <details class="blk"<?= $open ?>><summary>Compras y proveedores</summary>
+    <div class="g2">
+      <div>
+        <label>Prefijo de los códigos de proveedor <input name="sup_prefix" value="<?= e((string)$o('sup_prefix', docp('sup_prefix'))) ?>" maxlength="3" size="4" style="text-transform:uppercase"></label>
+        <small>Los códigos nuevos son <?= e(docp('sup_prefix')) ?>00001, <?= e(docp('sup_prefix')) ?>00002… Es independiente del de los clientes (C00001). Las letras de las series de compras (pedido a proveedor, albarán de compra, factura recibida con su número de registro y rectificativa recibida) se cambian en «Series de numeración».</small>
+      </div>
+      <div>
+        <label class="check"><input type="checkbox" name="purch_stock" value="1"<?= $chk('purch_stock') ? ' checked' : '' ?>> <span>Las compras suman al stock</span></label>
+        <small><strong>Apagado por ahora:</strong> el stock viene de NCS y la sincronización lo sobrescribiría. El ajuste queda preparado para cuando el CMS lleve el stock; todavía no hace nada.</small>
+      </div>
+    </div>
+  </details>
+
   <details class="blk"<?= $open ?>><summary>Documento de prueba y tiques</summary>
     <div class="g2">
       <div>

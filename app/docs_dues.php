@@ -148,12 +148,12 @@ function dues_method_terms(string $code): array
 }
 
 /** Día(s) de pago de un cliente (por su código). */
-function dues_customer_days(string $custCode): array
+function dues_customer_days(string $custCode, bool $supplier = false): array
 {
     if (trim($custCode) === '') {
         return [];
     }
-    $st = db()->prepare('SELECT pay_days FROM erp_customers WHERE cust_code = ?');
+    $st = db()->prepare($supplier ? 'SELECT pay_days FROM erp_suppliers WHERE sup_code = ?' : 'SELECT pay_days FROM erp_customers WHERE cust_code = ?');
     $st->execute([$custCode]);
     return dues_parse_days((string)$st->fetchColumn()) ?? [];
 }
@@ -161,14 +161,14 @@ function dues_customer_days(string $custCode): array
 /** ¿Lleva vencimientos este documento? Solo las facturas completas. */
 function dues_applies(array $doc): bool
 {
-    return (string)($doc['doc_type'] ?? '') === 'factura';
+    return in_array((string)($doc['doc_type'] ?? ''), ['factura', 'factura_c'], true);
 }
 
 /** Calcula los vencimientos de una factura y la clave de la base del cálculo: ['rows' => [...], 'key' => md5]. */
 function dues_compute(array $doc): array
 {
     $terms = dues_method_terms((string)$doc['pay_code']);
-    $days = dues_customer_days((string)$doc['cust_code']);
+    $days = dues_customer_days((string)$doc['cust_code'], docs_is_purchase((string)($doc['doc_type'] ?? '')));
     $key = md5(implode('|', [(int)$doc['doc_day'], (string)$doc['pay_code'], dues_terms_text($terms), dues_terms_text($days), (int)$doc['total_cents']]));
     return ['rows' => dues_schedule((int)$doc['total_cents'], (int)$doc['doc_day'], $terms, $days), 'key' => $key];
 }

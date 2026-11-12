@@ -24,6 +24,7 @@ const DOCP_DEFAULTS = [
     'vat_incl' => '1', 'cash_criterion' => '0', 'retail_trade' => '0',
     'lock_until' => '0',
     'test_mode' => '1', 'test_text' => 'Documento de prueba – sin validez fiscal',
+    'sup_prefix' => 'P', 'purch_stock' => '0',
 ];
 
 function docp(string $k): string
@@ -681,6 +682,12 @@ function admin_doc_params(): void
             $errors[] = 'La forma de pago por defecto debe ser una forma de pago activa.';
         }
         $v['pay_method'] = $pm;
+        $sp = strtoupper(trim((string)($_POST['sup_prefix'] ?? 'P')));
+        if (!preg_match('/^[A-Z]{1,3}$/', $sp)) {
+            $errors[] = 'El prefijo de los proveedores son de 1 a 3 letras (por ejemplo P).';
+            $sp = docp('sup_prefix');
+        }
+        $v['sup_prefix'] = $sp;
         $v['test_text'] = mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string)($_POST['test_text'] ?? '')) ?? ''), 0, 120);
         $testWasOn = docp_bool('test_mode');
         $retail = trim((string)($_POST['retail'] ?? ''));
@@ -779,7 +786,7 @@ function admin_doc_params(): void
             foreach ($v as $k => $val) {
                 save_setting('docp_' . $k, $val);
             }
-            foreach (['ask_discount', 'ask_price', 'ask_tariff', 'ask_title', 'warn_stock_min', 'warn_blocked', 'retail_trade', 'test_mode'] as $k) {
+            foreach (['ask_discount', 'ask_price', 'ask_tariff', 'ask_title', 'warn_stock_min', 'warn_blocked', 'retail_trade', 'test_mode', 'purch_stock'] as $k) {
                 save_setting('docp_' . $k, !empty($_POST[$k]) ? '1' : '0');
             }
             save_setting('erp_retail_customer', mb_substr($retail, 0, 40)); // una sola fuente: el mismo ajuste que usa la sincronización

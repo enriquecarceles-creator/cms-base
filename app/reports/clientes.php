@@ -85,7 +85,7 @@ return [
             }
             $st2 = $db->prepare("SELECT h.cust_code, MIN(u.due_day) AS next_day, COALESCE(SUM(CASE WHEN u.due_day < ? THEN u.amount_cents ELSE 0 END), 0) AS overdue
                 FROM doc_dues u JOIN doc_headers h ON h.id = u.doc_id LEFT JOIN erp_invoices i ON i.inv_number = h.doc_code LEFT JOIN erp_invoice_state s ON s.invoice_id = i.id
-                WHERE u.paid = 0 AND h.status = 'emitida' AND h.is_test = 0 AND COALESCE(s.paid, 0) = 0 GROUP BY h.cust_code");
+                WHERE u.paid = 0 AND h.doc_type = 'factura' AND h.status = 'emitida' AND h.is_test = 0 AND COALESCE(s.paid, 0) = 0 GROUP BY h.cust_code");
             $st2->execute([(int)date('Ymd')]);
             foreach ($st2->fetchAll() as $r) {
                 $dues[(string)$r['cust_code']] = ['next' => (int)$r['next_day'], 'over' => (int)$r['overdue']];

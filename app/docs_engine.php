@@ -44,15 +44,29 @@ const DOCS_KINDS = [
 ];
 const DOCS_PAGE_KIND = ['pedidos' => 'pedido', 'albaranes' => 'albaran', 'facturas' => 'factura'];
 
+/** Documentos de COMPRA (mismo motor, mismas tablas): llevan _c. El «cliente» del documento es el proveedor (erp_suppliers). */
+const DOCS_KINDS_PURCHASE = [
+    'pedido_c' => ['label' => 'Pedido a proveedor', 'plural' => 'Pedidos a proveedor', 'path' => '/admin/compras/pedidos', 'print' => 'PEDIDO A PROVEEDOR', 'new' => 'Nuevo pedido'],
+    'albaran_c' => ['label' => 'Albarán de compra', 'plural' => 'Albaranes de compra', 'path' => '/admin/compras/albaranes', 'print' => 'ALBARÁN DE COMPRA', 'new' => 'Nuevo albarán'],
+    'factura_c' => ['label' => 'Factura recibida', 'plural' => 'Facturas recibidas', 'path' => '/admin/compras/facturas', 'print' => 'FACTURA RECIBIDA', 'new' => 'Nueva factura recibida'],
+    'rectificativa_c' => ['label' => 'Rectificativa recibida', 'plural' => 'Rectificativas recibidas', 'path' => '/admin/compras/facturas', 'print' => 'RECTIFICATIVA RECIBIDA', 'new' => 'Nueva rectificativa'],
+];
+const DOCS_PAGE_KIND_PURCHASE = ['pedidos' => 'pedido_c', 'albaranes' => 'albaran_c', 'facturas' => 'factura_c'];
+const DOCS_PURCHASE_INVOICE_STATUS = ['borrador' => 'Borrador', 'emitida' => 'Cerrada'];
+
 const DOCS_INVOICE_STATUS = ['borrador' => 'Borrador', 'emitida' => 'Emitida'];
 const DOCS_STATUS = [
     'pedido' => ['borrador' => 'Borrador', 'pendiente' => 'Pendiente', 'parcial' => 'Parcialmente servido', 'servido' => 'Servido', 'facturado' => 'Facturado', 'anulado' => 'Anulado'],
     'albaran' => ['borrador' => 'Borrador', 'pendiente' => 'Pendiente de facturar', 'facturado' => 'Facturado', 'anulado' => 'Anulado'],
     'factura' => DOCS_INVOICE_STATUS, 'simplificada' => DOCS_INVOICE_STATUS, 'rectificativa' => DOCS_INVOICE_STATUS,
+    'pedido_c' => ['borrador' => 'Borrador', 'pendiente' => 'Pendiente', 'parcial' => 'Parcialmente recibido', 'servido' => 'Recibido', 'facturado' => 'Facturado', 'anulado' => 'Anulado'],
+    'albaran_c' => ['borrador' => 'Borrador', 'pendiente' => 'Pendiente de facturar', 'facturado' => 'Facturado', 'anulado' => 'Anulado'],
+    'factura_c' => DOCS_PURCHASE_INVOICE_STATUS, 'rectificativa_c' => DOCS_PURCHASE_INVOICE_STATUS,
 ];
 
 const DOCS_EVENT_LABELS = [
     'creado' => 'Creado', 'modificado' => 'Modificado', 'servido' => 'Servido', 'anulado' => 'Anulado', 'desde' => 'Creado desde',
+    'cerrada' => 'Cerrada (registro asignado)', 'pagado' => 'Pago anotado', 'despagado' => 'Pago deshecho',
     'emitida' => 'Emitida', 'facturado' => 'Facturado', 'rectificada' => 'Rectificada', 'reservado' => 'Reservado en un borrador',
     'liberado' => 'Liberado (borrador borrado)', 'enviado' => 'Enviado por email', 'confirmado' => 'Confirmado (número asignado)', 'envio_error' => 'Error al enviar por email',
 ];
@@ -71,7 +85,31 @@ const DOCS_TIQUE_LIMIT_RETAIL = 300000;  // 3.000 € en comercio minorista
 
 function docs_is_invoice(string $kind): bool
 {
-    return in_array($kind, DOC_INVOICE_TYPES, true);
+    return in_array($kind, DOC_INVOICE_TYPES, true) || in_array($kind, ['factura_c', 'rectificativa_c'], true);
+}
+
+/** ¿Es un documento de compra (pedido a proveedor, albarán de compra, factura recibida)? */
+function docs_is_purchase(string $kind): bool
+{
+    return str_ends_with($kind, '_c');
+}
+
+/** Tipo base sin el sufijo de compra: pedido_c → pedido. */
+function docs_base(string $kind): string
+{
+    return docs_is_purchase($kind) ? substr($kind, 0, -2) : $kind;
+}
+
+/** El tipo «$base» del mismo lado (ventas o compras) que $kind: docs_side('pedido_c', 'albaran') → albaran_c. */
+function docs_side(string $kind, string $base): string
+{
+    return docs_is_purchase($kind) ? $base . '_c' : $base;
+}
+
+/** Datos del tipo (etiquetas, dirección…), de ventas o de compras. */
+function docs_kind(string $kind): array
+{
+    return DOCS_KINDS[$kind] ?? DOCS_KINDS_PURCHASE[$kind];
 }
 
 /* ---------- Números ---------- */
@@ -162,6 +200,27 @@ function docs_tariff_field(int $tariffNum): ?array
     return $cache[$tariffNum];
 }
 
+/** Campo del catálogo con el precio de compra (coste), si existe: se busca por nombre. */
+function docs_cost_field(): ?array
+{
+    return docs_field_named(['coste', 'costo', 'precio compra', 'precio de compra', 'precio coste', 'pcompra'], ['price', 'number']);
+}
+
+/** Precio de un artículo en un documento: el de la tarifa en ventas; el de compra (campo «Coste») en compras, o null si no lo hay. */
+function docs_price_for(string $kind, int $pid, int $tariffNum): ?int
+{
+    if (!docs_is_purchase($kind)) {
+        return docs_product_price($pid, $tariffNum);
+    }
+    $f = docs_cost_field();
+    if (!$f) {
+        return null;
+    }
+    $v = field_values_for((int)$f['id'], [$pid])[$pid] ?? '';
+    $n = $v !== '' ? docs_parse_num($v) : null;
+    return $n === null ? null : (int)round($n * DOCS_PRICE);
+}
+
 /** Artículo por referencia exacta (sin distinguir mayúsculas). */
 function docs_product_by_ref(string $ref): ?array
 {
@@ -239,6 +298,23 @@ function docs_customer(string $code): ?array
     return $st->fetch() ?: null;
 }
 
+/** Proveedor por código (erp_suppliers), con la misma forma que un cliente (cust_code = su código) para reutilizar el formulario. */
+function docs_supplier(string $code): ?array
+{
+    if (trim($code) === '') {
+        return null;
+    }
+    $st = db()->prepare('SELECT s.*, s.sup_code AS cust_code FROM erp_suppliers s WHERE s.sup_code = ?');
+    $st->execute([trim($code)]);
+    return $st->fetch() ?: null;
+}
+
+/** El cliente o el proveedor de un documento, según su tipo. */
+function docs_party(string $code, string $kind): ?array
+{
+    return docs_is_purchase($kind) ? docs_supplier($code) : docs_customer($code);
+}
+
 /** Copia de los datos del cliente para el documento. */
 function docs_customer_snapshot(array $c): array
 {
@@ -278,11 +354,12 @@ function docs_blank(string $kind): array
         'id' => 0, 'doc_type' => $kind, 'series_id' => $series ? (int)$series['id'] : 0, 'yr' => 0, 'doc_no' => 0, 'doc_code' => '',
         'doc_day' => (int)date('Ymd'), 'status' => 'borrador', 'cust_code' => '', 'cust_name' => '', 'cust_nif' => '', 'cust_address' => '',
         'cust_postcode' => '', 'cust_city' => '', 'cust_province' => '', 'cust_email' => '', 'pay_code' => docp('pay_method'),
-        'tariff' => docp_int('tariff'), 'vat_incl' => docp_bool('vat_incl') ? 1 : 0, 'with_re' => 0, 'ref_text' => '', 'notes' => '',
+        'tariff' => docp_int('tariff'), 'vat_incl' => docp_bool('vat_incl') && !docs_is_purchase($kind) ? 1 : 0, // en compras, por defecto sin IVA incluido
+        'with_re' => 0, 'ref_text' => '', 'notes' => '',
         'base_cents' => 0, 'vat_cents' => 0, 'rec_cents' => 0, 'total_cents' => 0, 'vat_json' => '[]', 'origin_id' => 0,
         'created_at' => 0, 'created_by' => '', 'updated_at' => 0, 'updated_by' => '',
         'issued_at' => 0, 'issued_by' => '', 'op_day' => 0, 'rect_of' => 0, 'rect_mode' => '', 'rect_reason' => '', 'rect_text' => '',
-        'sii_type' => '', 'vat_note' => '', 'cash_crit' => docp_bool('cash_criterion') ? 1 : 0, 'billed_by' => 0, 'reg_hash' => '', 'rev' => 0, 'dues_key' => '',
+        'sii_type' => '', 'vat_note' => '', 'cash_crit' => docp_bool('cash_criterion') ? 1 : 0, 'billed_by' => 0, 'reg_hash' => '', 'rev' => 0, 'dues_key' => '', 'sup_ref' => '', 'is_test' => 0,
     ];
 }
 
@@ -379,7 +456,7 @@ function docs_totals(array $lines, bool $vatIncl, bool $withRe): array
 /* ---------- Progreso de pedidos (lo servido) ---------- */
 
 /** Unidades servidas de cada línea de pedido (albaranes no anulados), sin contar el documento $exceptDoc. */
-function docs_served_by_line(array $lineIds, int $exceptDoc = 0): array
+function docs_served_by_line(array $lineIds, int $exceptDoc = 0, string $albType = 'albaran'): array
 {
     $lineIds = array_values(array_filter(array_map('intval', $lineIds)));
     if (!$lineIds) {
@@ -388,9 +465,9 @@ function docs_served_by_line(array $lineIds, int $exceptDoc = 0): array
     $out = [];
     foreach (array_chunk($lineIds, 500) as $chunk) {
         $st = db()->prepare("SELECT l.src_line_id, SUM(l.qty_u) AS q FROM doc_lines l JOIN doc_headers h ON h.id = l.doc_id
-            WHERE h.doc_type = 'albaran' AND h.status <> 'anulado' AND h.id <> ? AND l.src_line_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ')
+            WHERE h.doc_type = ? AND h.status <> 'anulado' AND h.id <> ? AND l.src_line_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ')
             GROUP BY l.src_line_id');
-        $st->execute([$exceptDoc, ...$chunk]);
+        $st->execute([$albType, $exceptDoc, ...$chunk]);
         foreach ($st->fetchAll() as $r) {
             $out[(int)$r['src_line_id']] = (int)$r['q'];
         }
@@ -404,11 +481,12 @@ function docs_refresh_orders(array $orderIds): void
     $db = db();
     foreach (array_unique(array_filter(array_map('intval', $orderIds))) as $oid) {
         $doc = docs_get($oid);
-        if (!$doc || $doc['doc_type'] !== 'pedido' || in_array($doc['status'], ['anulado', 'borrador'], true)) {
+        if (!$doc || docs_base((string)$doc['doc_type']) !== 'pedido' || in_array($doc['status'], ['anulado', 'borrador'], true)) {
             continue;
         }
+        $albType = docs_side((string)$doc['doc_type'], 'albaran');
         $lines = docs_lines($oid);
-        $served = docs_served_by_line(array_column($lines, 'id'));
+        $served = docs_served_by_line(array_column($lines, 'id'), 0, $albType);
         $total = $done = 0;
         foreach ($lines as $l) {
             $d = min((int)$l['qty_u'], $served[(int)$l['id']] ?? 0);
@@ -421,8 +499,8 @@ function docs_refresh_orders(array $orderIds): void
         $status = $done <= 0 ? 'pendiente' : ($done >= $total ? 'servido' : 'parcial');
         if ($status === 'servido') { // facturado = servido entero y ningún albarán suyo pendiente de facturar
             $st = $db->prepare("SELECT COUNT(DISTINCT h.id) FROM doc_lines l JOIN doc_lines o ON o.id = l.src_line_id JOIN doc_headers h ON h.id = l.doc_id
-                WHERE o.doc_id = ? AND h.doc_type = 'albaran' AND h.status = 'pendiente'");
-            $st->execute([$oid]);
+                WHERE o.doc_id = ? AND h.doc_type = ? AND h.status = 'pendiente'");
+            $st->execute([$oid, $albType]);
             if ((int)$st->fetchColumn() === 0) {
                 $status = 'facturado';
             }
@@ -469,13 +547,16 @@ function docs_locked_reason(array $doc): string
     if ($doc['status'] === 'anulado') {
         return 'Este documento está anulado: no se puede modificar.';
     }
-    if ($doc['doc_type'] === 'albaran' && $doc['status'] === 'facturado') {
+    if (docs_base((string)$doc['doc_type']) === 'albaran' && $doc['status'] === 'facturado') {
         return 'Este albarán ya está facturado: no se puede modificar.';
+    }
+    if (docs_is_purchase((string)$doc['doc_type']) && docs_is_invoice((string)$doc['doc_type']) && $doc['status'] !== 'borrador') {
+        return 'Factura cerrada: ya no se puede modificar. Para corregirla, haz una rectificativa recibida (botón «Rectificar»).';
     }
     if (docs_is_invoice((string)$doc['doc_type']) && $doc['status'] !== 'borrador') {
         return 'Factura emitida: ya no se puede modificar ni borrar. Para corregirla, haz una factura rectificativa (botón «Rectificar»).';
     }
-    if ($doc['doc_type'] === 'albaran' && (int)($doc['billed_by'] ?? 0) > 0) {
+    if (docs_base((string)$doc['doc_type']) === 'albaran' && (int)($doc['billed_by'] ?? 0) > 0) {
         $b = docs_get((int)$doc['billed_by']);
         return 'Este albarán está en ' . ($b && $b['status'] === 'borrador' ? 'un borrador de factura: no se puede modificar mientras exista (borra el borrador para liberarlo).' : 'una factura: no se puede modificar.');
     }
@@ -513,7 +594,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
         $sid = (int)($h['series_id'] ?? 0);
         $pickC = trim((string)($h['cust_code'] ?? ''));
         if ($pickC !== '' && $pickC !== (string)($h['cust_prev'] ?? '')) { // cliente elegido ahora: su serie por defecto, si es de este tipo y está activa
-            $cs = ($cc = docs_customer($pickC)) ? series_get((int)$cc['def_series']) : null;
+            $cs = ($cc = docs_party($pickC, $kind)) ? series_get((int)$cc['def_series']) : null;
             if ($cs && $cs['doc_type'] === $kind && (int)$cs['is_active'] === 1) {
                 $sid = (int)$cs['id'];
             }
@@ -539,8 +620,9 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
 
     // Cliente: código de una ficha o «cliente sin ficha» (datos escritos a mano)
     $code = mb_substr(trim((string)($h['cust_code'] ?? '')), 0, 191);
+    $partyWord = docs_is_purchase($kind) ? 'proveedor' : 'cliente';
     if (($hasSrc || (int)($saved['rect_of'] ?? 0) > 0) && $code !== (string)$saved['cust_code']) {
-        $errors[] = 'Las líneas vienen de ' . ((int)($saved['rect_of'] ?? 0) > 0 ? 'la factura que se rectifica' : ($kind === 'albaran' ? 'un pedido' : 'albaranes')) . ': el cliente no se puede cambiar.';
+        $errors[] = 'Las líneas vienen de ' . ((int)($saved['rect_of'] ?? 0) > 0 ? 'la factura que se rectifica' : (docs_base($kind) === 'albaran' ? 'un pedido' : 'albaranes')) . ': el ' . $partyWord . ' no se puede cambiar.';
         $code = (string)$saved['cust_code'];
     }
     $cust = null;
@@ -548,9 +630,9 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
         $doc[$k] = erp_txt($h[$k] ?? '', $max);
     }
     if ($code !== '') {
-        $cust = docs_customer($code);
+        $cust = docs_party($code, $kind);
         if (!$cust) {
-            $errors[] = 'No hay ningún cliente con el código «' . $code . '». Bórralo para escribir un cliente sin ficha.';
+            $errors[] = 'No hay ningún ' . $partyWord . ' con el código «' . $code . '». Bórralo para escribir un ' . $partyWord . ' sin ficha.';
         } else {
             if ($code !== (string)($h['cust_prev'] ?? $saved['cust_code']) || $doc['cust_name'] === '') { // cliente elegido ahora: se copian sus datos
                 $doc = array_merge($doc, docs_customer_snapshot($cust));
@@ -564,7 +646,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
                 }
             }
             if ((int)$cust['blocked'] === 1 || (int)$cust['ended_day'] > 0) {
-                $why = 'El cliente ' . $code . ' está ' . ((int)$cust['blocked'] === 1 ? 'bloqueado' : 'de baja') . '.';
+                $why = 'El ' . $partyWord . ' ' . $code . ' está ' . ((int)$cust['blocked'] === 1 ? 'bloqueado' : 'de baja') . '.';
                 if ($code !== (string)$saved['cust_code']) { // elegido ahora: no se puede; si ya estaba en el documento, solo se avisa
                     $errors[] = $why . ' No se puede elegir.';
                 } else {
@@ -573,11 +655,11 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
             }
         }
     } elseif ($doc['cust_name'] === '' && $kind !== 'simplificada') { // en un tique el cliente es opcional
-        $errors[] = 'Falta el cliente: escribe su código o, si no tiene ficha, al menos su nombre.';
+        $errors[] = 'Falta el ' . $partyWord . ': escribe su código o, si no tiene ficha, al menos su nombre.';
     }
     $doc['cust_code'] = $code;
     if ($doc['cust_email'] !== '' && !filter_var($doc['cust_email'], FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'El correo del cliente no es válido.';
+        $errors[] = 'El correo del ' . $partyWord . ' no es válido.';
     }
 
     // Forma de pago y tarifa
@@ -604,6 +686,19 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
     $doc['vat_incl'] = !empty($h['vat_incl']) ? 1 : 0;
     $doc['with_re'] = !empty($h['with_re']) ? 1 : 0;
     $doc['ref_text'] = erp_txt($h['ref_text'] ?? '', 100);
+    if (in_array($kind, ['factura_c', 'rectificativa_c'], true)) { // factura recibida: el número de la factura del proveedor es obligatorio y no debería repetirse
+        $doc['sup_ref'] = erp_txt($h['sup_ref'] ?? $saved['sup_ref'], 60);
+        if ($doc['sup_ref'] === '') {
+            $errors[] = 'Falta el número de la factura del proveedor.';
+        } else {
+            $st = db()->prepare("SELECT doc_code, status FROM doc_headers WHERE doc_type IN ('factura_c', 'rectificativa_c') AND id <> ? AND LOWER(sup_ref) = LOWER(?)
+                AND " . ($code !== '' ? 'cust_code = ?' : 'LOWER(cust_name) = LOWER(?)') . " AND status <> 'anulado' LIMIT 1");
+            $st->execute([(int)$saved['id'], $doc['sup_ref'], $code !== '' ? $code : $doc['cust_name']]);
+            if ($dup = $st->fetch()) {
+                $warn[] = 'Ya hay otra factura de este proveedor con el número «' . $doc['sup_ref'] . '»' . ($dup['status'] === 'borrador' ? ' (en borrador)' : ' (registro ' . $dup['doc_code'] . ')') . '. Revisa que no sea un duplicado.';
+            }
+        }
+    }
     $doc['notes'] = mb_substr(trim(str_replace("\r", '', (string)($h['notes'] ?? ''))), 0, 2000);
     if ($cust && $doc['notes'] === '' && trim((string)$cust['doc_notes']) !== '' && ($isNew || $code !== (string)($h['cust_prev'] ?? $saved['cust_code']))) {
         $doc['notes'] = mb_substr(trim((string)$cust['doc_notes']), 0, 2000); // notas para documentos del cliente: se proponen al elegirlo
@@ -721,16 +816,17 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
         }
         // Precio: de la tarifa si no se pide, si la línea es nueva o cambia el artículo, si se cambia la tarifa o se pide aplicarla
         $p = docs_parse_num((string)($in['price'] ?? ''));
-        $useTariff = $prod && ($refChanged || $p === null || $reprice || (!docp_bool('ask_price') && ($tariffChanged || !$old)));
+        $askPrice = docp_bool('ask_price') || docs_is_purchase($kind); // en compras el precio siempre se escribe (el coste del artículo, si lo trae, se propone)
+        $useTariff = $prod && ($refChanged || $p === null || $reprice || (!$askPrice && ($tariffChanged || !$old)));
         if ($useTariff) {
-            $tp = docs_product_price((int)$prod['id'], $tariff);
+            $tp = docs_price_for($kind, (int)$prod['id'], $tariff);
             if ($tp === null) {
-                $warn[] = 'Línea ' . $n . ': el artículo ' . $prod['ref'] . ' no tiene precio en la tarifa ' . $tariff . '.';
+                $warn[] = 'Línea ' . $n . ': el artículo ' . $prod['ref'] . (docs_is_purchase($kind) ? ' no tiene precio de compra (campo «Coste»): escríbelo.' : ' no tiene precio en la tarifa ' . $tariff . '.');
                 $l['price_u'] = $p !== null ? (int)round($p * DOCS_PRICE) : 0;
             } else {
                 $l['price_u'] = $tp;
             }
-        } elseif ($prod && $old && !docp_bool('ask_price')) {
+        } elseif ($prod && $old && !$askPrice) {
             $l['price_u'] = (int)$old['price_u']; // el precio no se pide: no se cambia a mano
         } else {
             $l['price_u'] = docs_scale($p ?? 0.0, docs_dec('dec_price'), DOCS_PRICE);
@@ -774,7 +870,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
             if (docp_bool('warn_blocked') && (int)$prod['visible'] !== 1) {
                 $warn[] = 'Línea ' . $n . ': el artículo ' . $prod['ref'] . ' está bloqueado (oculto en el catálogo).';
             }
-            if (docp_bool('warn_stock_min')) {
+            if (docp_bool('warn_stock_min') && !docs_is_purchase($kind)) { // en compras el stock no es un límite
                 $sk = docs_product_stock((int)$prod['id']);
                 $qty = $l['qty_u'] / DOCS_QTY;
                 if ($sk['stock'] !== null && $qty > $sk['stock']) {
@@ -801,8 +897,8 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
     }
     // Albarán con líneas de pedido: no servir más de lo pendiente
     $src = array_filter(array_column($lines, 'src_line_id'));
-    if ($kind === 'albaran' && $src) {
-        $served = docs_served_by_line($src, (int)$saved['id']);
+    if (docs_base($kind) === 'albaran' && $src) {
+        $served = docs_served_by_line($src, (int)$saved['id'], $kind);
         $st = db()->prepare('SELECT id, qty_u FROM doc_lines WHERE id IN (' . implode(',', array_fill(0, count($src), '?')) . ')');
         $st->execute(array_values($src));
         $ordered = array_column($st->fetchAll(), 'qty_u', 'id');
@@ -833,7 +929,7 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
 /* ---------- Guardar ---------- */
 
 const DOCS_HEAD_COLS = ['doc_day', 'cust_code', 'cust_name', 'cust_nif', 'cust_address', 'cust_postcode', 'cust_city', 'cust_province', 'cust_email',
-    'pay_code', 'tariff', 'vat_incl', 'with_re', 'ref_text', 'notes', 'base_cents', 'vat_cents', 'rec_cents', 'total_cents', 'vat_json', 'op_day', 'vat_note', 'rect_text'];
+    'pay_code', 'tariff', 'vat_incl', 'with_re', 'ref_text', 'notes', 'base_cents', 'vat_cents', 'rec_cents', 'total_cents', 'vat_json', 'op_day', 'vat_note', 'rect_text', 'sup_ref'];
 const DOCS_LINE_COLS = ['product_id', 'ref', 'title', 'size_txt', 'color_txt', 'qty_u', 'price_u', 'disc_bp', 'vat_id', 'vat_bp', 'rec_bp', 'amount_u', 'src_line_id', 'kind', 'detail', 'extra'];
 
 /**
@@ -854,7 +950,7 @@ function docs_save(array $doc, array $lines, int $stamp = -1, string $eventKind 
     $invoice = docs_is_invoice((string)$doc['doc_type']);
     try {
         $id = (int)$doc['id'];
-        $ordersBefore = $id > 0 && $doc['doc_type'] === 'albaran' ? docs_source_orders($id) : []; // por si se quita una línea de un pedido
+        $ordersBefore = $id > 0 && docs_base((string)$doc['doc_type']) === 'albaran' ? docs_source_orders($id) : []; // por si se quita una línea de un pedido
         if ($id === 0 && ($invoice || !$confirmed)) {
             // Borrador: se guarda SIN número (el número de la serie se toma al emitir o confirmar, dentro de su transacción) (el número de la serie se toma al emitir, sin huecos)
             $doc['yr'] = 0;
@@ -932,9 +1028,9 @@ function docs_save(array $doc, array $lines, int $stamp = -1, string $eventKind 
             }
         }
         docs_dues_save($doc, $id); // vencimientos de la factura (la misma transacción)
-        if ($doc['doc_type'] === 'albaran') {
+        if (docs_base((string)$doc['doc_type']) === 'albaran') {
             docs_refresh_orders([...$ordersBefore, ...docs_source_orders($id)]);
-        } elseif ($doc['doc_type'] === 'pedido') {
+        } elseif (docs_base((string)$doc['doc_type']) === 'pedido') {
             docs_refresh_orders([$id]);
         }
         if ($own) {
@@ -960,7 +1056,7 @@ function docs_confirm_problems(array $doc, array $lines): array
         $e[] = 'No tiene ninguna línea con artículo o concepto.';
     }
     if (trim((string)$doc['cust_name']) === '') {
-        $e[] = 'Falta el cliente.';
+        $e[] = docs_is_purchase((string)$doc['doc_type']) ? 'Falta el proveedor.' : 'Falta el cliente.';
     }
     if (period_is_locked((int)$doc['doc_day'])) {
         $e[] = period_lock_message((int)$doc['doc_day']);
@@ -983,7 +1079,7 @@ function docs_confirm(int $id, int $rev = -1): string
     $db->beginTransaction();
     try {
         $doc = docs_get($id);
-        if (!$doc || !in_array($doc['doc_type'], ['pedido', 'albaran'], true)) {
+        if (!$doc || !in_array(docs_base((string)$doc['doc_type']), ['pedido', 'albaran'], true) || docs_is_invoice((string)$doc['doc_type'])) {
             throw new DomainException('No es un pedido ni un albarán.');
         }
         if ($doc['status'] !== 'borrador') {
@@ -1038,7 +1134,7 @@ function docs_annul(array $doc): string
     if ($reason = docs_locked_reason($doc)) {
         return $reason;
     }
-    if ($doc['doc_type'] === 'pedido') {
+    if (docs_base((string)$doc['doc_type']) === 'pedido') {
         $st = db()->prepare('SELECT COUNT(*) FROM doc_lines WHERE doc_id = ? AND done_u > 0');
         $st->execute([(int)$doc['id']]);
         if ((int)$st->fetchColumn() > 0) {
@@ -1048,7 +1144,7 @@ function docs_annul(array $doc): string
     $db = db();
     $db->beginTransaction();
     try {
-        $orders = $doc['doc_type'] === 'albaran' ? docs_source_orders((int)$doc['id']) : [];
+        $orders = docs_base((string)$doc['doc_type']) === 'albaran' ? docs_source_orders((int)$doc['id']) : [];
         $db->prepare("UPDATE doc_headers SET status = 'anulado', updated_at = ?, updated_by = ? WHERE id = ?")->execute([time(), (string)(current_user()['username'] ?? ''), (int)$doc['id']]);
         docs_event((int)$doc['id'], 'anulado');
         docs_refresh_orders($orders);
@@ -1066,19 +1162,20 @@ function docs_annul(array $doc): string
  */
 function docs_serve(array $order): int
 {
-    if ($order['doc_type'] !== 'pedido' || in_array($order['status'], ['anulado', 'servido', 'facturado', 'borrador'], true)) {
+    if (docs_base((string)$order['doc_type']) !== 'pedido' || in_array($order['status'], ['anulado', 'servido', 'facturado', 'borrador'], true)) {
         throw new DomainException(in_array($order['status'], ['servido', 'facturado'], true) ? 'Este pedido ya está servido entero.' : ($order['status'] === 'borrador' ? 'Confirma antes el pedido.' : 'Este pedido está anulado.'));
     }
     $today = (int)date('Ymd');
     if (period_is_locked($today)) {
         throw new DomainException(period_lock_message($today));
     }
-    $s = series_default_for('albaran');
+    $albType = docs_side((string)$order['doc_type'], 'albaran');
+    $s = series_default_for($albType);
     if (!$s) {
-        throw new DomainException('No hay ninguna serie activa de albaranes (Configuración → Series).');
+        throw new DomainException('No hay ninguna serie activa de ' . mb_strtolower(docs_kind($albType)['plural']) . ' (Configuración → Parámetros → Series).');
     }
     $lines = docs_lines((int)$order['id']);
-    $served = docs_served_by_line(array_column($lines, 'id'));
+    $served = docs_served_by_line(array_column($lines, 'id'), 0, $albType);
     $out = [];
     foreach ($lines as $l) {
         if ((int)$l['kind'] === 1) { // las líneas de texto pasan al albarán tal cual
@@ -1102,7 +1199,8 @@ function docs_serve(array $order): int
     if (!array_filter($out, fn($l) => (int)$l['kind'] === 0)) {
         throw new DomainException('No queda nada pendiente de servir en este pedido.');
     }
-    $doc = array_merge(docs_blank('albaran'), array_intersect_key($order, array_flip(DOCS_HEAD_COLS)));
+    $doc = array_merge(docs_blank($albType), array_intersect_key($order, array_flip(DOCS_HEAD_COLS)));
+    $doc['sup_ref'] = '';
     $doc['series_id'] = (int)$s['id'];
     $doc['doc_day'] = $today;
     $doc['origin_id'] = (int)$order['id'];
@@ -1125,14 +1223,14 @@ function docs_related(array $doc): array
     $db = db();
     $cols = 'h.id, h.doc_type, h.doc_code, h.status, h.doc_day';
     $type = (string)$doc['doc_type'];
-    if ($type === 'pedido' || $type === 'albaran') { // documentos hechos a partir de este (albaranes de un pedido, factura de un albarán)
+    if (in_array(docs_base($type), ['pedido', 'albaran'], true) && !docs_is_invoice($type)) { // documentos hechos a partir de este (albaranes de un pedido, factura de un albarán)
         $st = $db->prepare('SELECT DISTINCT ' . $cols . ' FROM doc_lines l JOIN doc_lines o ON o.id = l.src_line_id JOIN doc_headers h ON h.id = l.doc_id WHERE o.doc_id = ? ORDER BY h.doc_day, h.id');
         $st->execute([(int)$doc['id']]);
         $out = $st->fetchAll();
     } else {
         $out = [];
     }
-    if ($type !== 'pedido') { // documentos de los que viene (pedidos de un albarán, albaranes de una factura)
+    if (docs_base($type) !== 'pedido') { // documentos de los que viene (pedidos de un albarán, albaranes de una factura)
         $st = $db->prepare('SELECT DISTINCT ' . $cols . ' FROM doc_lines l JOIN doc_lines o ON o.id = l.src_line_id JOIN doc_headers h ON h.id = o.doc_id WHERE l.doc_id = ? ORDER BY h.doc_day, h.id');
         $st->execute([(int)$doc['id']]);
         $out = array_merge($out, $st->fetchAll());
@@ -1150,12 +1248,12 @@ function docs_related(array $doc): array
 /** Despacha /admin/pedidos, /admin/albaranes y /admin/facturas: [/nuevo|/buscar|/<id>[/ver]]. */
 function admin_docs(string $kind, string $sub, string $sub2 = ''): void
 {
-    if (!erp_guard()) {
+    if (!docs_is_purchase($kind) && !erp_guard()) { // compras: la doble verificación de Compras ya la comprueba purch_guard()
         return;
     }
     $invoices = docs_is_invoice($kind);
     if ($sub === 'buscar') {
-        docs_search_json($invoices ? 'factura' : $kind);
+        docs_search_json($invoices && !docs_is_purchase($kind) ? 'factura' : $kind);
         return;
     }
     if ($sub === 'pruebas' && $invoices) {
@@ -1163,15 +1261,15 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
         return;
     }
     if ($sub === '') {
-        if ($kind === 'albaran' && $_SERVER['REQUEST_METHOD'] === 'POST') { // «Facturar los marcados» de la lista de albaranes
+        if (docs_base($kind) === 'albaran' && $_SERVER['REQUEST_METHOD'] === 'POST') { // «Facturar los marcados» de la lista de albaranes
             csrf_check();
             try {
                 $fid = docs_bill((array)($_POST['ids'] ?? []));
-                flash('Borrador de factura creado con los albaranes. Revísalo y pulsa «Emitir» cuando esté bien.');
-                redirect(DOCS_KINDS['factura']['path'] . '/' . $fid);
+                flash('Borrador de factura creado con los albaranes. Revísalo y pulsa «' . (docs_is_purchase($kind) ? 'Cerrar' : 'Emitir') . '» cuando esté bien.');
+                redirect(docs_kind(docs_side($kind, 'factura'))['path'] . '/' . $fid);
             } catch (DomainException $e) {
                 flash($e->getMessage(), 'err');
-                redirect(DOCS_KINDS['albaran']['path'] . (isset($_POST['back']) ? '?' . preg_replace('/[^\w=&%.-]/', '', (string)$_POST['back']) : ''));
+                redirect(docs_kind($kind)['path'] . (isset($_POST['back']) ? '?' . preg_replace('/[^\w=&%.-]/', '', (string)$_POST['back']) : ''));
             }
         }
         admin_docs_list($kind);
@@ -1179,7 +1277,7 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
     }
     if ($sub === 'nuevo') {
         $t = (string)($_GET['tipo'] ?? $_POST['tipo'] ?? $kind);
-        admin_docs_form($invoices ? (in_array($t, ['factura', 'simplificada'], true) ? $t : 'factura') : $kind, null);
+        admin_docs_form($invoices && !docs_is_purchase($kind) ? (in_array($t, ['factura', 'simplificada'], true) ? $t : 'factura') : $kind, null);
         return;
     }
     if (!ctype_digit($sub)) {
@@ -1187,18 +1285,18 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
         return;
     }
     $doc = docs_get((int)$sub);
-    if (!$doc || ($invoices ? !docs_is_invoice((string)$doc['doc_type']) : $doc['doc_type'] !== $kind)) {
+    if (!$doc || ($invoices ? (!docs_is_invoice((string)$doc['doc_type']) || docs_is_purchase((string)$doc['doc_type']) !== docs_is_purchase($kind)) : $doc['doc_type'] !== $kind)) {
         not_found();
         return;
     }
     if ($sub2 === 'ver') {
-        if (docs_is_invoice((string)$doc['doc_type']) && $doc['status'] === 'emitida' && !docs_is_test($doc)) { // una sola versión impresa: la de Ventas
+        if (docs_is_invoice((string)$doc['doc_type']) && !docs_is_purchase((string)$doc['doc_type']) && $doc['status'] === 'emitida' && !docs_is_test($doc)) { // una sola versión impresa: la de Ventas
             redirect('/admin/ventas/' . erp_inv_seg((string)$doc['doc_code']) . '/ver');
         }
         docs_print($doc);
         return;
     }
-    if ($sub2 === 'enviar' && !$invoices) {
+    if ($sub2 === 'enviar' && !$invoices && !docs_is_purchase($kind)) {
         docs_send($doc);
         return;
     }
@@ -1213,22 +1311,23 @@ function admin_docs_list(string $kind): void
 {
     $db = db();
     $invoices = docs_is_invoice($kind);
-    $statuses = $invoices ? DOCS_INVOICE_STATUS : DOCS_STATUS[$kind];
+    $purchase = docs_is_purchase($kind);
+    $statuses = $invoices ? ($purchase ? DOCS_PURCHASE_INVOICE_STATUS : DOCS_INVOICE_STATUS) : DOCS_STATUS[$kind];
     $f = [
         'q' => mb_substr(trim((string)($_GET['q'] ?? '')), 0, 60),
         'estado' => isset($statuses[(string)($_GET['estado'] ?? '')]) ? (string)$_GET['estado'] : '',
         'anio' => preg_match('/^\d{4}$/', (string)($_GET['anio'] ?? '')) ? (string)$_GET['anio'] : '',
-        'tipo' => $invoices && in_array($_GET['tipo'] ?? '', DOC_INVOICE_TYPES, true) ? (string)$_GET['tipo'] : '',
+        'tipo' => $invoices && in_array($_GET['tipo'] ?? '', $purchase ? ['factura_c', 'rectificativa_c'] : DOC_INVOICE_TYPES, true) ? (string)$_GET['tipo'] : '',
         'cli' => mb_substr(trim((string)($_GET['cli'] ?? '')), 0, 60),
         'desde' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['desde'] ?? '')) ? (string)$_GET['desde'] : '',
         'hasta' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['hasta'] ?? '')) ? (string)$_GET['hasta'] : '',
     ];
-    if ($invoices) {
+    if ($invoices && !$purchase) {
         docs_mirror_sync();
     }
     $page = max(1, (int)($_GET['pag'] ?? 1));
     if ($invoices) {
-        $w = " WHERE doc_type IN ('factura','simplificada','rectificativa')";
+        $w = $purchase ? " WHERE doc_type IN ('factura_c','rectificativa_c')" : " WHERE doc_type IN ('factura','simplificada','rectificativa')";
         $a = [];
         if ($f['tipo'] !== '') {
             $w .= ' AND doc_type = ?';
@@ -1258,8 +1357,8 @@ function admin_docs_list(string $kind): void
     }
     if ($f['q'] !== '') {
         $like = '%' . strtr(mb_strtolower($f['q']), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
-        $w .= " AND (LOWER(doc_code) LIKE ? ESCAPE '!' OR LOWER(cust_name) LIKE ? ESCAPE '!' OR LOWER(cust_code) LIKE ? ESCAPE '!' OR LOWER(ref_text) LIKE ? ESCAPE '!')";
-        array_push($a, $like, $like, $like, $like);
+        $w .= " AND (LOWER(doc_code) LIKE ? ESCAPE '!' OR LOWER(cust_name) LIKE ? ESCAPE '!' OR LOWER(cust_code) LIKE ? ESCAPE '!' OR LOWER(ref_text) LIKE ? ESCAPE '!' OR LOWER(sup_ref) LIKE ? ESCAPE '!')";
+        array_push($a, $like, $like, $like, $like, $like);
     }
     $st = $db->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN status NOT IN (\'anulado\', \'borrador\') AND is_test = 0 THEN total_cents ELSE 0 END), 0) AS tot FROM doc_headers' . $w);
     $st->execute($a);
@@ -1270,23 +1369,57 @@ function admin_docs_list(string $kind): void
     $st = $db->prepare('SELECT * FROM doc_headers' . $w . ' ORDER BY ' . $order . ' LIMIT ' . DOCS_PER_PAGE . ($page > 1 ? ' OFFSET ' . (($page - 1) * DOCS_PER_PAGE) : ''));
     $st->execute($a);
     $rows = $st->fetchAll();
+    $payState = []; // facturas recibidas: Pagada / Vencida / Pendiente de pago según sus vencimientos
+    if ($purchase && $invoices && $rows) {
+        $ids = array_map(fn($r) => (int)$r['id'], array_filter($rows, fn($r) => $r['status'] === 'emitida'));
+        if ($ids) {
+            $st = $db->prepare('SELECT doc_id, COUNT(*) AS n, SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) AS np, SUM(CASE WHEN paid = 0 AND due_day < ? THEN 1 ELSE 0 END) AS nv FROM doc_dues WHERE doc_id IN (' . implode(',', $ids) . ') GROUP BY doc_id');
+            $st->execute([(int)date('Ymd')]);
+            foreach ($st->fetchAll() as $r) {
+                $payState[(int)$r['doc_id']] = (int)$r['np'] === (int)$r['n'] ? 'pagada' : ((int)$r['nv'] > 0 ? 'vencida' : 'pendiente');
+            }
+        }
+    }
     $years = array_map('intval', $db->query("SELECT DISTINCT yr FROM doc_headers WHERE yr > 0 ORDER BY yr DESC")->fetchAll(PDO::FETCH_COLUMN));
     $years = array_values(array_unique([(int)date('Y'), ...$years]));
     rsort($years);
-    admin_render('docs_list', ['kind' => $kind, 'k' => DOCS_KINDS[$kind], 'rows' => $rows, 'f' => $f, 'sum' => $sum, 'page' => $page, 'pages' => $pages,
-        'years' => $years, 'retail' => erp_retail_code(), 'statuses' => $statuses, 'invoices' => $invoices,
-        'register' => $invoices ? docs_register_verify() : null, 'testCount' => $invoices ? docs_test_count() : 0, 'title' => $invoices ? 'Facturas del CMS' : DOCS_KINDS[$kind]['plural']]);
+    admin_render('docs_list', ['kind' => $kind, 'k' => docs_kind($kind), 'rows' => $rows, 'f' => $f, 'sum' => $sum, 'page' => $page, 'pages' => $pages,
+        'years' => $years, 'retail' => erp_retail_code(), 'statuses' => $statuses, 'invoices' => $invoices, 'purchase' => $purchase, 'payState' => $payState,
+        'register' => $invoices && !$purchase ? docs_register_verify() : null, 'testCount' => $invoices && !$purchase ? docs_test_count() : 0,
+        'title' => $purchase ? docs_kind($kind)['plural'] : ($invoices ? 'Facturas del CMS' : DOCS_KINDS[$kind]['plural'])]);
 }
 
 function docs_list_url(string $kind, array $f, array $change = []): string
 {
     $q = array_filter(array_merge($f, $change), fn($v) => $v !== '' && $v !== null);
-    return DOCS_KINDS[$kind]['path'] . ($q ? '?' . http_build_query($q) : '');
+    return docs_kind($kind)['path'] . ($q ? '?' . http_build_query($q) : '');
 }
 
 /**
  * Clientes por código, nombre, nombre comercial o NIF (como mucho 15). Los bloqueados o de baja salen marcados (no se pueden elegir).
  */
+/** Proveedores por código, nombre, nombre comercial o NIF (como docs_customer_search, con la misma forma de fila). */
+function docs_supplier_search(string $q, int $limit = 15): array
+{
+    $q = mb_strtolower(mb_substr(trim($q), 0, 60));
+    if (mb_strlen($q) < 2) {
+        return [];
+    }
+    $esc = strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']);
+    $like = '%' . $esc . '%';
+    $st = db()->prepare("SELECT sup_code AS cust_code, name, trade_name, nif, address, postcode, city, province, email, tariff, pay_code, blocked, ended_day FROM erp_suppliers
+        WHERE LOWER(sup_code) LIKE ? ESCAPE '!' OR LOWER(name) LIKE ? ESCAPE '!' OR LOWER(trade_name) LIKE ? ESCAPE '!' OR LOWER(nif) LIKE ? ESCAPE '!'
+        ORDER BY CASE WHEN LOWER(sup_code) LIKE ? ESCAPE '!' THEN 0 ELSE 1 END, name LIMIT " . max(1, min(30, $limit)));
+    $st->execute([$like, $like, $like, $like, $esc . '%']);
+    return $st->fetchAll();
+}
+
+/** Clientes o proveedores según el tipo de documento. */
+function docs_party_search(string $q, string $kind, int $limit = 15): array
+{
+    return docs_is_purchase($kind) ? docs_supplier_search($q, $limit) : docs_customer_search($q, $limit);
+}
+
 function docs_customer_search(string $q, int $limit = 15): array
 {
     $q = mb_strtolower(mb_substr(trim($q), 0, 60));
@@ -1310,10 +1443,11 @@ function docs_customer_search(string $q, int $limit = 15): array
  */
 function admin_docs_form(string $kind, ?array $saved): void
 {
-    $k = DOCS_KINDS[$kind];
+    $k = docs_kind($kind);
+    $purchase = docs_is_purchase($kind);
     $isNew = $saved === null;
     $saved ??= docs_blank($kind);
-    if ($isNew && $_SERVER['REQUEST_METHOD'] === 'GET' && ($pc = docs_customer((string)($_GET['cliente'] ?? ''))) && (int)$pc['blocked'] === 0 && (int)$pc['ended_day'] === 0) { // «Nuevo documento» desde la ficha del cliente
+    if ($isNew && $_SERVER['REQUEST_METHOD'] === 'GET' && ($pc = docs_party((string)($_GET[$purchase ? 'proveedor' : 'cliente'] ?? ''), $kind)) && (int)$pc['blocked'] === 0 && (int)$pc['ended_day'] === 0) { // «Nuevo documento» desde la ficha del cliente o proveedor
         $saved = array_merge($saved, docs_customer_snapshot($pc), ['cust_code' => (string)$pc['cust_code'], 'tariff' => (int)$pc['tariff'] > 0 ? (int)$pc['tariff'] : $saved['tariff'],
             'pay_code' => (string)$pc['pay_code'] !== '' ? (string)$pc['pay_code'] : $saved['pay_code'], 'notes' => mb_substr(trim((string)$pc['doc_notes']), 0, 2000)]);
         $ps = series_get((int)$pc['def_series']);
@@ -1322,7 +1456,7 @@ function admin_docs_form(string $kind, ?array $saved): void
         }
     }
     $savedLines = $isNew ? [] : docs_lines((int)$saved['id']);
-    $self = $isNew ? $k['path'] . '/nuevo' . (docs_is_invoice($kind) ? '?tipo=' . $kind : '') : $k['path'] . '/' . (int)$saved['id'];
+    $self = $isNew ? $k['path'] . '/nuevo' . (docs_is_invoice($kind) && !$purchase ? '?tipo=' . $kind : '') : $k['path'] . '/' . (int)$saved['id'];
     $locked = docs_locked_reason($saved);
     $inv = docs_is_invoice($kind);
     $isDraft = !$isNew && $saved['status'] === 'borrador';
@@ -1372,20 +1506,26 @@ function admin_docs_form(string $kind, ?array $saved): void
             redirect($self);
         }
         try {
-            if ($action === 'serve' && !$isNew && $kind === 'pedido') {
-                $aid = docs_serve($saved);
-                flash('Albarán creado con lo pendiente del pedido. Si solo vas a servir una parte, baja las unidades y guarda: el resto sigue pendiente en el pedido.');
-                redirect(DOCS_KINDS['albaran']['path'] . '/' . $aid);
+            if ($purchase && !$isNew && (str_starts_with($action, 'due_pay:') || str_starts_with($action, 'due_unpay:'))) { // pagos de una factura recibida cerrada (no modifica la factura)
+                [$act, $dno] = explode(':', $action, 2);
+                purch_due_mark($saved, (int)$dno, $act === 'due_pay', (string)($_POST['paid_day'] ?? ''));
+                flash($act === 'due_pay' ? 'Vencimiento marcado como pagado.' : 'Vencimiento marcado como pendiente.');
+                redirect($self . '#vencimientos');
             }
-            if ($action === 'duplicate' && !$isNew && in_array($kind, ['pedido', 'albaran'], true)) {
+            if ($action === 'serve' && !$isNew && docs_base($kind) === 'pedido' && !docs_is_invoice($kind)) {
+                $aid = docs_serve($saved);
+                flash($purchase ? 'Albarán de compra creado con lo pendiente de recibir. Si solo has recibido una parte, baja las unidades y guarda: el resto sigue pendiente en el pedido.' : 'Albarán creado con lo pendiente del pedido. Si solo vas a servir una parte, baja las unidades y guarda: el resto sigue pendiente en el pedido.');
+                redirect(docs_kind(docs_side($kind, 'albaran'))['path'] . '/' . $aid);
+            }
+            if ($action === 'duplicate' && !$isNew && in_array(docs_base($kind), ['pedido', 'albaran'], true) && !docs_is_invoice($kind)) {
                 $did = docs_duplicate($saved);
                 flash($k['label'] . ' duplicado: es un borrador nuevo con las mismas líneas (sin vínculos con el original). Revisa fecha y precios y confírmalo.');
                 redirect($k['path'] . '/' . $did);
             }
-            if ($action === 'bill' && !$isNew && $kind === 'albaran') {
+            if ($action === 'bill' && !$isNew && docs_base($kind) === 'albaran' && !docs_is_invoice($kind)) {
                 $fid = docs_bill([(int)$saved['id']]);
-                flash('Borrador de factura creado con el albarán. Revísalo y pulsa «Emitir» cuando esté bien.');
-                redirect(DOCS_KINDS['factura']['path'] . '/' . $fid);
+                flash('Borrador de factura creado con el albarán. Revísalo y pulsa «' . ($purchase ? 'Cerrar' : 'Emitir') . '» cuando esté bien.');
+                redirect(docs_kind(docs_side($kind, 'factura'))['path'] . '/' . $fid);
             }
             if ($action === 'confirm' && $isDraft && !$inv) {
                 $code = docs_confirm((int)$saved['id'], $stamp);
@@ -1393,6 +1533,11 @@ function admin_docs_form(string $kind, ?array $saved): void
                 redirect($self);
             }
             if ($action === 'issue' && $isDraft && $inv) {
+                if ($purchase) {
+                    $code = purch_close((int)$saved['id'], $stamp);
+                    flash('Factura recibida cerrada con el registro ' . $code . '. Desde ahora no se puede modificar: para corregirla, haz una rectificativa recibida.');
+                    redirect($self);
+                }
                 $code = docs_issue((int)$saved['id'], $stamp);
                 flash('Factura ' . $code . ' emitida. Desde ahora no se puede modificar ni borrar.');
                 redirect($self);
@@ -1400,7 +1545,12 @@ function admin_docs_form(string $kind, ?array $saved): void
             if ($action === 'delete' && $isDraft) {
                 docs_delete_draft($saved);
                 flash('Borrador borrado' . ((int)$saved['origin_id'] > 0 || $inv ? ': sus albaranes vuelven a estar pendientes de facturar.' : '.'));
-                redirect($inv ? DOCS_KINDS['factura']['path'] : $k['path']);
+                redirect($inv && !$purchase ? DOCS_KINDS['factura']['path'] : $k['path']);
+            }
+            if ($action === 'rectify' && !$isNew && $inv && $purchase) {
+                $rid = purch_rectify($saved, (string)($_POST['text'] ?? ''));
+                flash('Borrador de rectificativa recibida creado, con las líneas en negativo. Escribe el número de la rectificativa del proveedor, ajusta las líneas y pulsa «Cerrar».');
+                redirect(docs_kind('rectificativa_c')['path'] . '/' . $rid);
             }
             if ($action === 'rectify' && !$isNew && $inv) {
                 $rid = docs_rectify($saved, (string)($_POST['mode'] ?? ''), (string)($_POST['reason'] ?? ''), (string)($_POST['text'] ?? ''));
@@ -1434,7 +1584,7 @@ function admin_docs_form(string $kind, ?array $saved): void
             $errors = [];
         } elseif ($action === 'search') {
             $custQuery = mb_substr(trim((string)($_POST['cust_q'] ?? '')), 0, 60);
-            $custResults = docs_customer_search($custQuery);
+            $custResults = docs_party_search($custQuery, $kind);
             $errors = [];
         } elseif ($action === 'artsearch') {
             $artQuery = mb_substr(trim((string)($_POST['art_q'] ?? '')), 0, 60);
@@ -1468,15 +1618,15 @@ function admin_docs_form(string $kind, ?array $saved): void
     $series = array_filter(series_all(), fn($s) => $s['doc_type'] === $kind && ((int)$s['is_active'] === 1 || (int)$s['id'] === (int)$doc['series_id']));
     $draftTitle = 'Borrador de ' . mb_strtolower($k['label']);
     admin_render('docs_form', [
-        'kind' => $kind, 'k' => $k, 'doc' => $doc, 'saved' => $saved, 'isNew' => $isNew, 'isDraft' => $isDraft, 'lines' => $lines, 'meta' => $meta, 'extra' => $extra, 'extraText' => $extraText,
+        'purchase' => $purchase, 'kind' => $kind, 'k' => $k, 'doc' => $doc, 'saved' => $saved, 'isNew' => $isNew, 'isDraft' => $isDraft, 'lines' => $lines, 'meta' => $meta, 'extra' => $extra, 'extraText' => $extraText,
         'tot' => $tot, 'errors' => $errors, 'warnings' => $warnings, 'locked' => $locked, 'self' => $self, 'series' => $series, 'stamp' => $stamp,
         'custResults' => $custResults, 'custQuery' => $custQuery, 'artResults' => $artResults, 'artQuery' => $artQuery,
         'rates' => docs_vat_rates(), 'methods' => array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$doc['pay_code']),
         'tariffs' => array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$doc['tariff']),
         'nav' => $isNew ? [null, null] : docs_neighbors($saved),
         'events' => $isNew ? [] : docs_events((int)$saved['id']), 'related' => $isNew ? [] : docs_related($saved),
-        'isRetail' => $doc['cust_code'] !== '' && $doc['cust_code'] === erp_retail_code(),
-        'issueProblems' => $isDraft ? ($inv ? docs_issue_problems($saved, $savedLines) : docs_confirm_problems($saved, $savedLines)) : [],
+        'isRetail' => !$purchase && $doc['cust_code'] !== '' && $doc['cust_code'] === erp_retail_code(),
+        'issueProblems' => $isDraft ? ($purchase && $inv ? purch_close_problems($saved, $savedLines) : ($inv ? docs_issue_problems($saved, $savedLines) : docs_confirm_problems($saved, $savedLines))) : [],
         'orig' => (int)$saved['rect_of'] > 0 ? docs_get((int)$saved['rect_of']) : null,
         'title' => $isNew ? $k['new'] : ($isDraft ? $draftTitle : $k['label'] . ' ' . $saved['doc_code']),
         'crumb' => $isNew ? $k['new'] : ($isDraft ? 'Borrador' : $saved['doc_code']),
@@ -1493,7 +1643,7 @@ function docs_search_json(string $kind = 'pedido'): void
         $like = '%' . strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
         $pre = strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
         if (($_GET['t'] ?? '') === 'cli') {
-            foreach (docs_customer_search($q) as $r) {
+            foreach (docs_party_search($q, $kind) as $r) {
                 $out[] = ['v' => $r['cust_code'], 'l' => trim(($r['trade_name'] !== '' ? $r['trade_name'] : $r['name']) . ($r['city'] !== '' ? ' · ' . $r['city'] : '')),
                     'name' => $r['name'] !== '' ? $r['name'] : $r['trade_name'], 'nif' => $r['nif'], 'address' => $r['address'], 'postcode' => $r['postcode'], 'city' => $r['city'],
                     'province' => $r['province'], 'email' => $r['email'], 'tariff' => (int)$r['tariff'], 'pay' => $r['pay_code'],
@@ -1544,7 +1694,7 @@ function docs_article_search(string $q, int $tariff = 0, string $custCode = '', 
     if (!in_array($tariff, array_map(fn($t) => (int)$t['num'], tariffs_all()), true)) {
         $tariff = docp_int('tariff');
     }
-    $pf = docs_tariff_field($tariff);
+    $pf = docs_is_purchase($kind) ? docs_cost_field() : docs_tariff_field($tariff);
     $prices = $pf ? field_values_for((int)$pf['id'], $ids) : [];
     $stockF = docs_field_named(['stock', 'existencias'], ['number', 'price', 'text']);
     $stocks = $stockF ? field_values_for((int)$stockF['id'], $ids) : [];
@@ -1555,7 +1705,7 @@ function docs_article_search(string $q, int $tariff = 0, string $custCode = '', 
     $colors = $colorF ? field_values_for((int)$colorF['id'], $ids) : [];
     $disc = 0;
     if ($custCode !== '' && isset($lf['disc'])) {
-        $c = docs_customer($custCode);
+        $c = docs_party($custCode, $kind);
         $disc = $c ? max(0, min(10000, (int)$c['disc_bp'])) : 0;
     }
     $out = [];
@@ -1580,9 +1730,9 @@ function docs_print(array $doc): void
     $lines = docs_lines((int)$doc['id']);
     $vat = json_decode((string)$doc['vat_json'], true);
     render('documents/doc_classic', [
-        'doc' => $doc, 'lines' => $lines, 'vat' => is_array($vat) ? $vat : [], 'k' => DOCS_KINDS[$doc['doc_type']], 'd' => doc_settings(), 'co' => doc_company(),
+        'doc' => $doc, 'lines' => $lines, 'vat' => is_array($vat) ? $vat : [], 'k' => docs_kind((string)$doc['doc_type']), 'd' => doc_settings(), 'co' => doc_company(),
         'dues' => dues_applies($doc) ? docs_dues((int)$doc['id']) : [],
-        'payLabel' => erp_pay_label((string)$doc['pay_code']), 'isRetail' => $doc['cust_code'] !== '' && $doc['cust_code'] === erp_retail_code(),
-        'title' => DOCS_KINDS[$doc['doc_type']]['label'] . ' ' . ($doc['status'] === 'borrador' ? '(borrador)' : $doc['doc_code']) . ' · ' . site_name(),
+        'payLabel' => erp_pay_label((string)$doc['pay_code']), 'isRetail' => !docs_is_purchase((string)$doc['doc_type']) && $doc['cust_code'] !== '' && $doc['cust_code'] === erp_retail_code(),
+        'title' => docs_kind((string)$doc['doc_type'])['label'] . ' ' . ($doc['status'] === 'borrador' ? '(borrador)' : $doc['doc_code']) . ' · ' . site_name(),
     ], null);
 }

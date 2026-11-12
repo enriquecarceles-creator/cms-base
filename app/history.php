@@ -23,6 +23,7 @@ function history_whats_for(string $role): ?array
     return match ($role) {
         'admin' => null,
         'erp' => ['clientes', 'ventas', 'clientes_ventas', 'cobros'],
+        'compras' => ['compras'],
         default => ['articulos', 'fotos', 'precios'],
     };
 }

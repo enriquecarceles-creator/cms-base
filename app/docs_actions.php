@@ -14,7 +14,7 @@ const DOCS_SEND_GAP_SECS = 60;
 function docs_neighbors(array $doc): array
 {
     $db = db();
-    $types = docs_is_invoice((string)$doc['doc_type']) ? DOC_INVOICE_TYPES : [(string)$doc['doc_type']];
+    $types = docs_is_invoice((string)$doc['doc_type']) ? (docs_is_purchase((string)$doc['doc_type']) ? ['factura_c', 'rectificativa_c'] : DOC_INVOICE_TYPES) : [(string)$doc['doc_type']];
     $in = implode(',', array_fill(0, count($types), '?'));
     $out = [];
     foreach ([['<', 'DESC'], ['>', 'ASC']] as [$op, $dir]) {
@@ -33,7 +33,7 @@ function docs_neighbors(array $doc): array
 function docs_duplicate(array $src): int
 {
     $type = (string)$src['doc_type'];
-    if (!in_array($type, ['pedido', 'albaran'], true)) {
+    if (!in_array($type, ['pedido', 'albaran', 'pedido_c', 'albaran_c'], true)) {
         throw new DomainException('Solo se duplican pedidos y albaranes.');
     }
     $today = (int)date('Ymd');
@@ -42,7 +42,7 @@ function docs_duplicate(array $src): int
     }
     $s = series_default_for($type);
     if (!$s) {
-        throw new DomainException('No hay ninguna serie activa de ' . mb_strtolower(DOCS_KINDS[$type]['plural']) . ' (Configuración → Series).');
+        throw new DomainException('No hay ninguna serie activa de ' . mb_strtolower(docs_kind($type)['plural']) . ' (Configuración → Series).');
     }
     $lines = [];
     foreach (docs_lines((int)$src['id']) as $l) {
@@ -58,6 +58,7 @@ function docs_duplicate(array $src): int
     $doc['op_day'] = 0;
     $doc['vat_note'] = '';
     $doc['rect_text'] = '';
+    $doc['sup_ref'] = '';
     return docs_save($doc, $lines, -1, 'desde', 'Copia de ' . $src['doc_code']);
 }
 

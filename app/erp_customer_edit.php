@@ -89,7 +89,7 @@ const ERP_CUST_OWN = ['pay_days', 'def_series', 'doc_notes'];
 function erp_customer_docs_count(string $code): int
 {
     $db = db();
-    $st = $db->prepare('SELECT COUNT(*) FROM doc_headers WHERE cust_code = ?');
+    $st = $db->prepare("SELECT COUNT(*) FROM doc_headers WHERE cust_code = ? AND doc_type NOT IN ('pedido_c', 'albaran_c', 'factura_c', 'rectificativa_c')");
     $st->execute([$code]);
     $n = (int)$st->fetchColumn();
     $st = $db->prepare("SELECT COUNT(*) FROM erp_invoices WHERE cust_code = ? AND origin = 'ncs'");

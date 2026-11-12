@@ -9,7 +9,10 @@
  * $custResults, $custQuery, $rates, $methods, $tariffs, $events, $related, $isRetail.
  */
 $ro = $locked !== '';
-$askPrice = docp_bool('ask_price');
+$purchase = !empty($purchase);
+$party = $purchase ? 'Proveedor' : 'Cliente';
+$base = docs_base($kind);
+$askPrice = docp_bool('ask_price') || $purchase; // en compras el precio siempre se escribe (el del coste, si el artículo lo trae, se propone)
 $askDisc = docp_bool('ask_discount');
 $askTitle = docp_bool('ask_title');
 $askTariff = docp_bool('ask_tariff');
@@ -35,18 +38,18 @@ if (!$ro) { // filas vacías al final: de artículo y de texto
 }
 $lf = docs_form_fields($kind); // campos de las líneas activos (Configuración → Parámetros): Talla, Color, Dto. y los propios
 $lfx = docs_form_custom($kind);
-$ncols = 8 + (isset($lf['size']) ? 1 : 0) + (isset($lf['color']) ? 1 : 0) + (isset($lf['disc']) ? 1 : 0) + count($lfx) + ($kind === 'pedido' && $hasDone ? 1 : 0); // columnas de la rejilla (para las filas de texto)
+$ncols = 8 + (isset($lf['size']) ? 1 : 0) + (isset($lf['color']) ? 1 : 0) + (isset($lf['disc']) ? 1 : 0) + count($lfx) + ($base === 'pedido' && !$inv && $hasDone ? 1 : 0); // columnas de la rejilla (para las filas de texto)
 $textOf = fn(?array $l) => $l === null ? '' : (string)$l['title'] . ((string)($l['detail'] ?? '') !== '' ? "\n" . $l['detail'] : '');
 $rowsOf = fn(string $t) => max(1, min(12, substr_count($t, "\n") + 1));
-$doneLabel = $inv ? 'Emitir' : 'Confirmar';
+$doneLabel = $inv ? ($purchase ? 'Cerrar' : 'Emitir') : 'Confirmar';
 $issued = $inv && $saved['status'] === 'emitida';
-$statusCls = $doc['status'] === 'anulado' ? ' tag-off' : (in_array($doc['status'], ['servido', 'facturado', 'emitida'], true) ? ' tag-ok' : '');
-$custLink = $doc['cust_code'] !== '' && !$isRetail ? url('/admin/clientes/' . rawurlencode((string)$doc['cust_code'])) : '';
+$statusCls = $doc['status'] === 'anulado' ? ' tag-off' : (in_array($doc['status'], ['servido', 'facturado'], true) ? ' tag-ok' : ($doc['status'] === 'borrador' ? ' tag-draft' : ''));
+$custLink = $doc['cust_code'] !== '' && !$isRetail ? url(($purchase ? '/admin/proveedores/' : '/admin/clientes/') . rawurlencode((string)$doc['cust_code'])) : '';
 $issueProblems = $issueProblems ?? [];
 $orig = $orig ?? null;
-$isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')));
+$isTest = $inv && !$purchase && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')));
 ?>
-<?php if (!erp_2fa_required()): ?><p class="alert warn"><?= admin_icon('alert') ?><span>La doble verificación para Clientes y Ventas está desactivada</span></p><?php endif; ?>
+<?php if ($purchase ? !purch_2fa_required() : !erp_2fa_required()): ?><p class="alert warn"><?= admin_icon('alert') ?><span>La doble verificación para <?= $purchase ? 'Compras' : 'Clientes y Ventas' ?> está desactivada</span></p><?php endif; ?>
 
 <div class="if-bar" role="toolbar" aria-label="Acciones">
   <div class="if-grp">
@@ -57,34 +60,35 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       <button class="btn small ghost" type="submit" form="docform" name="action" value="recalc">Recalcular</button>
       <button class="btn small ghost" type="submit" form="docform" name="action" value="more" title="Añade filas para más artículos o conceptos">Añadir artículo</button>
       <button class="btn small ghost" type="submit" form="docform" name="action" value="more_text" title="Añade una línea de texto libre (sin unidades ni precio)">Añadir texto</button>
-      <button class="btn small ghost" type="submit" form="docform" name="action" value="reprice" title="Pone en todas las líneas con artículo el precio de la tarifa elegida">Aplicar tarifa</button>
+      <?php if (!$purchase): ?><button class="btn small ghost" type="submit" form="docform" name="action" value="reprice" title="Pone en todas las líneas con artículo el precio de la tarifa elegida">Aplicar tarifa</button><?php endif; ?>
     <?php endif; ?>
   </div>
   <div class="if-grp">
     <?php if (!$isNew): ?>
       <?php if ($isDraft && !$ro): ?>
-        <button class="btn small" type="submit" form="f-done"<?= $issueProblems ? ' disabled title="Antes hay que completar lo que falta (ver arriba)"' : ' title="Toma el número de la serie' . ($inv ? '. Después ya no se podrá modificar ni borrar.' : ' y deja el documento listo para usarse.') . '"' ?>><?= $doneLabel ?></button>
+        <button class="btn small" type="submit" form="f-done"<?= $issueProblems ? ' disabled title="Antes hay que completar lo que falta (ver arriba)"' : ' title="Toma el número de la serie' . ($inv ? ($purchase ? ' (registro). Después ya no se podrá modificar: se corrige con una rectificativa recibida.' : '. Después ya no se podrá modificar ni borrar.') : ' y deja el documento listo para usarse.') . '"' ?>><?= $doneLabel ?></button>
         <button class="btn small ghost df-annul" type="submit" form="f-delete">Borrar borrador</button>
       <?php endif; ?>
       <a class="btn small ghost" href="<?= e(url($self . '/ver')) ?>" target="_blank" rel="noopener"><?= $isDraft ? 'Vista previa' : 'Imprimir' ?></a>
       <?php if ($issued): ?>
-        <?php if (!docs_is_test($saved)): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$saved['doc_code']))) ?>" title="Cobro, envío por email, notas e historial">Cobro y envío</a><?php endif; ?>
-        <a class="btn small ghost" href="#rectificar">Rectificar</a>
+        <?php if (!$purchase && !docs_is_test($saved)): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$saved['doc_code']))) ?>" title="Cobro, envío por email, notas e historial">Cobro y envío</a><?php endif; ?>
+        <?php if ($purchase && $saved['doc_type'] === 'factura_c'): ?><a class="btn small ghost" href="#rectificar">Rectificar</a><?php endif; ?>
+        <?php if (!$purchase): ?><a class="btn small ghost" href="#rectificar">Rectificar</a><?php endif; ?>
       <?php endif; ?>
-      <?php if ($kind === 'pedido' && in_array($saved['status'], ['pendiente', 'parcial'], true) && !$ro): ?>
-        <button class="btn small" type="submit" form="f-serve" title="Crea un albarán con las unidades pendientes. Si solo sirves una parte, baja las unidades en el albarán: el resto sigue pendiente.">Convertir en albarán</button>
+      <?php if ($base === 'pedido' && !$inv && in_array($saved['status'], ['pendiente', 'parcial'], true) && !$ro): ?>
+        <button class="btn small" type="submit" form="f-serve" title="Crea un albarán con las unidades pendientes. Si solo <?= $purchase ? 'recibes' : 'sirves' ?> una parte, baja las unidades en el albarán: el resto sigue pendiente.">Convertir en albarán</button>
       <?php endif; ?>
-      <?php if ($kind === 'albaran' && $doc['status'] === 'pendiente' && (int)$saved['billed_by'] === 0 && !$ro): ?>
-        <button class="btn small" type="submit" form="f-bill" title="Crea un borrador de factura con este albarán">Facturar</button>
+      <?php if ($base === 'albaran' && !$inv && $doc['status'] === 'pendiente' && (int)$saved['billed_by'] === 0 && !$ro): ?>
+        <button class="btn small" type="submit" form="f-bill" title="Crea un borrador de factura<?= $purchase ? ' recibida' : '' ?> con este albarán"><?= $purchase ? 'Pasar a factura' : 'Facturar' ?></button>
       <?php endif; ?>
       <?php if (!$inv): ?>
         <button class="btn small ghost" type="submit" form="f-dup" title="Crea un borrador nuevo con las mismas líneas">Duplicar</button>
-        <?php if (!$isDraft && $doc['status'] !== 'anulado'): ?><a class="btn small ghost" href="<?= e(url($self . '/enviar')) ?>">Enviar por email</a><?php endif; ?>
+        <?php if (!$purchase && !$isDraft && $doc['status'] !== 'anulado'): ?><a class="btn small ghost" href="<?= e(url($self . '/enviar')) ?>">Enviar por email</a><?php endif; ?>
       <?php endif; ?>
       <?php if (!$inv && !$isDraft && $doc['status'] !== 'anulado' && !$ro): ?>
         <button class="btn small ghost df-annul" type="submit" form="f-annul">Anular</button>
       <?php endif; ?>
-      <?php if ($custLink !== ''): ?><a class="btn small ghost" href="<?= e($custLink) ?>">Ver cliente</a><?php endif; ?>
+      <?php if ($custLink !== ''): ?><a class="btn small ghost" href="<?= e($custLink) ?>">Ver <?= e(mb_strtolower($party)) ?></a><?php endif; ?>
     <?php endif; ?>
     <?php if (!$isNew): ?>
       <?php if ($nav[0]): ?><a class="btn small ghost" href="<?= e(url($k['path'] . '/' . $nav[0])) ?>" rel="prev" title="Documento anterior">‹ Anterior</a><?php endif; ?>
@@ -107,9 +111,10 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
 
 <?php if ($isTest): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><strong><?= e(docs_test_text()) ?>.</strong> <?= $issued ? 'Esta factura es de prueba: no ha gastado números de la serie ni está en el registro, el SII ni Ventas.' : 'Mientras el modo de prueba esté activado, «Emitir» crea una factura de prueba (numeración PRUEBA-…, sin validez fiscal). Se quita en Configuración → Parámetros.' ?></span></p><?php endif; ?>
 <?php if ($locked !== '' && !$issued): ?><p class="flash err"><?= e($locked) ?></p><?php endif; ?>
-<?php if ($issued): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><strong>Factura emitida el <?= e(date('d/m/Y H:i', (int)$saved['issued_at'])) ?><?= $saved['issued_by'] !== '' ? ' por ' . e($saved['issued_by']) : '' ?>.</strong> No se puede modificar, anular ni borrar: para corregirla, haz una rectificativa. Clave SII: <?= e($saved['sii_type']) ?>.</span></p><?php endif; ?>
-<?php if ($isDraft && !$isNew && $issueProblems): ?><div class="alert warn keep df-warn"><?= admin_icon('alert') ?><div><strong>Para <?= $inv ? 'emitir esta factura' : 'confirmar este ' . e(mb_strtolower($k['label'])) ?> falta:</strong><ul><?php foreach ($issueProblems as $p): ?><li><?= e($p) ?></li><?php endforeach; ?></ul></div></div><?php endif; ?>
-<?php if ($orig): ?><p class="hint">Rectifica la factura <a href="<?= e(url('/admin/facturas/' . (int)$orig['id'])) ?>"><?= e($orig['doc_code']) ?></a> del <?= e(erp_day((int)$orig['doc_day'])) ?> · <?= e(DOCS_RECT_MODES[$saved['rect_mode']] ?? '') ?> · <?= e(DOCS_RECT_REASONS[$saved['rect_reason']] ?? $saved['rect_reason']) ?></p><?php endif; ?>
+<?php if ($issued && $purchase): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><strong>Factura recibida cerrada el <?= e(date('d/m/Y H:i', (int)$saved['issued_at'])) ?><?= $saved['issued_by'] !== '' ? ' por ' . e($saved['issued_by']) : '' ?> con el registro <?= e($saved['doc_code']) ?>.</strong> No se puede modificar: para corregirla, haz una rectificativa recibida. Los pagos se marcan en «Vencimientos».</span></p>
+<?php elseif ($issued): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><strong>Factura emitida el <?= e(date('d/m/Y H:i', (int)$saved['issued_at'])) ?><?= $saved['issued_by'] !== '' ? ' por ' . e($saved['issued_by']) : '' ?>.</strong> No se puede modificar, anular ni borrar: para corregirla, haz una rectificativa. Clave SII: <?= e($saved['sii_type']) ?>.</span></p><?php endif; ?>
+<?php if ($isDraft && !$isNew && $issueProblems): ?><div class="alert warn keep df-warn"><?= admin_icon('alert') ?><div><strong>Para <?= $inv ? ($purchase ? 'cerrar esta factura' : 'emitir esta factura') : 'confirmar este ' . e(mb_strtolower($k['label'])) ?> falta:</strong><ul><?php foreach ($issueProblems as $p): ?><li><?= e($p) ?></li><?php endforeach; ?></ul></div></div><?php endif; ?>
+<?php if ($orig): ?><p class="hint">Rectifica la factura <a href="<?= e(url(($purchase ? '/admin/compras/facturas/' : '/admin/facturas/') . (int)$orig['id'])) ?>"><?= e($orig['doc_code']) ?></a> del <?= e(erp_day((int)$orig['doc_day'])) ?> · <?= e(DOCS_RECT_MODES[$saved['rect_mode']] ?? '') ?><?= $purchase ? '' : ' · ' . e(DOCS_RECT_REASONS[$saved['rect_reason']] ?? $saved['rect_reason']) ?></p><?php endif; ?>
 <?php foreach ($errors as $er): ?><p class="flash err"><?= e($er) ?></p><?php endforeach; ?>
 <?php if ($warnings): ?><div class="alert warn keep df-warn"><?= admin_icon('alert') ?><ul><?php foreach ($warnings as $w): ?><li><?= e($w) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
 
@@ -131,7 +136,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
           <?php if ($isNew): ?>
             <select name="h[series_id]"><?php foreach ($series as $s): ?><option value="<?= (int)$s['id'] ?>"<?= (int)$s['id'] === (int)$doc['series_id'] ? ' selected' : '' ?>><?= e($s['letter']) ?> · <?= e($s['descr']) ?></option><?php endforeach; ?></select>
           <?php elseif ($isDraft): $sr = series_get((int)$doc['series_id']); ?>
-            <input value="<?= e(($sr['letter'] ?? '?') . ' · se numera al ' . ($inv ? 'emitir' : 'confirmar')) ?>" readonly>
+            <input value="<?= e(($sr['letter'] ?? '?') . ' · se numera al ' . ($inv ? ($purchase ? 'cerrar' : 'emitir') : 'confirmar')) ?>" readonly>
           <?php else: ?>
             <input value="<?= e($doc['doc_code']) ?>" readonly>
           <?php endif; ?>
@@ -139,14 +144,15 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
         <label>Fecha <input type="date" name="h[day]" value="<?= e(erp_day_to_input((int)$doc['doc_day'])) ?>" required></label>
         <label>Forma de pago
           <select name="h[pay_code]"><option value="">—</option><?php foreach ($methods as $m): ?><option value="<?= e($m['code']) ?>"<?= (string)$m['code'] === (string)$doc['pay_code'] ? ' selected' : '' ?>><?= e($m['code']) ?> · <?= e($m['name'] !== '' ? $m['name'] : 'sin nombre') ?></option><?php endforeach; ?></select></label>
-        <label>Tarifa
+        <?php if ($purchase && $inv): ?><label class="df-wide">Nº de la factura del proveedor <span class="muted">(obligatorio)</span> <input name="h[sup_ref]" value="<?= e((string)$doc['sup_ref']) ?>" maxlength="60" required></label><?php endif; ?>
+        <?php if ($purchase): ?><input type="hidden" name="h[tariff]" value="<?= (int)$doc['tariff'] ?>"><?php else: ?><label>Tarifa
           <?php if ($askTariff || $isNew): ?>
             <select name="h[tariff]"><?php foreach ($tariffs as $t): ?><option value="<?= (int)$t['num'] ?>"<?= (int)$t['num'] === (int)$doc['tariff'] ? ' selected' : '' ?>><?= (int)$t['num'] ?> · <?= e($t['name']) ?></option><?php endforeach; ?></select>
           <?php else: ?>
             <input type="hidden" name="h[tariff]" value="<?= (int)$doc['tariff'] ?>"><input value="<?= (int)$doc['tariff'] ?>" readonly title="La tarifa la fija el cliente (Configuración → Parámetros: «Pedir siempre tarifa» desactivado)">
-          <?php endif; ?></label>
+          <?php endif; ?></label><?php endif; ?>
         <label class="df-wide">Referencia <input name="h[ref_text]" value="<?= e($doc['ref_text']) ?>" maxlength="100" placeholder="Su pedido, obra, persona de contacto…"></label>
-        <?php if ($inv): ?>
+        <?php if ($inv && !$purchase): ?>
           <label>Fecha de operación <input type="date" name="h[op_day]" value="<?= e(erp_day_to_input((int)$doc['op_day'])) ?>"><small>Solo si no es la de la factura.</small></label>
           <label class="df-wide">Mención legal <input name="h[vat_note]" value="<?= e((string)$doc['vat_note']) ?>" maxlength="200" placeholder="Ej.: Operación exenta (art. 20 LIVA)"><small>Obligatoria si hay líneas con IVA 0 % (exención, inversión del sujeto pasivo…).</small></label>
           <?php if ($kind === 'rectificativa'): ?><label class="df-wide">Qué se corrige <input name="h[rect_text]" value="<?= e((string)$doc['rect_text']) ?>" maxlength="200" required></label><?php endif; ?>
@@ -156,10 +162,10 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       </div>
     </section>
     <section class="if-box" aria-label="Cliente">
-      <h2>Cliente <?php if ($custLink !== ''): ?><a class="if-link" href="<?= e($custLink) ?>">Ver ficha →</a><?php endif; ?></h2>
+      <h2><?= $party ?> <?php if ($custLink !== ''): ?><a class="if-link" href="<?= e($custLink) ?>">Ver ficha →</a><?php endif; ?></h2>
       <?php if (!$hasSrc && !$ro): ?>
       <div class="df-find">
-        <label>Buscar cliente <small>(por código, nombre o NIF)</small>
+        <label>Buscar <?= e(mb_strtolower($party)) ?> <small>(por código, nombre o NIF)</small>
           <input type="search" id="cust-q" name="cust_q" value="<?= e($custQuery) ?>" placeholder="Escribe al menos 2 letras o números" autocomplete="off" aria-controls="cust-res">
         </label>
         <noscript><button class="btn small" type="submit" name="action" value="search">Buscar</button></noscript>
@@ -173,7 +179,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       <?php endif; ?>
       <div class="df-g">
         <label>Código <input name="h[cust_code]" value="<?= e((string)$doc['cust_code']) ?>" maxlength="40"<?= $hasSrc ? ' readonly title="Las líneas vienen de un pedido: el cliente no se cambia"' : '' ?>>
-          <small><?= $kind === 'simplificada' ? 'Opcional en un tique.' : 'Vacío = cliente sin ficha.' ?></small></label>
+          <small><?= $kind === 'simplificada' ? 'Opcional en un tique.' : 'Vacío = ' . mb_strtolower($party) . ' sin ficha.' ?></small></label>
         <label class="df-wide">Nombre <input name="h[cust_name]" value="<?= e($isRetail && $doc['cust_name'] === '' ? 'Cliente de contado' : $doc['cust_name']) ?>" maxlength="255"></label>
         <label>NIF <input name="h[cust_nif]" value="<?= e($doc['cust_nif']) ?>" maxlength="40"></label>
         <label class="df-wide">Dirección <input name="h[cust_address]" value="<?= e($doc['cust_address']) ?>" maxlength="255"></label>
@@ -182,7 +188,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
         <label>Provincia <input name="h[cust_province]" value="<?= e($doc['cust_province']) ?>" maxlength="120"></label>
         <label>Correo <input type="email" name="h[cust_email]" value="<?= e($doc['cust_email']) ?>" maxlength="190"></label>
       </div>
-      <p class="muted df-note"><small>Al elegir un cliente se rellenan solos sus datos, su tarifa y su forma de pago; se pueden cambiar en este documento. Los clientes bloqueados o de baja no se pueden elegir.</small></p>
+      <p class="muted df-note"><small>Al elegir un <?= e(mb_strtolower($party)) ?> se rellenan solos sus datos<?= $purchase ? '' : ', su tarifa' ?> y su forma de pago; se pueden cambiar en este documento. Los <?= $purchase ? 'proveedores' : 'clientes' ?> bloqueados o de baja no se pueden elegir.</small></p>
     </section>
   </div>
 
@@ -204,10 +210,10 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
   <?php if (!$isNew): ?>
   <div class="if-grid-wrap">
     <table class="if-grid df-grid">
-      <colgroup><col class="k-n"><col class="k-ref"><col><?php if (isset($lf['size'])): ?><col class="k-s"><?php endif; ?><?php if (isset($lf['color'])): ?><col class="k-c"><?php endif; ?><?php foreach ($lfx as $_): ?><col class="k-e"><?php endforeach; ?><col class="k-q"><?php if ($kind === 'pedido' && $hasDone): ?><col class="k-q"><?php endif; ?><col class="k-p"><?php if (isset($lf['disc'])): ?><col class="k-d"><?php endif; ?><col class="k-v"><col class="k-a"><col class="k-x"></colgroup>
+      <colgroup><col class="k-n"><col class="k-ref"><col><?php if (isset($lf['size'])): ?><col class="k-s"><?php endif; ?><?php if (isset($lf['color'])): ?><col class="k-c"><?php endif; ?><?php foreach ($lfx as $_): ?><col class="k-e"><?php endforeach; ?><col class="k-q"><?php if ($base === 'pedido' && !$inv && $hasDone): ?><col class="k-q"><?php endif; ?><col class="k-p"><?php if (isset($lf['disc'])): ?><col class="k-d"><?php endif; ?><col class="k-v"><col class="k-a"><col class="k-x"></colgroup>
       <thead><tr>
         <th class="c">Nº</th><th>Ref.</th><th>Descripción</th><?php if (isset($lf['size'])): ?><th>Talla</th><?php endif; ?><?php if (isset($lf['color'])): ?><th>Color</th><?php endif; ?><?php foreach ($lfx as $f): ?><th><?= e($f['name']) ?></th><?php endforeach; ?><th class="r">Uds.</th>
-        <?php if ($kind === 'pedido' && $hasDone): ?><th class="r" title="Unidades ya servidas en albaranes">Serv.</th><?php endif; ?>
+        <?php if ($base === 'pedido' && !$inv && $hasDone): ?><th class="r" title="Unidades ya <?= $purchase ? 'recibidas' : 'servidas' ?> en albaranes"><?= $purchase ? 'Recib.' : 'Serv.' ?></th><?php endif; ?>
         <th class="r">Precio</th><?php if (isset($lf['disc'])): ?><th class="r">Dto.%</th><?php endif; ?><th>IVA</th><th class="r">Importe</th><th class="c" title="Quitar la línea al guardar">Quitar</th>
       </tr></thead>
       <tbody>
@@ -243,7 +249,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
             <?php else: ?><input class="df-e" name="<?= $nm ?>[x][<?= e($fk) ?>]" value="<?= e($fv) ?>" maxlength="60"<?= $f['type'] === 'number' ? ' inputmode="decimal"' : '' ?> aria-label="<?= e($f['name']) ?> de la línea <?= $i + 1 ?>"><?php endif; ?></td>
           <?php endforeach; endif; ?>
           <td class="r"><input class="df-n" name="<?= $nm ?>[qty]" value="<?= $l !== null ? e($num((int)$l['qty_u'], DOCS_QTY, $decQ)) : '' ?>" inputmode="decimal" aria-label="Unidades de la línea <?= $i + 1 ?>" data-q<?= $inv && $l !== null && (int)($l['src_line_id'] ?? 0) > 0 ? ' readonly title="Unidades del albarán"' : '' ?>></td>
-          <?php if ($kind === 'pedido' && $hasDone): ?><td class="r muted"><?= $l !== null && (int)$l['done_u'] > 0 ? e(docs_qty_txt((int)$l['done_u'])) : '' ?></td><?php endif; ?>
+          <?php if ($base === 'pedido' && !$inv && $hasDone): ?><td class="r muted"><?= $l !== null && (int)$l['done_u'] > 0 ? e(docs_qty_txt((int)$l['done_u'])) : '' ?></td><?php endif; ?>
           <td class="r"><input class="df-n" name="<?= $nm ?>[price]" value="<?= $l !== null ? e($num((int)$l['price_u'], DOCS_PRICE, $decP)) : '' ?>" inputmode="decimal" aria-label="Precio de la línea <?= $i + 1 ?>" data-p<?= $hasProd && !$askPrice ? ' readonly title="El precio sale de la tarifa (Configuración → Parámetros: «Pedir siempre precio» desactivado)"' : '' ?>></td>
           <?php if (isset($lf['disc'])): ?><td class="r"><input class="df-d" name="<?= $nm ?>[disc]" value="<?= $l !== null && (int)$l['disc_bp'] > 0 ? e($num((int)$l['disc_bp'], 100, 2)) : '' ?>" inputmode="decimal" aria-label="Descuento de la línea <?= $i + 1 ?>" data-d<?= !$askDisc ? ' readonly title="El descuento es el del cliente (Configuración → Parámetros: «Pedir siempre descuento» desactivado)"' : '' ?>></td><?php else: ?><input type="hidden" data-d value="<?= $l !== null && (int)$l['disc_bp'] > 0 ? e($num((int)$l['disc_bp'], 100, 2)) : '' ?>"><?php endif; ?>
           <td><select name="<?= $nm ?>[vat]" aria-label="IVA de la línea <?= $i + 1 ?>">
@@ -266,7 +272,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       <label class="df-notes">Observaciones (salen en el documento impreso)
         <textarea name="h[notes]" rows="3" maxlength="2000"><?= e((string)$doc['notes']) ?></textarea></label>
 
-<?php if ($kind === 'factura' && !$isNew):
+<?php if (in_array($kind, ['factura', 'factura_c'], true) && !$isNew):
       $duesRows = isset($doc['dues']) ? $doc['dues'] : docs_dues((int)$doc['id']);
       $duesPreview = false;
       if (!$duesRows && (int)$doc['total_cents'] > 0 && !$ro) { $duesRows = dues_compute($doc)['rows']; $duesPreview = (bool)$duesRows; }
@@ -281,7 +287,8 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
         <thead><tr><th scope="col">Nº</th><th scope="col">Fecha</th><th scope="col" style="text-align:right">Importe</th><th scope="col">Cobrado</th></tr></thead>
         <tbody>
         <?php if ($ro): foreach ($duesRows as $i => $du): ?>
-          <tr><td><?= $i + 1 ?></td><td><?= e(erp_day((int)$du['day'])) ?></td><td style="text-align:right"><?= e(erp_money((int)$du['cents'])) ?></td><td><?= (int)($du['paid'] ?? 0) === 1 ? 'Sí' : 'No' ?></td></tr>
+          <tr><td><?= $i + 1 ?></td><td><?= e(erp_day((int)$du['day'])) ?></td><td style="text-align:right"><?= e(erp_money((int)$du['cents'])) ?></td>
+            <td><?= (int)($du['paid'] ?? 0) === 1 ? 'Sí' : 'No' ?></td></tr>
         <?php endforeach; else: foreach ($duesFill as $i => $du): ?>
           <tr><td><?= $i + 1 ?></td>
             <td><input type="date" name="due_day[]" value="<?= e(erp_day_to_input((int)$du['day'])) ?>" aria-label="Fecha del vencimiento <?= $i + 1 ?>"></td>
@@ -326,14 +333,42 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
 <?php if (!$isNew): ?>
   <form id="f-annul" method="post" action="<?= e(url($self)) ?>" onsubmit="return confirm('¿Anular <?= e($k['label'] . ' ' . $doc['doc_code']) ?>? Conserva su número, pero ya no se podrá modificar.')"><?= csrf_field() ?><input type="hidden" name="action" value="annul"></form>
   <?php if (!$inv && !$isNew): ?><form id="f-dup" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="duplicate"></form><?php endif; ?>
-  <?php if ($kind === 'pedido'): ?><form id="f-serve" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="serve"></form><?php endif; ?>
-  <?php if ($kind === 'albaran'): ?><form id="f-bill" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="bill"></form><?php endif; ?>
+  <?php if ($base === 'pedido' && !$inv): ?><form id="f-serve" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="serve"></form><?php endif; ?>
+  <?php if ($base === 'albaran' && !$inv): ?><form id="f-bill" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="bill"></form><?php endif; ?>
   <?php if ($isDraft): ?>
     <form id="f-done" method="post" action="<?= e(url($self)) ?>" onsubmit="return confirm('<?= $inv ? '¿Emitir la factura? Tomará el siguiente número de la serie y desde ese momento NO se podrá modificar ni borrar (solo corregir con una rectificativa).' : '¿Confirmar? Toma el siguiente número de la serie y el borrador pasa a ser un ' . e(mb_strtolower($k['label'])) . ' con número.' ?>')"><?= csrf_field() ?><input type="hidden" name="action" value="<?= $inv ? 'issue' : 'confirm' ?>"><input type="hidden" name="stamp" value="<?= (int)$stamp ?>"></form>
     <form id="f-delete" method="post" action="<?= e(url($self)) ?>" onsubmit="return confirm('¿Borrar este borrador?<?= $inv ? ' Si venía de albaranes, quedarán otra vez pendientes de facturar.' : '' ?>')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"></form>
     <p class="muted"><small>Guarda los cambios antes de <?= $inv ? 'emitir' : 'confirmar' ?>: «<?= $doneLabel ?>» usa lo último guardado.</small></p>
   <?php endif; ?>
-  <?php if ($issued): ?>
+  <?php if ($purchase && $inv && !$isDraft && $saved['status'] === 'emitida'): $payRows = docs_dues((int)$saved['id']); ?>
+    <section class="if-box" id="pagos">
+      <h2>Pagos de los vencimientos</h2>
+      <?php if (!$payRows): ?><p class="muted" style="margin:0">Esta factura no tiene vencimientos (sin forma de pago).</p><?php else: ?>
+      <div class="tbl-wrap"><table class="tbl df-dues"><thead><tr><th scope="col">Nº</th><th scope="col">Vence</th><th scope="col" style="text-align:right">Importe</th><th scope="col">Pago</th></tr></thead><tbody>
+      <?php foreach ($payRows as $pi => $du): $pn = $pi + 1; ?>
+        <tr><td><?= $pn ?></td><td><?= e(erp_day((int)$du['day'])) ?><?= (int)$du['paid'] === 0 && (int)$du['day'] < (int)date('Ymd') ? ' <span class="tag tag-off">Vencido</span>' : '' ?></td><td style="text-align:right"><?= e(erp_money((int)$du['cents'])) ?></td>
+          <td><form method="post" action="<?= e(url($self)) ?>" class="inline"><?= csrf_field() ?>
+            <?php if ((int)$du['paid'] === 1): ?><span class="tag tag-ok">Pagado <?= e(erp_day((int)$du['paid_day'])) ?></span> <button class="link" type="submit" name="action" value="due_unpay:<?= $pn ?>">Deshacer</button>
+            <?php else: ?><input type="date" name="paid_day" value="<?= e(date('Y-m-d')) ?>" aria-label="Fecha de pago del vencimiento <?= $pn ?>"> <button class="btn small" type="submit" name="action" value="due_pay:<?= $pn ?>">Marcar pagado</button><?php endif; ?>
+          </form></td></tr>
+      <?php endforeach; ?>
+      </tbody></table></div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+  <?php if ($issued && $purchase): ?>
+    <?php if ($saved['doc_type'] === 'factura_c'): ?>
+    <section class="if-box df-rect" id="rectificar">
+      <h2>Rectificar esta factura recibida</h2>
+      <form method="post" action="<?= e(url($self)) ?>" class="df-g">
+        <?= csrf_field() ?><input type="hidden" name="action" value="rectify">
+        <label class="df-wide">Qué se corrige <input name="text" maxlength="200" required placeholder="Ej.: abono de 1 par devuelto; precio mal facturado"></label>
+        <div class="buttons df-wide"><button class="btn" type="submit">Crear borrador de rectificativa recibida</button></div>
+      </form>
+      <p class="muted" style="margin:6px 0 0"><small>Se crea un borrador con todas las líneas en negativo: quita las que no cambian, ajusta las demás, escribe el número de la rectificativa del proveedor y pulsa «Cerrar». Confirma el tratamiento del IVA con tu asesoría.</small></p>
+    </section>
+    <?php endif; ?>
+  <?php elseif ($issued): ?>
     <section class="if-box df-rect" id="rectificar">
       <h2>Rectificar esta factura</h2>
       <form method="post" action="<?= e(url($self)) ?>" class="df-g">
@@ -358,7 +393,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       <h2 class="df-h">Documentos relacionados</h2>
       <?php if (!$related): ?><p class="muted"><?= $kind === 'pedido' ? 'Todavía no se ha servido nada.' : ($kind === 'albaran' ? 'Este albarán no viene de ningún pedido ni se ha facturado.' : 'Ninguno.') ?></p><?php else: ?>
         <ul class="if-hist">
-          <?php foreach ($related as $r): $rk = DOCS_KINDS[$r['doc_type']] ?? null; if (!$rk) { continue; } ?>
+          <?php foreach ($related as $r): $rk = DOCS_KINDS[$r['doc_type']] ?? DOCS_KINDS_PURCHASE[$r['doc_type']] ?? null; if (!$rk) { continue; } ?>
             <li><span class="when"><?= e(erp_day((int)$r['doc_day'])) ?></span><a href="<?= e(url($rk['path'] . '/' . (int)$r['id'])) ?>"><?= e($rk['label'] . ' ' . ($r['status'] === 'borrador' ? '(borrador)' : $r['doc_code'])) ?></a> <span class="muted">· <?= e(docs_status_label($r)) ?></span></li>
           <?php endforeach; ?>
         </ul>
