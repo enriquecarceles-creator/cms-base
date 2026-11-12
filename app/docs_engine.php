@@ -17,7 +17,7 @@ declare(strict_types=1);
  * importe de línea × 10.000 (amount_u), totales en céntimos. Descuento e IVA en centésimas de por ciento (1000 = 10 %).
  *
  * Flujo: Pedido → «Servir» crea un albarán con lo pendiente (se puede servir menos) → (fase 2) Albarán → Factura.
- * Estados: pedido pendiente | parcial | servido | anulado (se calcula con lo servido); albarán pendiente | facturado | anulado.
+ * Estados: pedido pendiente | parcial | servido | facturado (todos sus albaranes facturados) | anulado (se calcula con lo servido y facturado); albarán pendiente | facturado | anulado.
  * Numeración: series_next_number() en la misma transacción que crea el documento (nunca repetidos). Los documentos no se
  * borran: se anulan (conservan su número). Bloqueo de periodos: no se crea, modifica ni anula nada con fecha bloqueada.
  */
@@ -42,7 +42,7 @@ const DOCS_PAGE_KIND = ['pedidos' => 'pedido', 'albaranes' => 'albaran', 'factur
 
 const DOCS_INVOICE_STATUS = ['borrador' => 'Borrador', 'emitida' => 'Emitida'];
 const DOCS_STATUS = [
-    'pedido' => ['pendiente' => 'Pendiente', 'parcial' => 'Parcialmente servido', 'servido' => 'Servido', 'anulado' => 'Anulado'],
+    'pedido' => ['pendiente' => 'Pendiente', 'parcial' => 'Parcialmente servido', 'servido' => 'Servido', 'facturado' => 'Facturado', 'anulado' => 'Anulado'],
     'albaran' => ['pendiente' => 'Pendiente de facturar', 'facturado' => 'Facturado', 'anulado' => 'Anulado'],
     'factura' => DOCS_INVOICE_STATUS, 'simplificada' => DOCS_INVOICE_STATUS, 'rectificativa' => DOCS_INVOICE_STATUS,
 ];
@@ -50,7 +50,7 @@ const DOCS_STATUS = [
 const DOCS_EVENT_LABELS = [
     'creado' => 'Creado', 'modificado' => 'Modificado', 'servido' => 'Servido', 'anulado' => 'Anulado', 'desde' => 'Creado desde',
     'emitida' => 'Emitida', 'facturado' => 'Facturado', 'rectificada' => 'Rectificada', 'reservado' => 'Reservado en un borrador',
-    'liberado' => 'Liberado (borrador borrado)',
+    'liberado' => 'Liberado (borrador borrado)', 'enviado' => 'Enviado por email', 'envio_error' => 'Error al enviar por email',
 ];
 
 /** Motivos de rectificación (art. 80 de la Ley del IVA) con su clave del SII. */
@@ -412,6 +412,14 @@ function docs_refresh_orders(array $orderIds): void
             $done += $d;
         }
         $status = $done <= 0 ? 'pendiente' : ($done >= $total ? 'servido' : 'parcial');
+        if ($status === 'servido') { // facturado = servido entero y ningún albarán suyo pendiente de facturar
+            $st = $db->prepare("SELECT COUNT(DISTINCT h.id) FROM doc_lines l JOIN doc_lines o ON o.id = l.src_line_id JOIN doc_headers h ON h.id = l.doc_id
+                WHERE o.doc_id = ? AND h.doc_type = 'albaran' AND h.status = 'pendiente'");
+            $st->execute([$oid]);
+            if ((int)$st->fetchColumn() === 0) {
+                $status = 'facturado';
+            }
+        }
         if ($status !== $doc['status']) {
             $db->prepare('UPDATE doc_headers SET status = ? WHERE id = ?')->execute([$status, $oid]);
         }
@@ -918,8 +926,8 @@ function docs_annul(array $doc): string
  */
 function docs_serve(array $order): int
 {
-    if ($order['doc_type'] !== 'pedido' || in_array($order['status'], ['anulado', 'servido'], true)) {
-        throw new DomainException($order['status'] === 'servido' ? 'Este pedido ya está servido entero.' : 'Este pedido está anulado.');
+    if ($order['doc_type'] !== 'pedido' || in_array($order['status'], ['anulado', 'servido', 'facturado'], true)) {
+        throw new DomainException(in_array($order['status'], ['servido', 'facturado'], true) ? 'Este pedido ya está servido entero.' : 'Este pedido está anulado.');
     }
     $today = (int)date('Ymd');
     if (period_is_locked($today)) {
@@ -1039,6 +1047,10 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
         docs_print($doc);
         return;
     }
+    if ($sub2 === 'enviar' && !$invoices) {
+        docs_send($doc);
+        return;
+    }
     if ($sub2 !== '') {
         not_found();
         return;
@@ -1056,6 +1068,9 @@ function admin_docs_list(string $kind): void
         'estado' => isset($statuses[(string)($_GET['estado'] ?? '')]) ? (string)$_GET['estado'] : '',
         'anio' => preg_match('/^\d{4}$/', (string)($_GET['anio'] ?? '')) ? (string)$_GET['anio'] : '',
         'tipo' => $invoices && in_array($_GET['tipo'] ?? '', DOC_INVOICE_TYPES, true) ? (string)$_GET['tipo'] : '',
+        'cli' => mb_substr(trim((string)($_GET['cli'] ?? '')), 0, 60),
+        'desde' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['desde'] ?? '')) ? (string)$_GET['desde'] : '',
+        'hasta' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['hasta'] ?? '')) ? (string)$_GET['hasta'] : '',
     ];
     if ($invoices) {
         docs_mirror_sync();
@@ -1079,6 +1094,16 @@ function admin_docs_list(string $kind): void
     if ($f['anio'] !== '') {
         $w .= ' AND doc_day BETWEEN ? AND ?';
         array_push($a, (int)$f['anio'] * 10000, (int)$f['anio'] * 10000 + 9999);
+    }
+    if ($f['cli'] !== '') { // cliente: código exacto o parte del nombre
+        $w .= " AND (LOWER(cust_code) = ? OR LOWER(cust_name) LIKE ? ESCAPE '!')";
+        array_push($a, mb_strtolower($f['cli']), '%' . strtr(mb_strtolower($f['cli']), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%');
+    }
+    foreach ([['desde', '>='], ['hasta', '<=']] as [$k2, $op]) {
+        if ($f[$k2] !== '') {
+            $w .= ' AND doc_day ' . $op . ' ?';
+            $a[] = (int)str_replace('-', '', $f[$k2]);
+        }
     }
     if ($f['q'] !== '') {
         $like = '%' . strtr(mb_strtolower($f['q']), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
@@ -1133,8 +1158,13 @@ function admin_docs_form(string $kind, ?array $saved): void
         try {
             if ($action === 'serve' && !$isNew && $kind === 'pedido') {
                 $aid = docs_serve($saved);
-                flash('Albarán creado con lo pendiente del pedido. Revisa las unidades (puedes servir menos) y guarda si cambias algo.');
+                flash('Albarán creado con lo pendiente del pedido. Si solo vas a servir una parte, baja las unidades y guarda: el resto sigue pendiente en el pedido.');
                 redirect(DOCS_KINDS['albaran']['path'] . '/' . $aid);
+            }
+            if ($action === 'duplicate' && !$isNew && in_array($kind, ['pedido', 'albaran'], true)) {
+                $did = docs_duplicate($saved);
+                flash($k['label'] . ' duplicado: es un documento nuevo con las mismas líneas (sin vínculos con el original). Revisa fecha y precios.');
+                redirect($k['path'] . '/' . $did);
             }
             if ($action === 'bill' && !$isNew && $kind === 'albaran') {
                 $fid = docs_bill([(int)$saved['id']]);
@@ -1206,6 +1236,7 @@ function admin_docs_form(string $kind, ?array $saved): void
         'tot' => $tot, 'errors' => $errors, 'warnings' => $warnings, 'locked' => $locked, 'self' => $self, 'series' => $series,
         'rates' => docs_vat_rates(), 'methods' => array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$doc['pay_code']),
         'tariffs' => array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$doc['tariff']),
+        'nav' => $isNew ? [null, null] : docs_neighbors($saved),
         'events' => $isNew ? [] : docs_events((int)$saved['id']), 'related' => $isNew ? [] : docs_related($saved),
         'isRetail' => $doc['cust_code'] !== '' && $doc['cust_code'] === erp_retail_code(),
         'issueProblems' => $isDraft && !$isNew ? docs_issue_problems($saved, $savedLines) : [],

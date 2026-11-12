@@ -10,6 +10,7 @@ require_once __DIR__ . '/doc_series.php';
 require_once __DIR__ . '/doc_params.php';
 require_once __DIR__ . '/docs_engine.php';
 require_once __DIR__ . '/docs_invoices.php';
+require_once __DIR__ . '/docs_actions.php';
 
 function admin_dispatch(array $segs): void
 {

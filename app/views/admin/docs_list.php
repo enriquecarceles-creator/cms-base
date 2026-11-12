@@ -6,7 +6,7 @@
 $pageUrl = fn(int $p) => docs_list_url($kind, $f, $p > 1 ? ['pag' => (string)$p] : []);
 $canBill = $kind === 'albaran' && (bool)array_filter($rows, fn($r) => $r['status'] === 'pendiente' && (int)$r['billed_by'] === 0);
 $code = fn(array $r) => $r['status'] === 'borrador' ? 'Borrador' : $r['doc_code'];
-$filtered = $f['q'] !== '' || $f['estado'] !== '' || $f['anio'] !== '' || ($f['tipo'] ?? '') !== '';
+$filtered = $f['q'] !== '' || $f['estado'] !== '' || $f['anio'] !== '' || ($f['tipo'] ?? '') !== '' || $f['cli'] !== '' || $f['desde'] !== '' || $f['hasta'] !== '';
 ?>
 <?php if (!erp_2fa_required()): ?><p class="alert warn"><?= admin_icon('alert') ?><span>La doble verificación para Clientes y Ventas está desactivada</span></p><?php endif; ?>
 <div class="head">
@@ -35,7 +35,7 @@ $filtered = $f['q'] !== '' || $f['estado'] !== '' || $f['anio'] !== '' || ($f['t
     <?php endif; ?>
   <?php endif; ?>
 <?php elseif ($kind === 'albaran'): ?>
-  <p class="hint">Los albaranes se crean desde un pedido (botón «Servir») o directamente aquí. Para facturarlos, marca los de un mismo cliente y pulsa «Facturar los marcados».</p>
+  <p class="hint">Los albaranes se crean desde un pedido (botón «Convertir en albarán») o directamente aquí. Para facturarlos, marca los de un mismo cliente y pulsa «Facturar los marcados».</p>
 <?php endif; ?>
 
 <form class="filters lf" method="get" action="<?= e(url($k['path'])) ?>">
@@ -48,6 +48,9 @@ $filtered = $f['q'] !== '' || $f['estado'] !== '' || $f['anio'] !== '' || ($f['t
     <?php foreach ($statuses as $s => $label): ?><option value="<?= e($s) ?>"<?= $f['estado'] === $s ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
   <label><span class="sr-only">Año</span><select name="anio"><option value="">Todos los años</option>
     <?php foreach ($years as $y): ?><option value="<?= (int)$y ?>"<?= $f['anio'] === (string)$y ? ' selected' : '' ?>><?= (int)$y ?></option><?php endforeach; ?></select></label>
+  <label><span class="sr-only">Cliente</span><input type="search" name="cli" value="<?= e($f['cli']) ?>" placeholder="Cliente (código o nombre)" maxlength="60"></label>
+  <label>Desde <input type="date" name="desde" value="<?= e($f['desde']) ?>"></label>
+  <label>Hasta <input type="date" name="hasta" value="<?= e($f['hasta']) ?>"></label>
   <button class="btn small" type="submit">Buscar</button>
   <?php if ($filtered): ?><a class="lf-clear" href="<?= e(url($k['path'])) ?>">Quitar filtros</a><?php endif; ?>
 </form>

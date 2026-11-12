@@ -49,15 +49,23 @@ $orig = $orig ?? null;
         <a class="btn small ghost" href="#rectificar">Rectificar</a>
       <?php endif; ?>
       <?php if ($kind === 'pedido' && in_array($doc['status'], ['pendiente', 'parcial'], true) && !$ro): ?>
-        <button class="btn small" type="submit" form="f-serve" title="Crea un albarán con las unidades pendientes">Servir</button>
+        <button class="btn small" type="submit" form="f-serve" title="Crea un albarán con las unidades pendientes. Si solo sirves una parte, baja las unidades en el albarán: el resto sigue pendiente.">Convertir en albarán</button>
       <?php endif; ?>
       <?php if ($kind === 'albaran' && $doc['status'] === 'pendiente' && (int)$saved['billed_by'] === 0 && !$ro): ?>
         <button class="btn small" type="submit" form="f-bill" title="Crea un borrador de factura con este albarán">Facturar</button>
+      <?php endif; ?>
+      <?php if (!$inv): ?>
+        <button class="btn small ghost" type="submit" form="f-dup" title="Crea un documento nuevo con las mismas líneas">Duplicar</button>
+        <?php if ($doc['status'] !== 'anulado'): ?><a class="btn small ghost" href="<?= e(url($self . '/enviar')) ?>">Enviar por email</a><?php endif; ?>
       <?php endif; ?>
       <?php if (!$inv && $doc['status'] !== 'anulado' && !$ro): ?>
         <button class="btn small ghost df-annul" type="submit" form="f-annul">Anular</button>
       <?php endif; ?>
       <?php if ($custLink !== ''): ?><a class="btn small ghost" href="<?= e($custLink) ?>">Ver cliente</a><?php endif; ?>
+    <?php endif; ?>
+    <?php if (!$isNew): ?>
+      <?php if ($nav[0]): ?><a class="btn small ghost" href="<?= e(url($k['path'] . '/' . $nav[0])) ?>" rel="prev" title="Documento anterior">‹ Anterior</a><?php endif; ?>
+      <?php if ($nav[1]): ?><a class="btn small ghost" href="<?= e(url($k['path'] . '/' . $nav[1])) ?>" rel="next" title="Documento siguiente">Siguiente ›</a><?php endif; ?>
     <?php endif; ?>
     <a class="btn small ghost" href="<?= e(url($k['path'])) ?>">Volver</a>
   </div>
@@ -214,6 +222,7 @@ $orig = $orig ?? null;
 
 <?php if (!$isNew): ?>
   <form id="f-annul" method="post" action="<?= e(url($self)) ?>" onsubmit="return confirm('¿Anular <?= e($k['label'] . ' ' . $doc['doc_code']) ?>? Conserva su número, pero ya no se podrá modificar.')"><?= csrf_field() ?><input type="hidden" name="action" value="annul"></form>
+  <?php if (!$inv && !$isNew): ?><form id="f-dup" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="duplicate"></form><?php endif; ?>
   <?php if ($kind === 'pedido'): ?><form id="f-serve" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="serve"></form><?php endif; ?>
   <?php if ($kind === 'albaran'): ?><form id="f-bill" method="post" action="<?= e(url($self)) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="bill"></form><?php endif; ?>
   <?php if ($isDraft): ?>

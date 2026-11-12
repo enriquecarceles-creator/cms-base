@@ -265,6 +265,7 @@ function docs_issue(int $id): string
         foreach ($db->query("SELECT id, doc_code FROM doc_headers WHERE doc_type = 'albaran' AND billed_by = " . $id)->fetchAll() as $a) {
             $db->prepare("UPDATE doc_headers SET status = 'facturado' WHERE id = ?")->execute([(int)$a['id']]);
             docs_event((int)$a['id'], 'facturado', 'Factura ' . $num['formatted']);
+            docs_refresh_orders(docs_source_orders((int)$a['id'])); // el pedido pasa a «Facturado» si ya no le queda ningún albarán por facturar
         }
         if ($doc['doc_type'] === 'rectificativa') {
             docs_event((int)$doc['rect_of'], 'rectificada', 'Rectificativa ' . $num['formatted'] . ' (' . mb_strtolower(DOCS_RECT_MODES[$doc['rect_mode']] ?? '') . ')');
