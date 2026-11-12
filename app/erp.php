@@ -804,7 +804,7 @@ function admin_clients(string $code, string $sub = ''): void
     $sortKey = isset($q['orden']) ? $q['orden'] : 'nombre';
     $dir = ($q['dir'] ?? '') === 'desc' ? 'DESC' : 'ASC';
     $order = ERP_CLIENT_SORTS[$sortKey] . ' ' . $dir . ($sortKey === 'nombre' ? '' : ', c.name') . ', c.id'; // SQL Server no admite repetir una columna en ORDER BY
-    $sql = 'SELECT c.id, c.cust_code, c.name, c.trade_name, c.city, c.phone, c.blocked, c.ended_day,
+    $sql = 'SELECT c.id, c.cust_code, c.name, c.trade_name, c.nif, c.city, c.phone, c.blocked, c.ended_day,
             COALESCE(s.n, 0) AS n_inv, COALESCE(s.tot, 0) AS tot, COALESCE(s.last_day, 0) AS last_day
         FROM erp_customers c
         LEFT JOIN (SELECT cust_code, COUNT(*) AS n, SUM(total_cents) AS tot, MAX(inv_day) AS last_day FROM erp_invoices WHERE annulled = 0 GROUP BY cust_code) s ON s.cust_code = c.cust_code

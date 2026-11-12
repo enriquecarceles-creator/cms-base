@@ -20,7 +20,7 @@ $hasFilters = (bool)array_diff_key($q, ['orden' => 1, 'dir' => 1, 'pag' => 1]);
   <p class="empty">Todavía no hay clientes. Crea el primero con «+ Nuevo cliente» o ve a <a href="<?= e(url('/admin/erp')) ?>">Sincronizar con NCS</a> para traerlos.</p>
 <?php else: ?>
 <form class="filters lf" method="get" action="<?= e(url('/admin/clientes')) ?>">
-  <label class="lf-q"><span class="sr-only">Buscar</span><input type="search" name="q" value="<?= e($q['q'] ?? '') ?>" placeholder="Nombre, código, NIF, población, teléfono o email"></label>
+  <label class="lf-q"><span class="sr-only">Buscar</span><input type="search" name="q" value="<?= e($q['q'] ?? '') ?>" placeholder="Buscar por código, nombre o NIF"></label>
   <label><span class="sr-only">Mostrar</span>
     <select name="ver"><option value="">Todos</option><option value="con"<?= ($q['ver'] ?? '') === 'con' ? ' selected' : '' ?>>Con facturas</option><option value="bloq"<?= ($q['ver'] ?? '') === 'bloq' ? ' selected' : '' ?>>Bloqueados o de baja</option></select></label>
   <?php if ($retail !== ''): ?><label class="check"><input type="checkbox" name="contado" value="1"<?= !empty($q['contado']) ? ' checked' : '' ?>> <span>Incluir cliente de contado</span></label><?php endif; ?>
@@ -33,18 +33,18 @@ $hasFilters = (bool)array_diff_key($q, ['orden' => 1, 'dir' => 1, 'pag' => 1]);
 <?php if (!$rows): ?>
   <p class="empty">No hay clientes<?= $hasFilters ? ' con ese filtro' : '' ?>.</p>
 <?php else: ?>
-<div class="tbl-wrap"><table class="tbl list">
-  <thead><tr><?= $th('codigo', 'Código') ?><?= $th('nombre', 'Cliente') ?><th scope="col">Población</th><th scope="col">Teléfono</th><?= $th('facturas', 'Facturas') ?><?= $th('total', 'Total comprado') ?><?= $th('ultima', 'Última compra') ?></tr></thead>
+<div class="tbl-wrap"><table class="tbl list cl-tbl">
+  <thead><tr><?= $th('codigo', 'Código') ?><?= $th('nombre', 'Cliente') ?><th scope="col">NIF</th><th scope="col">Población</th><th scope="col">Teléfono</th><th scope="col">Estado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
   <tbody>
-  <?php foreach ($rows as $r): $off = (int)$r['blocked'] === 1 || (int)$r['ended_day'] > 0; ?>
+  <?php foreach ($rows as $r): $off = (int)$r['blocked'] === 1 || (int)$r['ended_day'] > 0; $cu = url('/admin/clientes/' . rawurlencode($r['cust_code'])); ?>
     <tr<?= $off ? ' class="off"' : '' ?>>
-      <td><a href="<?= e(url('/admin/clientes/' . rawurlencode($r['cust_code']))) ?>"><?= e($r['cust_code']) ?></a></td>
-      <td><a href="<?= e(url('/admin/clientes/' . rawurlencode($r['cust_code']))) ?>"><?= e($r['name'] !== '' ? $r['name'] : '(sin nombre)') ?></a><?= $r['trade_name'] !== '' && $r['trade_name'] !== $r['name'] ? '<br><small class="muted">' . e($r['trade_name']) . '</small>' : '' ?><?= (int)$r['blocked'] === 1 ? ' <small class="review-flag">bloqueado</small>' : '' ?><?= (int)$r['ended_day'] > 0 ? ' <small class="review-flag">de baja</small>' : '' ?></td>
+      <td><a href="<?= e($cu) ?>"><?= e($r['cust_code']) ?></a></td>
+      <td><a href="<?= e($cu) ?>"><?= e($r['name'] !== '' ? $r['name'] : '(sin nombre)') ?></a><?= $r['trade_name'] !== '' && $r['trade_name'] !== $r['name'] ? ' <small class="muted">' . e($r['trade_name']) . '</small>' : '' ?></td>
+      <td><?= e($r['nif']) ?></td>
       <td><?= e($r['city']) ?></td>
       <td><?= e($r['phone']) ?></td>
-      <td><?= e($n((int)$r['n_inv'])) ?></td>
-      <td><?= e(erp_money((int)$r['tot'])) ?></td>
-      <td class="t-date"><?= e(erp_day((int)$r['last_day'])) ?></td>
+      <td><?php if ((int)$r['ended_day'] > 0): ?><span class="tag tag-off">De baja</span><?php elseif ((int)$r['blocked'] === 1): ?><span class="tag tag-off">Bloqueado</span><?php else: ?><span class="tag tag-ok">Activo</span><?php endif; ?></td>
+      <td class="cl-act"><a class="btn small ghost" href="<?= e($cu) ?>">Ver</a> <a class="btn small ghost" href="<?= e($cu . '?editar=1') ?>">Modificar</a></td>
     </tr>
   <?php endforeach; ?>
   </tbody>

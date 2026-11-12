@@ -69,6 +69,7 @@ $ended = (int)$c['ended_day'] > 0;
 <div class="cf-layout">
   <div class="cf-main">
     <nav class="cf-tabs" aria-label="Secciones de la ficha">
+      <a href="<?= e(url($self)) ?>">← Ficha del cliente</a>
       <?php foreach (ERP_CLIENT_TABS as $k => $label): ?>
         <a href="<?= e($tabUrl($k, $stats['year'] !== (int)date('Y') ? ['anio' => $stats['year']] : [])) ?>"<?= $tab === $k ? ' aria-current="page"' : '' ?>><?= e($label) ?><?= $k === 'notas' && $nNotes > 0 ? ' (' . (int)$nNotes . ')' : '' ?></a>
       <?php endforeach; ?>

@@ -1,45 +1,45 @@
 <?php
-/** Alta / edición manual de un cliente del CMS. Variables: $v, $isNew, $tariffs, $methods, $errors, $nifWarn. */
-$back = $isNew ? '/admin/clientes' : '/admin/clientes/' . rawurlencode((string)$v['cust_code']);
-$f = fn(string $k, string $label, int $max, string $extra = '') => '<label>' . e($label) . ' <input name="' . e($k) . '" value="' . e((string)$v[$k]) . '" maxlength="' . $max . '"' . $extra . '></label>';
+/** Alta de un cliente del CMS (compacta, misma rejilla que la ficha). Variables: $v, $tariffs, $methods, $series, $errors, $nifWarn. */
+$in = fn(string $k, string $label, int $span, int $max, string $extra = '') => '<div class="cfld s' . $span . '"><label class="cl" for="n-' . e($k) . '">' . e($label) . '</label><input id="n-' . e($k) . '" name="' . e($k) . '" value="' . e((string)$v[$k]) . '" maxlength="' . $max . '"' . $extra . '></div>';
 ?>
-<div class="head"><h1><?= $isNew ? 'Nuevo cliente' : 'Modificar cliente ' . e((string)$v['cust_code']) ?></h1><a class="btn ghost" href="<?= e(url($back)) ?>">Volver</a></div>
+<div class="head"><h1>Nuevo cliente</h1><a class="btn ghost" href="<?= e(url('/admin/clientes')) ?>">Volver</a></div>
 <?php foreach ($errors as $er): ?><p class="flash err"><?= e($er) ?></p><?php endforeach; ?>
-<?php if ($nifWarn !== '' && !$isNew && !$errors): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><?= e($nifWarn) ?></span></p><?php endif; ?>
-<form method="post" action="<?= e(url($isNew ? '/admin/clientes/nuevo' : $back . '/modificar')) ?>" class="cfgf" autocomplete="off">
+<form method="post" action="<?= e(url('/admin/clientes/nuevo')) ?>" class="cfc is-edit" autocomplete="off">
   <?= csrf_field() ?>
-  <fieldset>
-    <legend>Datos</legend>
-    <div class="g3">
-      <label>Código <input name="cust_code" value="<?= e((string)$v['cust_code']) ?>" maxlength="40" required<?= $isNew ? '' : ' readonly' ?>><?php if ($isNew): ?><small>El siguiente libre. Si lo cambias, con una letra delante (los solo números son de NCS).</small><?php endif; ?></label>
-      <?= $f('name', 'Nombre o razón social', 255, ' required') ?>
-      <?= $f('trade_name', 'Nombre comercial', 255) ?>
-      <label>NIF <input name="nif" value="<?= e((string)$v['nif']) ?>" maxlength="40"><small>DNI, NIE o CIF. Si el formato no cuadra, solo se avisa.</small></label>
-      <?= $f('contact', 'Persona de contacto', 255) ?>
-      <?= $f('email', 'Email', 190, ' type="email"') ?>
-      <?= $f('phone', 'Teléfono', 40) ?>
-      <?= $f('phone2', 'Teléfono 2', 40) ?>
+  <section class="cc-card"><h2>General</h2>
+    <div class="cgrid">
+      <?= $in('cust_code', 'Código', 2, 40, ' required') ?>
+      <?= $in('nif', 'NIF', 2, 40) ?>
+      <?= $in('name', 'Nombre o razón social', 4, 255, ' required') ?>
+      <?= $in('trade_name', 'Nombre comercial', 4, 255) ?>
+      <?= $in('address', 'Dirección', 6, 255) ?>
+      <?= $in('postcode', 'C. postal', 1, 20) ?>
+      <?= $in('city', 'Población', 3, 255) ?>
+      <?= $in('province', 'Provincia', 2, 255) ?>
+      <?= $in('country', 'País', 2, 255) ?>
     </div>
-    <div class="g4">
-      <?= $f('address', 'Dirección', 255) ?>
-      <?= $f('postcode', 'Código postal', 20) ?>
-      <?= $f('city', 'Población', 255) ?>
-      <?= $f('province', 'Provincia', 255) ?>
-      <?= $f('country', 'País', 255) ?>
+    <p class="cc-note"><small>El código propuesto es el siguiente libre; con letra delante (nunca solo números: esos son los de NCS). DNI, NIE o CIF: si el formato no cuadra, solo se avisa.</small></p>
+  </section>
+  <section class="cc-card"><h2>Contacto</h2>
+    <div class="cgrid">
+      <?= $in('phone', 'Teléfono', 3, 40, ' inputmode="tel"') ?>
+      <?= $in('phone2', 'Teléfono 2', 3, 40, ' inputmode="tel"') ?>
+      <?= $in('email', 'Correo', 3, 190, ' type="email"') ?>
+      <?= $in('contact', 'Persona de contacto', 3, 255) ?>
     </div>
-  </fieldset>
-  <fieldset>
-    <legend>Venta</legend>
-    <div class="g4">
-      <label>Tarifa <select name="tariff"><option value="0">—</option><?php foreach ($tariffs as $t): ?><option value="<?= (int)$t['num'] ?>"<?= (int)$v['tariff'] === (int)$t['num'] ? ' selected' : '' ?>><?= (int)$t['num'] ?> · <?= e($t['name']) ?></option><?php endforeach; ?></select></label>
-      <label>Forma de pago <select name="pay_code"><option value="">—</option><?php foreach ($methods as $m): ?><option value="<?= e($m['code']) ?>"<?= (string)$v['pay_code'] === (string)$m['code'] ? ' selected' : '' ?>><?= e($m['code']) ?> · <?= e($m['name'] !== '' ? $m['name'] : 'sin nombre') ?></option><?php endforeach; ?></select></label>
-      <label>Día de pago <input name="pay_days" value="<?= e((string)($v['pay_days'] ?? '')) ?>" maxlength="20" placeholder="Ej.: 5 o 5,25"><small>Opcional. Los vencimientos se pasan al siguiente de esos días.</small></label>
-      <label>Descuento habitual (%) <input name="disc" value="<?= e((string)$v['disc_txt']) ?>" maxlength="6" inputmode="decimal"></label>
-      <div>
+  </section>
+  <section class="cc-card"><h2>Comercial</h2>
+    <div class="cgrid">
+      <div class="cfld s2"><label class="cl" for="n-tariff">Tarifa</label><select id="n-tariff" name="tariff"><option value="0">—</option><?php foreach ($tariffs as $t): ?><option value="<?= (int)$t['num'] ?>"<?= (int)$v['tariff'] === (int)$t['num'] ? ' selected' : '' ?>><?= (int)$t['num'] ?> · <?= e($t['name']) ?></option><?php endforeach; ?></select></div>
+      <div class="cfld s3"><label class="cl" for="n-pay">Forma de pago</label><select id="n-pay" name="pay_code"><option value="">—</option><?php foreach ($methods as $m): ?><option value="<?= e($m['code']) ?>"<?= (string)$v['pay_code'] === (string)$m['code'] ? ' selected' : '' ?>><?= e($m['code']) ?> · <?= e($m['name'] !== '' ? $m['name'] : 'sin nombre') ?></option><?php endforeach; ?></select></div>
+      <?= $in('pay_days', 'Día de pago', 2, 20, ' placeholder="Ej.: 5 o 5,25"') ?>
+      <div class="cfld s2"><label class="cl" for="n-disc">Descuento %</label><input id="n-disc" name="disc" value="<?= e((string)$v['disc_txt']) ?>" maxlength="6" inputmode="decimal"></div>
+      <div class="cfld s3"><label class="cl" for="n-ser">Serie por defecto</label><select id="n-ser" name="def_series"><option value="0">— la de cada tipo —</option><?php foreach ($series as $s): ?><option value="<?= (int)$s['id'] ?>"<?= (int)$v['def_series'] === (int)$s['id'] ? ' selected' : '' ?>><?= e($s['letter']) ?> · <?= e($s['descr']) ?></option><?php endforeach; ?></select></div>
+      <div class="cfld s12"><label class="cl" for="n-dn">Notas para documentos <span class="muted">(se proponen en las observaciones de sus documentos nuevos)</span></label><textarea id="n-dn" name="doc_notes" rows="2" maxlength="1000"><?= e((string)$v['doc_notes']) ?></textarea></div>
+      <div class="cfld s12"><span class="cl">Estado</span>
         <label class="check"><input type="checkbox" name="blocked" value="1"<?= (int)$v['blocked'] === 1 ? ' checked' : '' ?>> <span>Bloqueado</span></label>
-        <label class="check"><input type="checkbox" name="ended" value="1"<?= (int)$v['ended_day'] > 0 ? ' checked' : '' ?>> <span>De baja</span></label>
-      </div>
+        <label class="check"><input type="checkbox" name="ended" value="1"<?= (int)$v['ended_day'] > 0 ? ' checked' : '' ?>> <span>De baja</span></label></div>
     </div>
-  </fieldset>
-  <div class="savebar"><button class="btn" type="submit">Guardar</button></div>
+  </section>
+  <div class="savebar"><button class="btn" type="submit">Crear cliente</button></div>
 </form>

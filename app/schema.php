@@ -121,7 +121,12 @@ const SCHEMA_ERP_DDL = "
         ended_day {I} NOT NULL DEFAULT 0,
         origin {S} NOT NULL DEFAULT 'ncs',
         row_hash {S} NOT NULL,
-        synced_at {BIG} NOT NULL DEFAULT 0
+        synced_at {BIG} NOT NULL DEFAULT 0,
+        rev {I} NOT NULL DEFAULT 0,
+        updated_by {S} NOT NULL DEFAULT '',
+        updated_at {BIG} NOT NULL DEFAULT 0,
+        def_series {I} NOT NULL DEFAULT 0,
+        doc_notes {T} NOT NULL DEFAULT ''
     );
     CREATE TABLE erp_invoices (
         id {ID},
@@ -882,6 +887,16 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    // v36: ficha de cliente editable: versión (avisa de cambios simultáneos), quién y cuándo, serie por defecto y notas para documentos
+    if ($ver < 36 && in_array('erp_customers', db_tables($pdo), true)) {
+        $have = db_columns($pdo, 'erp_customers');
+        foreach (['rev' => '{I} NOT NULL DEFAULT 0', 'updated_by' => "{S} NOT NULL DEFAULT ''", 'updated_at' => '{BIG} NOT NULL DEFAULT 0',
+                  'def_series' => '{I} NOT NULL DEFAULT 0', 'doc_notes' => "{T} NOT NULL DEFAULT ''"] as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'erp_customers', $col, $def);
+            }
         }
     }
     // v35: campos libres de las líneas de documentos (Lote…): valores en JSON en la columna «extra»

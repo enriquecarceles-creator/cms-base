@@ -145,10 +145,72 @@ function admin_client(string $code): void
         return;
     }
     $self = '/admin/clientes/' . rawurlencode($code);
+    $formV = null; // datos de un guardado fallido (se vuelve a enseñar la edición con lo escrito)
+    $formErr = [];
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $act = (string)($_POST['action'] ?? '');
+        $ownOnly = !erp_customer_is_cms($c);
+        if ($act === 'save') { // guardar la ficha (todo en un cliente del CMS; solo día de pago, serie y notas para documentos en uno de NCS)
+            $tariffs = array_values(array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$c['tariff']));
+            $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$c['pay_code']));
+            $formV = erp_customer_read_post($c, $_POST, $tariffs, $methods, $ownOnly, $formErr);
+            $newCode = $code;
+            if (!$ownOnly) {
+                $cc = mb_substr(trim((string)($_POST['cust_code'] ?? $code)), 0, 40);
+                $formV['cust_code'] = $cc;
+                if ($cc !== $code) {
+                    if (erp_customer_docs_count($code) > 0) {
+                        $formErr[] = 'El código no se puede cambiar: el cliente ya tiene documentos.';
+                    } elseif (($err = erp_customer_code_error($cc)) !== '') {
+                        $formErr[] = $err;
+                    } else {
+                        $newCode = $cc;
+                    }
+                }
+            }
+            if (!$formErr) {
+                $msg = erp_customer_save($c, $formV, $newCode, (int)($_POST['stamp'] ?? -1), $ownOnly);
+                if ($msg !== '') {
+                    $formErr[] = $msg;
+                }
+            }
+            if (!$formErr) {
+                $warn = $ownOnly ? '' : erp_nif_warning((string)$formV['nif']);
+                $dups = $ownOnly ? [] : erp_customer_nif_dups((string)$formV['nif'], (int)$c['id']);
+                flash('Cliente ' . $newCode . ' guardado.' . ($warn !== '' ? ' Aviso: ' . $warn : '') . ($dups ? ' Aviso: ese NIF también lo tiene ' . implode(', ', $dups) . '.' : ''));
+                redirect('/admin/clientes/' . rawurlencode($newCode));
+            }
+        } elseif ($act === 'block' || $act === 'unblock') {
+            if ($ownOnly) {
+                flash('Este cliente viene de NCS: se bloquea o desbloquea allí y llega al sincronizar.', 'err');
+            } else {
+                $u = current_user();
+                $db->prepare('UPDATE erp_customers SET blocked = ?, rev = rev + 1, updated_by = ?, updated_at = ? WHERE id = ?')
+                    ->execute([$act === 'block' ? 1 : 0, mb_substr((string)($u['username'] ?? ''), 0, 100), time(), (int)$c['id']]);
+                flash($act === 'block' ? 'Cliente bloqueado: no se podrá elegir en documentos nuevos.' : 'Cliente desbloqueado.');
+            }
+            redirect($self);
+        } elseif ($act === 'delete') {
+            if ($ownOnly) {
+                flash('Este cliente viene de NCS: volvería al sincronizar. Bloquéalo allí si ya no se usa.', 'err');
+                redirect($self);
+            } elseif (empty($_POST['confirm'])) {
+                flash('Marca la casilla para confirmar el borrado.', 'err');
+                redirect($self);
+            } elseif (erp_customer_docs_count($code) > 0) {
+                flash('No se puede borrar: el cliente tiene documentos. Puedes bloquearlo.', 'err');
+                redirect($self);
+            } else {
+                $db->beginTransaction();
+                $db->prepare('DELETE FROM erp_notes WHERE cust_code = ?')->execute([$code]);
+                $db->prepare('DELETE FROM erp_customers WHERE id = ?')->execute([(int)$c['id']]);
+                $db->commit();
+                flash('Cliente ' . $code . ' borrado.');
+                redirect('/admin/clientes');
+            }
+        }
         if ($act === 'export') {
             erp_client_export($c, !empty($_POST['lineas']));
         }
@@ -172,7 +234,7 @@ function admin_client(string $code): void
                     ->execute([$code, $note, (int)$_SESSION['uid'], mb_substr((string)$u['username'], 0, 100), time()]);
                 flash('Nota guardada.');
             }
-            redirect($self . '?pestana=notas');
+            redirect($self . '#notas');
         }
         if ($act === 'note_del') {
             $st = $db->prepare('SELECT id, user_id FROM erp_notes WHERE id = ? AND cust_code = ?');
@@ -184,9 +246,16 @@ function admin_client(string $code): void
             } else {
                 flash('No puedes borrar esa nota: solo su autor o un administrador.', 'err');
             }
-            redirect($self . '?pestana=notas');
+            redirect($self . '#notas');
         }
-        redirect($self);
+        if ($formV === null) {
+            redirect($self);
+        }
+    }
+    $tabReq = (string)($_GET['pestana'] ?? '');
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' || $tabReq === '' || $tabReq === 'notas') { // la ficha (los análisis de compras siguen en ?pestana=resumen|facturas|articulos)
+        admin_client_card($c, $self, $formV !== null || !empty($_GET['editar']), $formV, $formErr);
+        return;
     }
 
     $tab = (string)($_GET['pestana'] ?? 'resumen');
@@ -337,4 +406,72 @@ function admin_client(string $code): void
         $v += ['notes' => $st->fetchAll()];
     }
     admin_render('client', $v);
+}
+
+/** Documentos de un cliente para su ficha: pedidos, albaranes y facturas (CMS) y facturas importadas de NCS, de más reciente a más antiguo. */
+function erp_client_documents(string $code, string $type, int $limit = 100): array
+{
+    $db = db();
+    $rows = [];
+    $kinds = ['pedido' => ['pedido'], 'albaran' => ['albaran'], 'factura' => ['factura', 'simplificada', 'rectificativa']];
+    $in = $kinds[$type] ?? array_merge(...array_values($kinds));
+    $st = $db->prepare('SELECT id, doc_type, doc_code, status, doc_day, total_cents, is_test FROM doc_headers WHERE cust_code = ? AND doc_type IN (' . implode(',', array_fill(0, count($in), '?')) . ') ORDER BY doc_day DESC, id DESC LIMIT ' . $limit);
+    $st->execute(array_merge([$code], $in));
+    foreach ($st->fetchAll() as $r) {
+        $k = DOCS_KINDS[$r['doc_type']] ?? null;
+        $rows[] = ['day' => (int)$r['doc_day'], 'id' => (int)$r['id'], 'label' => $k ? $k['label'] : $r['doc_type'], 'code' => $r['status'] === 'borrador' ? '(borrador)' : (string)$r['doc_code'],
+            'total' => (int)$r['total_cents'], 'status' => (int)$r['is_test'] === 1 ? 'prueba' : (string)$r['status'], 'url' => ($k ? $k['path'] : '/admin/pedidos') . '/' . (int)$r['id']];
+    }
+    if ($type === '' || $type === 'factura') {
+        $st = $db->prepare("SELECT id, inv_number, inv_day, total_cents, annulled FROM erp_invoices WHERE cust_code = ? AND origin = 'ncs' ORDER BY inv_day DESC, id DESC LIMIT " . $limit);
+        $st->execute([$code]);
+        foreach ($st->fetchAll() as $r) {
+            $rows[] = ['day' => (int)$r['inv_day'], 'id' => 0, 'label' => 'Factura (NCS)', 'code' => (string)$r['inv_number'], 'total' => (int)$r['total_cents'],
+                'status' => (int)$r['annulled'] === 1 ? 'anulada' : ($r['total_cents'] < 0 ? 'devolución' : 'emitida'), 'url' => '/admin/ventas/' . erp_inv_seg((string)$r['inv_number'])];
+        }
+    }
+    usort($rows, fn($a, $b) => $b['day'] <=> $a['day'] ?: $b['id'] <=> $a['id']);
+    return array_slice($rows, 0, $limit);
+}
+
+/** Datos rápidos de la cabecera: facturado este año, pendiente de cobro, último documento y número de documentos. */
+function erp_client_quick(array $c): array
+{
+    $db = db();
+    $code = (string)$c['cust_code'];
+    $year = (int)date('Y');
+    $st = $db->prepare('SELECT COALESCE(SUM(total_cents), 0) FROM erp_invoices WHERE cust_code = ? AND annulled = 0 AND inv_year = ?');
+    $st->execute([$code, $year]);
+    $billed = (int)$st->fetchColumn();
+    $st = $db->prepare('SELECT COALESCE(SUM(i.total_cents), 0) FROM erp_invoices i LEFT JOIN erp_invoice_state s ON s.invoice_id = i.id
+        WHERE i.cust_code = ? AND i.annulled = 0 AND i.total_cents > 0 AND COALESCE(s.paid, 0) = 0');
+    $st->execute([$code]);
+    $pending = (int)$st->fetchColumn();
+    $last = erp_client_documents($code, '', 1)[0] ?? null;
+    return ['year' => $year, 'billed' => $billed, 'pending' => $pending, 'last' => $last, 'count' => erp_customer_docs_count($code)];
+}
+
+/** Ficha de cliente en modo consulta o edición. $form/$errors: datos y avisos de un guardado fallido (se vuelve a enseñar la edición con lo escrito). */
+function admin_client_card(array $c, string $self, bool $edit, ?array $form, array $errors): void
+{
+    $db = db();
+    $code = (string)$c['cust_code'];
+    $own = !erp_customer_is_cms($c);
+    $tariffs = array_values(array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$c['tariff']));
+    $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$c['pay_code']));
+    $series = array_filter(series_all(), fn($s) => (int)$s['is_active'] === 1 || (int)$s['id'] === (int)$c['def_series']);
+    $type = (string)($_GET['tipo'] ?? '');
+    $type = in_array($type, ['pedido', 'albaran', 'factura'], true) ? $type : '';
+    $st = $db->prepare('SELECT id, note, user_id, username, created_at FROM erp_notes WHERE cust_code = ? ORDER BY created_at DESC, id DESC LIMIT 200');
+    $st->execute([$code]);
+    $f = $form ?? $c;
+    $f['disc_txt'] = $form['disc_txt'] ?? rtrim(rtrim(number_format((int)$f['disc_bp'] / 100, 2, ',', ''), '0'), ',');
+    $nDocs = erp_customer_docs_count($code);
+    $nifDups = erp_customer_nif_dups((string)$c['nif'], (int)$c['id']);
+    admin_render('client_card', [
+        'c' => $c, 'f' => $f, 'edit' => $edit, 'own' => $own, 'errors' => $errors, 'self' => $self, 'tariffs' => $tariffs, 'methods' => $methods, 'series' => $series,
+        'quick' => erp_client_quick($c), 'docs' => erp_client_documents($code, $type), 'docType' => $type, 'notes' => $st->fetchAll(), 'nDocs' => $nDocs,
+        'nb' => erp_client_neighbours($c), 'isRetail' => erp_retail_code() === $code, 'nifWarn' => erp_nif_warning((string)$c['nif']), 'nifDups' => $nifDups,
+        'crumb' => $c['trade_name'] !== '' ? $c['trade_name'] : ($c['name'] !== '' ? $c['name'] : $code), 'title' => 'Cliente',
+    ]);
 }

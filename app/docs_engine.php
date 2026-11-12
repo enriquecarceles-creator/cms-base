@@ -511,6 +511,13 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
     // Serie: solo al crear
     if ($isNew) {
         $sid = (int)($h['series_id'] ?? 0);
+        $pickC = trim((string)($h['cust_code'] ?? ''));
+        if ($pickC !== '' && $pickC !== (string)($h['cust_prev'] ?? '')) { // cliente elegido ahora: su serie por defecto, si es de este tipo y está activa
+            $cs = ($cc = docs_customer($pickC)) ? series_get((int)$cc['def_series']) : null;
+            if ($cs && $cs['doc_type'] === $kind && (int)$cs['is_active'] === 1) {
+                $sid = (int)$cs['id'];
+            }
+        }
         $s = series_get($sid);
         if (!$s || $s['doc_type'] !== $kind || (int)$s['is_active'] !== 1) {
             $errors[] = 'Elige una serie activa de ' . mb_strtolower(DOCS_KINDS[$kind]['plural']) . ' (Configuración → Series).';
@@ -598,6 +605,9 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
     $doc['with_re'] = !empty($h['with_re']) ? 1 : 0;
     $doc['ref_text'] = erp_txt($h['ref_text'] ?? '', 100);
     $doc['notes'] = mb_substr(trim(str_replace("\r", '', (string)($h['notes'] ?? ''))), 0, 2000);
+    if ($cust && $doc['notes'] === '' && trim((string)$cust['doc_notes']) !== '' && ($isNew || $code !== (string)($h['cust_prev'] ?? $saved['cust_code']))) {
+        $doc['notes'] = mb_substr(trim((string)$cust['doc_notes']), 0, 2000); // notas para documentos del cliente: se proponen al elegirlo
+    }
     if (docs_is_invoice($kind)) {
         $doc['vat_note'] = erp_txt($h['vat_note'] ?? '', 200); // mención legal (exención, inversión del sujeto pasivo…)
         $op = trim((string)($h['op_day'] ?? ''));
@@ -1303,6 +1313,14 @@ function admin_docs_form(string $kind, ?array $saved): void
     $k = DOCS_KINDS[$kind];
     $isNew = $saved === null;
     $saved ??= docs_blank($kind);
+    if ($isNew && $_SERVER['REQUEST_METHOD'] === 'GET' && ($pc = docs_customer((string)($_GET['cliente'] ?? ''))) && (int)$pc['blocked'] === 0 && (int)$pc['ended_day'] === 0) { // «Nuevo documento» desde la ficha del cliente
+        $saved = array_merge($saved, docs_customer_snapshot($pc), ['cust_code' => (string)$pc['cust_code'], 'tariff' => (int)$pc['tariff'] > 0 ? (int)$pc['tariff'] : $saved['tariff'],
+            'pay_code' => (string)$pc['pay_code'] !== '' ? (string)$pc['pay_code'] : $saved['pay_code'], 'notes' => mb_substr(trim((string)$pc['doc_notes']), 0, 2000)]);
+        $ps = series_get((int)$pc['def_series']);
+        if ($ps && $ps['doc_type'] === $kind && (int)$ps['is_active'] === 1) {
+            $saved['series_id'] = (int)$ps['id'];
+        }
+    }
     $savedLines = $isNew ? [] : docs_lines((int)$saved['id']);
     $self = $isNew ? $k['path'] . '/nuevo' . (docs_is_invoice($kind) ? '?tipo=' . $kind : '') : $k['path'] . '/' . (int)$saved['id'];
     $locked = docs_locked_reason($saved);

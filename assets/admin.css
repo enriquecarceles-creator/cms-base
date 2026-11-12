@@ -636,3 +636,37 @@ form.cfgf .lg{display:block;font-size:.8rem;margin-bottom:4px}
 .modsw{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:8px 14px;margin:0 0 12px}
 .modsw.off{border-color:#d9a400;background:#fff8e1}
 .modsw small{flex-basis:100%;color:var(--steel);font-size:.76rem}
+
+/* Ficha de cliente compacta (estilo ERP) */
+.cfc{display:block}
+.cc-head{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:flex-start;gap:10px 16px;flex-wrap:wrap;background:var(--bg,#f6f5f1);padding:8px 0 8px;border-bottom:1px solid var(--line);margin:0 0 10px}
+.cc-id h1{margin:0;font-size:1.25rem;line-height:1.25}.cc-code{color:var(--steel);font-weight:500;margin-right:6px}
+.cc-back{margin:0 0 2px;font-size:.8rem}.cc-trade{margin:0;font-size:.85rem;color:var(--steel)}
+.cc-meta{margin:4px 0 0;font-size:.82rem;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.cc-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cc-menu{position:relative}.cc-menu>summary{list-style:none;cursor:pointer}.cc-menu>summary::-webkit-details-marker{display:none}
+.cc-pop{position:absolute;right:0;top:100%;margin-top:4px;z-index:30;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:12em;box-shadow:0 6px 18px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:6px}
+.cc-pop a{padding:3px 4px;text-decoration:none}
+.btn.danger,.cc-menu .danger{color:var(--err)}
+.cc-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px}
+.cc-quick>div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 12px}
+.cc-quick strong{display:block;font-size:1rem;line-height:1.3;overflow-wrap:anywhere}.cc-quick strong.warn{color:var(--err)}
+.cl{display:block;font-size:.7rem;letter-spacing:.03em;text-transform:uppercase;color:var(--steel);margin:0 0 1px}
+.cc-nav{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.85rem;margin:0 0 10px}.cc-nav .grow{flex:1}
+.cc-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 14px 10px;margin:0 0 10px;scroll-margin-top:90px}
+.cc-card h2{margin:0 0 6px;font-size:.92rem}
+.cgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px 12px}
+.cfld{min-width:0}.cfld.s1{grid-column:span 1}.cfld.s2{grid-column:span 2}.cfld.s3{grid-column:span 3}.cfld.s4{grid-column:span 4}.cfld.s6{grid-column:span 6}.cfld.s12{grid-column:1/-1}
+.cfc input:not([type=checkbox]),.cfc select{height:30px;padding:3px 8px;font-size:.88rem;border-radius:7px;width:100%;margin:0}
+.cfc textarea{padding:5px 8px;font-size:.88rem;border-radius:7px;width:100%;margin:0}
+.cfc label.check{display:flex;gap:7px;align-items:center;font-size:.86rem;margin:2px 0}.cfc label.check input{width:auto;height:auto}
+.cv{display:block;font-size:.92rem;min-height:30px;line-height:30px;overflow-wrap:anywhere}.cv a{text-decoration:none}
+.cc-note{margin:4px 0 0}
+.cc-filter{display:flex;gap:6px;margin:0 0 6px;font-size:.85rem}.cc-filter a{padding:2px 10px;border:1px solid var(--line);border-radius:999px;text-decoration:none;color:var(--steel)}.cc-filter a[aria-current]{background:var(--ink,#1c1b19);color:#fff;border-color:var(--ink,#1c1b19)}
+.cc-tbl td,.cc-tbl th{padding:4px 8px}
+.cc-noteform{display:flex;gap:8px;align-items:flex-start}.cc-noteform textarea{flex:1}
+.cc-foot{margin:4px 0 20px;text-align:right}
+.cl-tbl td,.cl-tbl th{padding:4px 8px}.cl-act{white-space:nowrap;text-align:right}
+@media (max-width:1100px){.cfld.s1,.cfld.s2{grid-column:span 3}.cfld.s3{grid-column:span 4}.cfld.s4{grid-column:span 6}.cfld.s6{grid-column:1/-1}.cc-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.cgrid{grid-template-columns:1fr}.cfld.s1,.cfld.s2,.cfld.s3,.cfld.s4,.cfld.s6,.cfld.s12{grid-column:1/-1}.cc-head{position:static}.cc-quick{grid-template-columns:1fr 1fr}.cc-pop{position:static;box-shadow:none}.cc-noteform{flex-direction:column}.cc-noteform textarea{width:100%}}
+.cl .muted{text-transform:none;letter-spacing:0;font-size:.72rem}

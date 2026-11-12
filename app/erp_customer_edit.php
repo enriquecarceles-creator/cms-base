@@ -82,34 +82,46 @@ function erp_customer_is_cms(array $c): bool
     return (string)($c['origin'] ?? 'ncs') === 'cms';
 }
 
-/**
- * /admin/clientes/nuevo y /admin/clientes/<código>/modificar. $c = cliente guardado (null = nuevo). El acceso (erp_guard) ya está comprobado.
- * Solo se modifican los creados en el CMS: los de NCS se cambian en NCS y llegan sincronizando.
- */
-function admin_client_edit(?array $c): void
+/** Campos de la ficha que son propios del CMS (valen también en clientes de NCS: la sincronización no los toca). */
+const ERP_CUST_OWN = ['pay_days', 'def_series', 'doc_notes'];
+
+/** Cuántos documentos tiene un cliente: los del CMS (borradores incluidos) y las facturas importadas de NCS. */
+function erp_customer_docs_count(string $code): int
 {
     $db = db();
-    $isNew = $c === null;
-    if (!$isNew && !erp_customer_is_cms($c)) {
-        flash('Este cliente viene de NCS: sus datos se cambian en NCS y llegan al sincronizar. Las notas internas sí se escriben aquí, en su pestaña.', 'err');
-        redirect('/admin/clientes/' . rawurlencode((string)$c['cust_code']));
+    $st = $db->prepare('SELECT COUNT(*) FROM doc_headers WHERE cust_code = ?');
+    $st->execute([$code]);
+    $n = (int)$st->fetchColumn();
+    $st = $db->prepare("SELECT COUNT(*) FROM erp_invoices WHERE cust_code = ? AND origin = 'ncs'");
+    $st->execute([$code]);
+    return $n + (int)$st->fetchColumn();
+}
+
+/** Otros clientes con el mismo NIF (sin espacios, puntos ni guiones, sin mayúsculas): lista de códigos. */
+function erp_customer_nif_dups(string $nif, int $exceptId): array
+{
+    $n = strtoupper(str_replace([' ', '.', '-'], '', $nif));
+    if ($n === '') {
+        return [];
     }
-    $tariffs = array_values(array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (!$isNew && (int)$t['num'] === (int)$c['tariff'])));
-    $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (!$isNew && (string)$m['code'] === (string)$c['pay_code'])));
-    $v = $c ?? ['cust_code' => erp_customer_next_code(), 'name' => '', 'trade_name' => '', 'nif' => '', 'contact' => '', 'phone' => '', 'phone2' => '', 'email' => '',
-        'address' => '', 'postcode' => '', 'city' => '', 'province' => '', 'country' => '',
-        'tariff' => docp_int('tariff'), 'pay_code' => docp('pay_method'), 'pay_days' => '', 'disc_bp' => 0, 'blocked' => 0, 'ended_day' => 0];
-    $v['disc_txt'] = rtrim(rtrim(number_format((int)$v['disc_bp'] / 100, 2, ',', ''), '0'), ',');
-    $errors = [];
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        csrf_check();
-        $in = $_POST;
+    $st = db()->prepare("SELECT cust_code FROM erp_customers WHERE id <> ? AND UPPER(REPLACE(REPLACE(REPLACE(nif, ' ', ''), '.', ''), '-', '')) = ? ORDER BY cust_code LIMIT 5");
+    $st->execute([$exceptId, $n]);
+    return $st->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Lee y valida el formulario de cliente sobre $v (los datos actuales o los de un cliente nuevo). $ownOnly: solo los campos propios del CMS
+ * (clientes de NCS). Rellena $errors. Devuelve $v con lo enviado.
+ */
+function erp_customer_read_post(array $v, array $in, array $tariffs, array $methods, bool $ownOnly, array &$errors): array
+{
+    if (!$ownOnly) {
         foreach (ERP_CUST_FIELDS as $k => $max) {
             $v[$k] = erp_txt($in[$k] ?? '', $max);
         }
         $v['nif'] = strtoupper(str_replace([' ', '.', '-'], '', $v['nif']));
-        $v['blocked'] = !empty($in['blocked']) ? 1 : 0;
         $wasEnded = (int)($v['ended_day'] ?? 0) > 0;
+        $v['blocked'] = !empty($in['blocked']) ? 1 : 0;
         $v['ended_day'] = !empty($in['ended']) ? ($wasEnded ? (int)$v['ended_day'] : (int)date('Ymd')) : 0;
         $t = (int)($in['tariff'] ?? 0);
         $v['tariff'] = array_filter($tariffs, fn($x) => (int)$x['num'] === $t) ? $t : 0;
@@ -119,12 +131,6 @@ function admin_client_edit(?array $c): void
             $pc = '';
         }
         $v['pay_code'] = $pc;
-        $pd = dues_parse_days((string)($in['pay_days'] ?? ''));
-        if ($pd === null) {
-            $errors[] = 'El día de pago tiene que ser un día del mes (1 a 31); si son varios, sepáralos con comas (por ejemplo 5,25). Como mucho ' . DUES_MAX_PAYDAYS . '.';
-            $pd = [];
-        }
-        $v['pay_days'] = implode(',', $pd);
         $v['disc_txt'] = trim((string)($in['disc'] ?? ''));
         $dn = str_replace(',', '.', $v['disc_txt']);
         $d = $v['disc_txt'] === '' ? 0.0 : (is_numeric($dn) ? (float)$dn : -1.0);
@@ -139,38 +145,108 @@ function admin_client_edit(?array $c): void
         if ($v['email'] !== '' && !filter_var($v['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'El email no es válido.';
         }
-        if ($isNew) {
-            $v['cust_code'] = mb_substr(trim((string)($in['cust_code'] ?? '')), 0, 40);
-            if (($err = erp_customer_code_error($v['cust_code'])) !== '') {
-                $errors[] = $err;
-            }
+    }
+    $pd = dues_parse_days((string)($in['pay_days'] ?? ''));
+    if ($pd === null) {
+        $errors[] = 'El día de pago tiene que ser un día del mes (1 a 31); si son varios, sepáralos con comas (por ejemplo 5,25). Como mucho ' . DUES_MAX_PAYDAYS . '.';
+        $pd = [];
+    }
+    $v['pay_days'] = implode(',', $pd);
+    $ds = (int)($in['def_series'] ?? 0);
+    $s = $ds > 0 ? series_get($ds) : null;
+    if ($ds > 0 && (!$s || ((int)$s['is_active'] !== 1 && $ds !== (int)($v['def_series'] ?? 0)))) {
+        $errors[] = 'La serie por defecto tiene que ser una serie activa.';
+        $ds = 0;
+    }
+    $v['def_series'] = $ds;
+    $v['doc_notes'] = mb_substr(trim(str_replace("\r", '', (string)($in['doc_notes'] ?? ''))), 0, 1000);
+    return $v;
+}
+
+/** Pone al día los datos del cliente en sus BORRADORES (las facturas emitidas, pedidos y albaranes confirmados conservan lo que llevaban). */
+function erp_customer_refresh_drafts(array $c): int
+{
+    $snap = docs_customer_snapshot($c);
+    $st = db()->prepare("UPDATE doc_headers SET cust_name = ?, cust_nif = ?, cust_address = ?, cust_postcode = ?, cust_city = ?, cust_province = ?, cust_email = ?, rev = rev + 1
+        WHERE cust_code = ? AND status = 'borrador'");
+    $st->execute([mb_substr((string)$snap['cust_name'], 0, 255), mb_substr((string)$snap['cust_nif'], 0, 40), mb_substr((string)$snap['cust_address'], 0, 255),
+        mb_substr((string)$snap['cust_postcode'], 0, 20), mb_substr((string)$snap['cust_city'], 0, 120), mb_substr((string)$snap['cust_province'], 0, 120),
+        mb_substr((string)$snap['cust_email'], 0, 190), (string)$c['cust_code']]);
+    return $st->rowCount();
+}
+
+/** Guarda la ficha de un cliente existente. Devuelve '' si fue bien, o el mensaje de error (conflicto de versión incluido). Lo llama admin_client(). */
+function erp_customer_save(array $c, array $v, string $newCode, int $stamp, bool $ownOnly): string
+{
+    $db = db();
+    $u = current_user();
+    $by = mb_substr((string)($u['username'] ?? ''), 0, 100);
+    $cols = $ownOnly ? ERP_CUST_OWN : [...array_keys(ERP_CUST_FIELDS), 'tariff', 'pay_code', 'disc_bp', 'blocked', 'ended_day', ...ERP_CUST_OWN];
+    $db->beginTransaction();
+    try {
+        $st = $db->prepare('UPDATE erp_customers SET ' . implode(' = ?, ', $cols) . ' = ?, rev = rev + 1, updated_by = ?, updated_at = ? WHERE id = ? AND rev = ?');
+        $st->execute([...array_map(fn($k) => $v[$k], $cols), $by, time(), (int)$c['id'], $stamp]);
+        if ($st->rowCount() === 0) {
+            $db->rollBack();
+            return 'Otro usuario ha modificado este cliente mientras lo editabas. Recarga la página para ver sus cambios (no se ha guardado nada tuyo).';
+        }
+        if (!$ownOnly && $newCode !== (string)$c['cust_code']) { // el código solo cambia si no tiene documentos (se comprueba antes)
+            $db->prepare('UPDATE erp_customers SET cust_code = ? WHERE id = ?')->execute([$newCode, (int)$c['id']]);
+            $db->prepare('UPDATE erp_notes SET cust_code = ? WHERE cust_code = ?')->execute([$newCode, (string)$c['cust_code']]);
+        }
+        if (!$ownOnly) {
+            erp_customer_refresh_drafts(array_merge($v, ['cust_code' => $newCode]));
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('cms: guardar cliente: ' . get_class($e));
+        return 'No se pudo guardar (¿otro cliente con ese código?). Inténtalo de nuevo.';
+    }
+    return '';
+}
+
+/**
+ * /admin/clientes/nuevo. El acceso (erp_guard) ya está comprobado. La edición de un cliente existente está en su ficha (?editar=1, admin_client()).
+ */
+function admin_client_edit(?array $c): void
+{
+    $db = db();
+    if ($c !== null) { // dirección antigua /modificar: ahora se edita en la ficha
+        redirect('/admin/clientes/' . rawurlencode((string)$c['cust_code']) . '?editar=1');
+    }
+    $tariffs = array_values(array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1));
+    $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1));
+    $v = ['cust_code' => erp_customer_next_code(), 'name' => '', 'trade_name' => '', 'nif' => '', 'contact' => '', 'phone' => '', 'phone2' => '', 'email' => '',
+        'address' => '', 'postcode' => '', 'city' => '', 'province' => '', 'country' => '', 'tariff' => docp_int('tariff'), 'pay_code' => docp('pay_method'),
+        'pay_days' => '', 'disc_bp' => 0, 'blocked' => 0, 'ended_day' => 0, 'def_series' => 0, 'doc_notes' => ''];
+    $v['disc_txt'] = '';
+    $errors = [];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        $v = erp_customer_read_post($v, $_POST, $tariffs, $methods, false, $errors);
+        $v['cust_code'] = mb_substr(trim((string)($_POST['cust_code'] ?? '')), 0, 40);
+        if (($err = erp_customer_code_error($v['cust_code'])) !== '') {
+            $errors[] = $err;
         }
         if (!$errors) {
-            $cols = [...array_keys(ERP_CUST_FIELDS), 'tariff', 'pay_code', 'pay_days', 'disc_bp', 'blocked', 'ended_day'];
+            $v += ['origin' => 'cms', 'row_hash' => '', 'created_day' => (int)date('Ymd'), 'synced_at' => 0, 'rev' => 0, 'updated_by' => mb_substr((string)(current_user()['username'] ?? ''), 0, 100), 'updated_at' => time()];
+            $all = ['cust_code', ...array_keys(ERP_CUST_FIELDS), 'tariff', 'pay_code', 'pay_days', 'disc_bp', 'blocked', 'ended_day', 'def_series', 'doc_notes', 'origin', 'row_hash', 'created_day', 'synced_at', 'rev', 'updated_by', 'updated_at'];
             try {
-                if ($isNew) {
-                    $v['origin'] = 'cms';
-                    $v['row_hash'] = '';
-                    $v['created_day'] = (int)date('Ymd');
-                    $v['synced_at'] = 0;
-                    $all = ['cust_code', ...$cols, 'origin', 'row_hash', 'created_day', 'synced_at'];
-                    $db->prepare('INSERT INTO erp_customers (' . implode(', ', $all) . ') VALUES (' . implode(', ', array_fill(0, count($all), '?')) . ')')
-                        ->execute(array_map(fn($k) => $v[$k], $all));
-                } else {
-                    $db->prepare('UPDATE erp_customers SET ' . implode(' = ?, ', $cols) . " = ? WHERE id = ? AND origin = 'cms'")
-                        ->execute([...array_map(fn($k) => $v[$k], $cols), (int)$c['id']]);
-                }
+                $db->prepare('INSERT INTO erp_customers (' . implode(', ', $all) . ') VALUES (' . implode(', ', array_fill(0, count($all), '?')) . ')')
+                    ->execute(array_map(fn($k) => $v[$k], $all));
+                $warn = erp_nif_warning((string)$v['nif']);
+                $dups = erp_customer_nif_dups((string)$v['nif'], 0);
+                flash('Cliente ' . $v['cust_code'] . ' creado.' . ($warn !== '' ? ' Aviso: ' . $warn : '') . ($dups ? ' Aviso: ese NIF ya lo tiene ' . implode(', ', $dups) . '.' : ''));
+                redirect('/admin/clientes/' . rawurlencode((string)$v['cust_code']));
             } catch (PDOException $e) {
                 error_log('cms: alta de cliente: ' . get_class($e));
                 $errors[] = 'No se pudo guardar (¿otro usuario ha creado a la vez un cliente con ese código?). Inténtalo de nuevo.';
             }
-            if (!$errors) {
-                $warn = erp_nif_warning((string)$v['nif']);
-                flash('Cliente ' . $v['cust_code'] . ($isNew ? ' creado.' : ' guardado.') . ($warn !== '' ? ' Aviso: ' . $warn : ''));
-                redirect('/admin/clientes/' . rawurlencode((string)$v['cust_code']));
-            }
         }
     }
-    admin_render('client_edit', ['v' => $v, 'isNew' => $isNew, 'tariffs' => $tariffs, 'methods' => $methods, 'errors' => $errors,
-        'nifWarn' => erp_nif_warning((string)$v['nif']), 'title' => $isNew ? 'Nuevo cliente' : 'Modificar cliente', 'crumb' => $isNew ? 'Nuevo cliente' : 'Modificar']);
+    admin_render('client_edit', ['v' => $v, 'tariffs' => $tariffs, 'methods' => $methods, 'errors' => $errors, 'series' => array_filter(series_all(), fn($s) => (int)$s['is_active'] === 1),
+        'nifWarn' => erp_nif_warning((string)$v['nif']), 'title' => 'Nuevo cliente', 'crumb' => 'Nuevo cliente']);
 }
