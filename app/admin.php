@@ -9,6 +9,7 @@ require_once __DIR__ . '/import_wizard.php';
 require_once __DIR__ . '/doc_series.php';
 require_once __DIR__ . '/doc_params.php';
 require_once __DIR__ . '/doc_fields.php';
+require_once __DIR__ . '/dashboard.php';
 require_once __DIR__ . '/docs_engine.php';
 require_once __DIR__ . '/docs_invoices.php';
 require_once __DIR__ . '/docs_actions.php';
@@ -534,7 +535,7 @@ function admin_home(): void
         $days = $last !== '' ? (int)floor((time() - (int)strtotime($last)) / 86400) : null;
         if ($days === null) {
             $alerts[] = ['warn', 'Todavía no has descargado ninguna copia de seguridad.', '/admin/configuracion/copia', 'Descargar copia'];
-        } elseif ($days > 30) {
+        } elseif ($days > 7) {
             $alerts[] = ['warn', 'Hace ' . $days . ' días que no descargas una copia de seguridad.', '/admin/configuracion/copia', 'Descargar copia'];
         }
     }
@@ -552,9 +553,25 @@ function admin_home(): void
     $recent = $db->query('SELECT p.id, p.name, p.ref, p.image, p.visible, p.updated_at, ' . PCAT_FIELDS . ' FROM products p ' . PCAT_JOIN
         . ' ORDER BY p.updated_at DESC, p.id DESC LIMIT 10')->fetchAll();
 
+    // Cuadro de mandos: cada usuario ve solo los bloques de su rol (importes: administradores y rol ERP, con la doble verificación si se exige)
+    $role = current_role();
+    $sales = false;
+    $salesNote = '';
+    if (in_array($role, ['admin', 'erp'], true)) {
+        $has2fa = true;
+        if (erp_2fa_required()) {
+            $st = $db->prepare('SELECT totp_enabled FROM users WHERE id = ?');
+            $st->execute([(int)($_SESSION['uid'] ?? 0)]);
+            $has2fa = (int)$st->fetchColumn() === 1;
+        }
+        $sales = $has2fa;
+        $salesNote = $has2fa ? '' : 'Hace falta la doble verificación para ver las ventas del cuadro de mandos: actívala en «Mi cuenta».';
+    }
+    $period = dash_period($_GET);
     admin_render('home', [
-        'stats' => $stats, 'pf' => $pf, 'lastImport' => $lastImport, 'alerts' => $alerts,
-        'lastBackup' => setting('last_backup_at'), 'recent' => $recent, 'title' => 'Inicio',
+        'stats' => $stats, 'pf' => $pf, 'lastImport' => $lastImport, 'alerts' => $alerts, 'recent' => $recent, 'title' => 'Inicio',
+        'sales' => $sales, 'salesNote' => $salesNote, 'catalog' => in_array($role, ['admin', 'catalogo'], true),
+        'period' => $period, 'dash' => $sales ? dash_sales_data($period) : null, 'lists' => $sales ? dash_lists() : null, 'sys' => is_admin() ? dash_system() : null,
     ]);
 }
 
