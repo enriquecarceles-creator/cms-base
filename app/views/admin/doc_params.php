@@ -74,9 +74,9 @@ $open = $errors ? ' open' : ''; // con errores se abren todos los bloques
     <?php else: ?><small>Ya tienes el máximo de campos propios (<?= (int)DOC_LINE_MAX_CUSTOM ?>). Desactiva alguno si no lo usas.</small><?php endif; ?>
   </details>
 
-  <details class="blk" id="series"<?= $open ?>><summary>Series de numeración</summary>
+  <details class="blk" id="series"<?= $open !== '' || ($_GET['abrir'] ?? '') === 'series' ? ' open' : '' ?>><summary>Series de numeración</summary>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th scope="col">Documento</th><th scope="col">Letra</th><th scope="col">Formato</th><th scope="col">Siguiente número (<?= (int)$year ?>)</th><th scope="col">Activa</th></tr></thead>
+      <thead><tr><th scope="col">Documento</th><th scope="col">Letra</th><th scope="col">Dígitos</th><th scope="col">Con año</th><th scope="col">Formato</th><th scope="col">Siguiente número (<?= (int)$year ?>)</th><th scope="col">Activa</th></tr></thead>
       <tbody>
       <?php foreach ($allSeries as $id => $s):
           $yr = (int)$s['with_year'] === 1 ? $year : 0;
@@ -88,7 +88,10 @@ $open = $errors ? ' open' : ''; // con errores se abren todos los bloques
       ?>
         <tr>
           <td><?= e(DOC_SERIES_TYPES[$s['doc_type']] ?? $s['doc_type']) ?><?= $s['descr'] !== '' && $s['descr'] !== (DOC_SERIES_TYPES_PL[$s['doc_type']] ?? '') ? ' <small class="muted">· ' . e($s['descr']) . '</small>' : '' ?></td>
-          <td><strong><?= e($s['letter']) ?></strong></td>
+          <?php $oS = $old !== null && isset($old['s'][$id]) ? $old['s'][$id] : null; ?>
+          <td><?php if ($s['used']): ?><strong><?= e($s['letter']) ?></strong><?php else: ?><input class="letter" name="s[<?= (int)$id ?>][letter]" value="<?= e((string)($oS['letter'] ?? $s['letter'])) ?>" maxlength="3" required aria-label="Letra" style="width:4.5em"><?php endif; ?></td>
+          <td><?php if ($s['used']): ?><?= (int)$s['digits'] ?><?php else: ?><input class="num" type="number" name="s[<?= (int)$id ?>][digits]" value="<?= (int)($oS['digits'] ?? $s['digits']) ?>" min="<?= SERIES_DIGITS_MIN ?>" max="<?= SERIES_DIGITS_MAX ?>" aria-label="Dígitos" style="width:4.5em"><?php endif; ?></td>
+          <td><?php if ($s['used']): ?><?= (int)$s['with_year'] === 1 ? 'Sí' : 'No' ?><?php else: ?><input type="checkbox" name="s[<?= (int)$id ?>][with_year]" value="1"<?= ($oS !== null ? !empty($oS['with_year']) : (int)$s['with_year'] === 1) ? ' checked' : '' ?> aria-label="Con año"><?php endif; ?></td>
           <td><code><?= e(series_format($s, $next, $year)) ?></code></td>
           <td><input class="num" type="number" name="s[<?= (int)$id ?>][start]" value="<?= e($startShown) ?>" min="<?= $curUsed ? (int)$next : 1 ?>" max="<?= (int)series_max_number((int)$s['digits']) ?>" aria-label="Siguiente número de la serie <?= e($s['letter']) ?>"<?= $curUsed ? ' title="Esta serie ya tiene documentos emitidos este año: el siguiente número no se puede bajar ni cambiar"' : '' ?>><?= $curUsed ? ' <small class="muted">en uso</small>' : '' ?></td>
           <td><input type="checkbox" name="s[<?= (int)$id ?>][active]" value="1"<?= $active ? ' checked' : '' ?> aria-label="Serie <?= e($s['letter']) ?> activa"></td>
@@ -96,7 +99,14 @@ $open = $errors ? ' open' : ''; // con errores se abren todos los bloques
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <small>El siguiente número de una serie con documentos emitidos no se puede bajar ni dejar huecos. Para crear series nuevas, cambiar letra, dígitos o año, ve a <a href="<?= e(url('/admin/configuracion/series')) ?>">Series</a>.</small>
+    <div class="g4 lf-new">
+      <label>Nueva serie: documento <select name="new[type]"><option value="">—</option><?php foreach (DOC_SERIES_TYPES as $tk => $tl): ?><option value="<?= e($tk) ?>"<?= (string)($old['new']['type'] ?? '') === $tk ? ' selected' : '' ?>><?= e($tl) ?></option><?php endforeach; ?></select></label>
+      <label>Letra (1-3) <input name="new[letter]" value="<?= e((string)($old['new']['letter'] ?? '')) ?>" maxlength="3" placeholder="Ej.: B"></label>
+      <label>Descripción <input name="new[descr]" value="<?= e((string)($old['new']['descr'] ?? '')) ?>" maxlength="60" placeholder="Opcional"></label>
+      <label>Dígitos <input type="number" name="new[digits]" min="<?= SERIES_DIGITS_MIN ?>" max="<?= SERIES_DIGITS_MAX ?>" value="<?= (int)($old['new']['digits'] ?? 5) ?>"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="new[with_year]" value="1"<?= $old === null || !empty($old['new']['with_year']) ? ' checked' : '' ?>> <span>La nueva serie lleva el año (<code>F00001/26</code>)</span></label>
+    <small>El siguiente número de una serie con documentos emitidos no se puede bajar ni dejar huecos, y su letra, dígitos y año quedan fijos (solo se puede desactivar). Las letras de las series de facturas no pueden coincidir con las de las facturas importadas de NCS. Para crear una serie rellena «Nueva serie» y guarda.</small>
   </details>
 
   <details class="blk"<?= $open ?>><summary>Pedir siempre y avisos</summary>

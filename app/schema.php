@@ -126,7 +126,10 @@ const SCHEMA_ERP_DDL = "
         updated_by {S} NOT NULL DEFAULT '',
         updated_at {BIG} NOT NULL DEFAULT 0,
         def_series {I} NOT NULL DEFAULT 0,
-        doc_notes {T} NOT NULL DEFAULT ''
+        doc_notes {T} NOT NULL DEFAULT '',
+        imported_at {BIG} NOT NULL DEFAULT 0,
+        cms_edited_at {BIG} NOT NULL DEFAULT 0,
+        ext_ref {S} NOT NULL DEFAULT ''
     );
     CREATE TABLE erp_invoices (
         id {ID},
@@ -888,6 +891,16 @@ function migrate_schema(CmsPdo $pdo): void
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
         }
+    }
+    // v37: clientes traspasados editables: cuándo se traspasaron, cuándo se modificaron en el CMS (la sincronización no los pisa) y el código que tenían en NCS
+    if ($ver < 37 && in_array('erp_customers', db_tables($pdo), true)) {
+        $have = db_columns($pdo, 'erp_customers');
+        foreach (['imported_at' => '{BIG} NOT NULL DEFAULT 0', 'cms_edited_at' => '{BIG} NOT NULL DEFAULT 0', 'ext_ref' => "{S} NOT NULL DEFAULT ''"] as $col => $def) {
+            if (!in_array($col, $have, true)) {
+                db_add_column($pdo, 'erp_customers', $col, $def);
+            }
+        }
+        $pdo->exec("UPDATE erp_customers SET imported_at = synced_at WHERE origin = 'ncs' AND imported_at = 0 AND synced_at > 0");
     }
     // v36: ficha de cliente editable: versión (avisa de cambios simultáneos), quién y cuándo, serie por defecto y notas para documentos
     if ($ver < 36 && in_array('erp_customers', db_tables($pdo), true)) {

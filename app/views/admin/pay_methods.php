@@ -35,18 +35,16 @@ $ex = function (string $terms): string { // reparto de 100 € con esos plazos
           <td><input type="checkbox" name="p[<?= $id ?>][active]" value="1"<?= $active ? ' checked' : '' ?> aria-label="Activa"></td>
           <td><small class="muted"><?= e($u) ?><?= $isDefault ? ($u !== '' ? ' · ' : '') . 'por defecto' : '' ?></small></td>
           <td>
-            <?php if ($u === '' && !$isDefault): ?>
-              <button class="link danger" type="submit" name="action" value="delete" onclick="document.getElementById('del-id').value=<?= $id ?>;return confirm('¿Borrar la forma de pago <?= e($r['code']) ?>?')">Borrar</button>
-            <?php elseif ($active && !$isDefault): ?>
-              <button class="link" type="submit" name="action" value="deactivate" onclick="document.getElementById('del-id').value=<?= $id ?>;return confirm('Esta forma de pago está en uso, así que no se borra. ¿Desactivarla? Dejará de salir al elegir, pero los clientes y documentos que la tienen la conservan.')">Desactivar</button>
-            <?php elseif (!$active): ?><small class="muted">desactivada</small>
-            <?php endif; ?>
+            <button class="link danger" type="submit" name="action" value="delete" onclick="document.getElementById('del-id').value=<?= $id ?>;return confirm('¿Eliminar la forma de pago <?= e($r['code']) ?>?<?= $u !== '' || $isDefault ? ' Está en uso: en el siguiente paso elegirás a cuál pasarla.' : '' ?>')">Eliminar</button>
+            <?php if ($active && !$isDefault && $u !== ''): ?>
+              <button class="link" type="submit" name="action" value="deactivate" onclick="document.getElementById('del-id').value=<?= $id ?>;return confirm('¿Desactivarla? Dejará de salir al elegir, pero los clientes y documentos que la tienen la conservan.')">Desactivar</button>
+            <?php elseif (!$active): ?><small class="muted">desactivada</small><?php endif; ?>
           </td>
         </tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <small>«Borrar» solo sale si nadie la usa. Si ya la usan clientes o documentos, se ofrece «Desactivar»: deja de salir al elegir, pero los documentos antiguos la conservan.</small>
+    <small>«Eliminar» borra la forma de pago: si nadie la usa, directamente; si la usan clientes o documentos, pide a cuál pasarlos. Las facturas ya emitidas conservan su texto. «Desactivar» solo la quita de las listas. Siempre queda al menos una.</small>
     <?php endif; ?>
     <input type="hidden" name="id" id="del-id" value="">
   </fieldset>

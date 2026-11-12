@@ -10,7 +10,7 @@ $old = $old ?? null;
   <fieldset>
     <legend>Tarifas</legend>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th scope="col">Nº</th><th scope="col">Nombre</th><th scope="col">Precio del catálogo</th><th scope="col">Referencia externa</th><th scope="col">Activa</th><th scope="col">Clientes</th></tr></thead>
+      <thead><tr><th scope="col">Nº</th><th scope="col">Nombre</th><th scope="col">Precio del catálogo</th><th scope="col">Referencia externa</th><th scope="col">Activa</th><th scope="col">Clientes</th><th scope="col"></th></tr></thead>
       <tbody>
       <?php foreach ($rows as $r): $id = (int)$r['id']; $in = $old['t'][$id] ?? null; ?>
         <tr>
@@ -24,11 +24,13 @@ $old = $old ?? null;
           <td><input name="t[<?= $id ?>][ext]" value="<?= e($in['ext'] ?? $r['ext_ref']) ?>" maxlength="40" placeholder="Ej.: PVP<?= (int)$r['num'] ?>" aria-label="Referencia externa"></td>
           <td><input type="checkbox" name="t[<?= $id ?>][active]" value="1"<?= ($in !== null ? !empty($in['active']) : (int)$r['is_active'] === 1) ? ' checked' : '' ?> aria-label="Activa"></td>
           <td><small class="muted"><?= (int)($users[(int)$r['num']] ?? 0) ?></small></td>
+          <td><button class="link danger" type="submit" name="action" value="delete" onclick="document.getElementById('del-id').value=<?= $id ?>;return confirm('¿Eliminar la tarifa <?= (int)$r['num'] ?>?')">Eliminar</button></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <small>Las tarifas no se borran (los clientes guardan su número): se desactivan. Una tarifa que usan clientes o que es la de por defecto no se puede desactivar.
+    <input type="hidden" name="id" id="del-id" value="">
+    <small>«Eliminar» borra la tarifa: si nadie la usa, directamente; si la usan clientes o documentos, pide a cuál pasarlos. Las facturas ya emitidas conservan sus precios y su número. Siempre queda al menos una. Una tarifa que usan clientes o que es la de por defecto no se puede solo desactivar.
       <strong>Precio del catálogo</strong>: de qué campo de precio de los artículos sale el precio de esa tarifa en pedidos y albaranes (los campos se crean en Catálogo → Características, de tipo «Precio»).</small>
   </fieldset>
   <fieldset>
@@ -39,5 +41,5 @@ $old = $old ?? null;
     </div>
     <small>Se numera sola (la siguiente) y se crea al pulsar Guardar. Como mucho 9.</small>
   </fieldset>
-  <div class="savebar"><button class="btn" type="submit">Guardar</button></div>
+  <div class="savebar"><button class="btn" type="submit" name="action" value="save" onclick="document.getElementById('del-id').value=''">Guardar</button></div>
 </form>

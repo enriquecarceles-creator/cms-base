@@ -271,11 +271,16 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
     $db = db();
     $haveC = [];
     $cmsC = []; // clientes dados de alta a mano en el CMS: NCS nunca los sobrescribe
-    foreach ($db->query('SELECT cust_code, row_hash, origin FROM erp_customers')->fetchAll(PDO::FETCH_NUM) as $r) {
+    $editedC = []; // clientes de NCS modificados a mano en el CMS: NCS no los pisa sin avisar
+    foreach ($db->query('SELECT cust_code, row_hash, origin, ext_ref, cms_edited_at FROM erp_customers')->fetchAll(PDO::FETCH_NUM) as $r) {
         if ((string)$r[2] === 'cms') {
             $cmsC[mb_strtolower((string)$r[0])] = true;
         } else {
-            $haveC[$r[0]] = $r[1];
+            $key = (string)$r[3] !== '' ? (string)$r[3] : (string)$r[0]; // si se cambió el código en el CMS, se casa con el que tenía en NCS
+            $haveC[$key] = $r[1];
+            if ((int)$r[4] > 0) {
+                $editedC[$key] = true;
+            }
         }
     }
     $haveI = [];
@@ -289,7 +294,7 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
     $st->exec('CREATE TABLE cust (seq INTEGER PRIMARY KEY, code TEXT, state TEXT, data TEXT)');
     $st->exec('CREATE TABLE inv (seq INTEGER PRIMARY KEY, num TEXT, state TEXT, data TEXT)');
 
-    $cnt = ['cust' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'inv' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'lines' => 0, 'skipped' => 0, 'cust_conflict' => 0];
+    $cnt = ['cust' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'inv' => ['new' => 0, 'changed' => 0, 'same' => 0, 'gone' => 0], 'lines' => 0, 'skipped' => 0, 'cust_conflict' => 0, 'cust_kept' => 0];
 
     // Clientes
     $st->beginTransaction();
@@ -309,7 +314,12 @@ function erp_stage_build(string $cuentasFile, string $historicoFile, ?string $al
         }
         $m['row_hash'] = erp_hash($m);
         $state = !isset($haveC[$m['cust_code']]) ? 'new' : ($haveC[$m['cust_code']] === $m['row_hash'] ? 'same' : 'changed');
-        $cnt['cust'][$state]++;
+        if ($state === 'changed' && isset($editedC[$m['cust_code']])) { // NCS lo ha cambiado, pero aquí se modificó a mano: se respeta lo del CMS y se avisa
+            $state = 'kept';
+            $cnt['cust_kept']++;
+        } else {
+            $cnt['cust'][$state]++;
+        }
         $ins->execute([++$seq, $m['cust_code'], $state, json_encode($m, JSON_UNESCAPED_UNICODE)]);
     }
     $st->commit();
@@ -429,13 +439,16 @@ function erp_run(array &$job, float $deadline): bool
     try {
         if (($job['phase'] ?? 'cust') === 'cust') {
             $db->beginTransaction();
-            $q = $st->query("SELECT data, state FROM cust WHERE state <> 'same' ORDER BY seq");
-            $find = $db->prepare('SELECT id, origin FROM erp_customers WHERE LOWER(cust_code) = LOWER(?)');
+            $q = $st->query("SELECT data, state FROM cust WHERE state NOT IN ('same', 'kept') ORDER BY seq");
+            $find = $db->prepare('SELECT id, origin FROM erp_customers WHERE LOWER(cust_code) = LOWER(?) OR (ext_ref <> \'\' AND LOWER(ext_ref) = LOWER(?))');
             foreach ($q as $row) {
                 $d = json_decode((string)$row['data'], true);
                 $d['synced_at'] = $now;
-                $find->execute([$d['cust_code']]);
+                $find->execute([$d['cust_code'], $d['cust_code']]);
                 $found = $find->fetch();
+                if (!$found) {
+                    $d['imported_at'] = $now; // primer traspaso de este cliente
+                }
                 if ($found && (string)$found['origin'] === 'cms') { // creado en el CMS mientras tanto: no se sobrescribe
                     continue;
                 }

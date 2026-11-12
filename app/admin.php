@@ -204,7 +204,7 @@ function admin_cfg_nav(): array
     return [
         'Empresa' => [['empresa', 'Datos de la empresa', '/admin/configuracion/empresa']],
         'Documentos' => [
-            ['series', 'Series', '/admin/configuracion/series'], ['parametros', 'Parámetros', '/admin/configuracion/parametros'], ['iva', 'IVA', '/admin/configuracion/iva'],
+            ['parametros', 'Parámetros', '/admin/configuracion/parametros'], ['iva', 'IVA', '/admin/configuracion/iva'],
             ['pagos', 'Formas de pago', '/admin/configuracion/pagos'], ['tarifas', 'Tarifas', '/admin/configuracion/tarifas'], ['diseno', 'Diseño de documentos', '/admin/configuracion/diseno'],
         ],
         'Sistema' => [
@@ -236,9 +236,8 @@ function admin_settings(string $sub): void
         case 'empresa':
             admin_company();
             break;
-        case 'series':
-            admin_series();
-            break;
+        case 'series': // la antigua pantalla de Series ahora es un bloque de Parámetros
+            redirect('/admin/configuracion/parametros?abrir=series#series');
         case 'parametros':
             admin_doc_params();
             break;

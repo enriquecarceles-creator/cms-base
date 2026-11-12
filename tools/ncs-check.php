@@ -604,6 +604,21 @@ $resC = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '
 erp_job_clear();
 $check('clientes del CMS: si NCS trae el mismo código, se avisa y no se sobrescribe', $resC['counts']['cust_conflict'] === 1 && $resC['counts']['cust']['new'] === 0 && $one("SELECT COUNT(*) FROM erp_customers WHERE origin = 'cms'") === 1, json_encode($resC['counts']['cust']));
 db()->prepare("DELETE FROM erp_customers WHERE origin = 'cms'")->execute();
+// Clientes traspasados y modificados en el CMS: la sincronización no los pisa sin avisar
+$c2 = (string)db()->query("SELECT cust_code FROM erp_customers WHERE origin = 'ncs' ORDER BY id LIMIT 1")->fetchColumn();
+db()->prepare("UPDATE erp_customers SET name = 'Nombre cambiado en el CMS', cms_edited_at = ?, row_hash = 'otro' WHERE cust_code = ?")->execute([time(), $c2]);
+$resK = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
+$jobK = ['status' => 'run', 'phase' => 'cust', 'cursor' => 0, 'has_art' => true, 'counts' => $resK['counts']];
+while (!erp_run($jobK, microtime(true) + 30)) {
+}
+$nameK = (string)db()->query("SELECT name FROM erp_customers WHERE cust_code = '" . str_replace("'", '', $c2) . "'")->fetchColumn();
+erp_job_clear();
+$check('clientes traspasados modificados en el CMS: NCS ha cambiado, se avisa (cust_kept) y NO se pisa', $resK['counts']['cust_kept'] === 1 && $nameK === 'Nombre cambiado en el CMS', json_encode($resK['counts']['cust']) . ' · ' . $nameK);
+db()->prepare("UPDATE erp_customers SET ext_ref = ?, cust_code = 'CAMBIADO' WHERE cust_code = ?")->execute([$c2, $c2]);
+$resX = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
+erp_job_clear();
+$check('código cambiado en el CMS: se sigue casando con el de NCS (no se duplica como nuevo)', $resX['counts']['cust']['new'] === 0 && $resX['counts']['cust_kept'] === 1, json_encode($resX['counts']['cust']));
+db()->prepare("UPDATE erp_customers SET cust_code = ?, ext_ref = '', cms_edited_at = 0 WHERE cust_code = 'CAMBIADO'")->execute([$c2]);
 $ridF = $fidF > 0 ? docs_rectify(docs_get($fidF), 'diferencias', 'R1', 'Devolución') : 0;
 $codeR = '';
 try {

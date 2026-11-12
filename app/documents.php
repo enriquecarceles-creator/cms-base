@@ -79,6 +79,20 @@ function erp_serie(string $number): string
     return preg_match('/^[A-Za-z]+/', $number, $m) ? $m[0] : '';
 }
 
+/** Formas de pago borradas: [código => nombre que tenían]. Los documentos ya emitidos y las facturas importadas guardan solo el código: así su texto nunca queda en blanco ni cambia. */
+function pay_deleted(): array
+{
+    $j = json_decode((string)db_setting('pay_deleted'), true);
+    return is_array($j) ? array_map('strval', $j) : [];
+}
+
+/** Tarifas borradas: [número => nombre que tenían]. */
+function tariff_deleted(): array
+{
+    $j = json_decode((string)db_setting('tariff_deleted'), true);
+    return is_array($j) ? array_map('strval', $j) : [];
+}
+
 /** Nombres de las formas de pago por código (lista editable): [código => nombre]. */
 function erp_pay_names(): array
 {
@@ -86,6 +100,11 @@ function erp_pay_names(): array
     if ($cache === null) {
         $j = json_decode(setting('erp_pay_names'), true); // lista antigua (Sincronizar con NCS): sigue valiendo como respaldo
         $cache = is_array($j) ? array_map('strval', $j) : [];
+        foreach (pay_deleted() as $dc => $dn) { // formas de pago eliminadas: las facturas antiguas siguen mostrando su nombre
+            if ($dn !== '') {
+                $cache[(string)$dc] = $dn;
+            }
+        }
         try { // la tabla de Configuración → Formas de pago manda
             foreach (db()->query("SELECT code, name FROM doc_pay_methods WHERE name <> ''")->fetchAll() as $r) {
                 $cache[(string)$r['code']] = (string)$r['name'];

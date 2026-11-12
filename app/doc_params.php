@@ -288,7 +288,7 @@ function pay_methods_import_missing(): int
     $max = (int)$db->query('SELECT COALESCE(MAX(sort), 0) FROM doc_pay_methods')->fetchColumn();
     foreach (array_keys(pay_codes_in_use()) as $code) {
         $code = (string)$code; // las claves numéricas de un array llegan como enteros
-        if (!in_array($code, $have, true) && preg_match('/^[A-Za-z0-9._-]{1,20}$/', $code)) {
+        if (!in_array($code, $have, true) && !isset(pay_deleted()[$code]) && preg_match('/^[A-Za-z0-9._-]{1,20}$/', $code)) {
             $db->prepare("INSERT INTO doc_pay_methods (code, name, days, terms, is_active, sort) VALUES (?, ?, 0, '0', 1, ?)")->execute([$code, mb_substr($names[$code] ?? '', 0, 40), $max + 10 * (++$n)]);
         }
     }
@@ -300,7 +300,8 @@ function pay_methods_usage(): array
 {
     $out = [];
     foreach (['clientes' => 'erp_customers', 'ncs' => 'erp_invoices', 'docs' => 'doc_headers'] as $k => $t) {
-        foreach (db()->query("SELECT pay_code, COUNT(*) AS n FROM $t WHERE pay_code <> '' GROUP BY pay_code")->fetchAll() as $r) {
+        $only = $t === 'erp_invoices' ? " AND origin = 'ncs'" : ''; // las copias de facturas del CMS en Ventas ya cuentan como documentos
+        foreach (db()->query("SELECT pay_code, COUNT(*) AS n FROM $t WHERE pay_code <> ''$only GROUP BY pay_code")->fetchAll() as $r) {
             $out[(string)$r['pay_code']][$k] = (int)$r['n'];
         }
     }
@@ -337,7 +338,39 @@ function admin_pay_methods(): void
             flash($n > 0 ? $n . ' forma' . ($n === 1 ? '' : 's') . ' de pago traída' . ($n === 1 ? '' : 's') . ' de los datos importados.' : 'No había formas de pago nuevas que traer.');
             redirect('/admin/configuracion/pagos');
         }
-        if ($act === 'delete' || $act === 'deactivate') {
+        if ($act === 'delete' || $act === 'delete_move') { // «Eliminar»: sin uso se borra; con uso se pide a cuál pasarlo
+            $id = (int)($_POST['id'] ?? 0);
+            $st = $db->prepare('SELECT * FROM doc_pay_methods WHERE id = ?');
+            $st->execute([$id]);
+            $row = $st->fetch();
+            if (!$row) {
+                flash('Esa forma de pago ya no existe.', 'err');
+                redirect('/admin/configuracion/pagos');
+            }
+            $code = (string)$row['code'];
+            $u = pay_methods_usage()[$code] ?? [];
+            $isDef = docp('pay_method') === $code;
+            $needs = $isDef || ($u['clientes'] ?? 0) + ($u['docs'] ?? 0) > 0;
+            $to = $act === 'delete_move' ? (string)($_POST['to'] ?? '') : null;
+            if ($needs && $to === null) { // pantalla de confirmación con el desplegable
+                $targets = [];
+                foreach (pay_methods_all() as $m) {
+                    if ((string)$m['code'] !== $code && (int)$m['is_active'] === 1) {
+                        $targets[(string)$m['code']] = $m['code'] . ' · ' . ($m['name'] !== '' ? $m['name'] : 'sin nombre');
+                    }
+                }
+                if (count(pay_methods_all()) <= 1 || !$targets) {
+                    flash(count(pay_methods_all()) <= 1 ? 'Siempre tiene que quedar al menos una forma de pago.' : 'No hay otra forma de pago activa a la que pasarlo: crea o activa una antes.', 'err');
+                    redirect('/admin/configuracion/pagos');
+                }
+                admin_delete_move('forma de pago', $code . ($row['name'] !== '' ? ' · ' . $row['name'] : ''), pay_usage_text($u), $isDef, $targets, '/admin/configuracion/pagos', $id, 'pagos');
+                return;
+            }
+            $err = pay_method_delete($row, $needs ? $to : null);
+            flash($err === '' ? 'Forma de pago «' . $code . '» eliminada.' . ($needs ? ' Sus clientes y documentos sin emitir pasan a «' . $to . '»; las facturas emitidas conservan su texto.' : '') : $err, $err === '' ? 'ok' : 'err');
+            redirect('/admin/configuracion/pagos');
+        }
+        if ($act === 'deactivate') {
             $id = (int)($_POST['id'] ?? 0);
             $st = $db->prepare('SELECT code, is_active FROM doc_pay_methods WHERE id = ?');
             $st->execute([$id]);
@@ -353,13 +386,6 @@ function admin_pay_methods(): void
                     $db->prepare('UPDATE doc_pay_methods SET is_active = 0 WHERE id = ?')->execute([$id]);
                     flash('Forma de pago «' . $code . '» desactivada: ya no sale al elegir, pero los clientes y documentos que la tenían la conservan.');
                 }
-            } elseif ($usage !== '') {
-                flash('La forma de pago «' . $code . '» la usan ' . $usage . ': no se puede borrar. Puedes desactivarla (deja de salir al elegir, pero los documentos antiguos la conservan).', 'err');
-            } elseif (docp('pay_method') === $code) {
-                flash('La forma de pago «' . $code . '» es la de por defecto (Parámetros): elige otra antes de borrarla.', 'err');
-            } else {
-                $db->prepare('DELETE FROM doc_pay_methods WHERE id = ?')->execute([$id]);
-                flash('Forma de pago «' . $code . '» borrada.');
             }
             redirect('/admin/configuracion/pagos');
         }
@@ -389,6 +415,8 @@ function admin_pay_methods(): void
                 $errors[] = 'Nueva forma de pago: el código puede tener hasta 20 letras, números, punto, guion o guion bajo.';
             } elseif (array_filter($rows, fn($r) => mb_strtolower((string)$r['code']) === mb_strtolower($code))) {
                 $errors[] = 'Nueva forma de pago: el código «' . $code . '» ya existe.';
+            } elseif (isset(pay_deleted()[$code])) {
+                $errors[] = 'Nueva forma de pago: el código «' . $code . '» perteneció a una forma de pago eliminada que aún usan facturas antiguas; usa otro para que no cambien.';
             } elseif ($nt === null) {
                 $errors[] = 'Nueva forma de pago: los vencimientos son días separados por comas (0, 30, o 30,60,90), de 0 a ' . DUES_MAX_DAYS . ', en orden creciente.';
             } else {
@@ -409,9 +437,112 @@ function admin_pay_methods(): void
             redirect('/admin/configuracion/pagos');
         }
     }
-    $missing = array_values(array_diff(array_map('strval', array_keys($inUse)), array_map('strval', array_column(pay_methods_all(), 'code'))));
+    $missing = array_values(array_diff(array_map('strval', array_keys($inUse)), array_map('strval', array_column(pay_methods_all(), 'code')), array_map('strval', array_keys(pay_deleted()))));
     admin_render('pay_methods', ['rows' => pay_methods_all(), 'inUse' => $inUse, 'usage' => pay_methods_usage(), 'missing' => $missing, 'errors' => $errors, 'old' => $old,
         'defaultCode' => docp('pay_method'), 'cfg' => 'pagos', 'title' => 'Formas de pago']);
+}
+
+
+/* ---------- Eliminar formas de pago y tarifas (con traspaso de lo que las usa) ---------- */
+
+/** Cuántos documentos (los del CMS) usan cada tarifa: [número => n]. */
+function tariff_docs_count(int $num): int
+{
+    $st = db()->prepare('SELECT COUNT(*) FROM doc_headers WHERE tariff = ?');
+    $st->execute([$num]);
+    return (int)$st->fetchColumn();
+}
+
+/**
+ * Borra una forma de pago pasando a $to (código de otra) lo que la usa: clientes y documentos NO emitidos (borradores, pedidos, albaranes).
+ * Las facturas emitidas y las importadas conservan su código y siguen mostrando el nombre que tenía (queda guardado en «pay_deleted»);
+ * sus vencimientos ya calculados no se tocan. Devuelve '' o el error.
+ */
+function pay_method_delete(array $row, ?string $to): string
+{
+    $db = db();
+    $code = (string)$row['code'];
+    if (count(pay_methods_all()) <= 1) {
+        return 'Siempre tiene que quedar al menos una forma de pago.';
+    }
+    $isDefault = docp('pay_method') === $code;
+    $used = pay_methods_usage()[$code] ?? [];
+    if (($isDefault || array_sum(array_intersect_key($used, ['clientes' => 1, 'docs' => 1])) > 0) && $to === null) {
+        return 'Elige a qué forma de pago pasar lo que usa «' . $code . '».';
+    }
+    if ($to !== null) {
+        $ok = array_filter(pay_methods_all(), fn($m) => (string)$m['code'] === $to && (string)$m['code'] !== $code && (int)$m['is_active'] === 1);
+        if (!$ok) {
+            return 'La forma de pago a la que pasarlo tiene que existir y estar activa.';
+        }
+    }
+    $db->beginTransaction();
+    try {
+        if ($to !== null) {
+            $db->prepare('UPDATE erp_customers SET pay_code = ? WHERE pay_code = ?')->execute([$to, $code]);
+            $db->prepare("UPDATE doc_headers SET pay_code = ?, rev = rev + 1 WHERE pay_code = ? AND status <> 'emitida'")->execute([$to, $code]);
+            if ($isDefault) {
+                save_setting('docp_pay_method', $to);
+            }
+        }
+        $dead = pay_deleted();
+        $dead[$code] = (string)($row['name'] ?? '');
+        save_setting('pay_deleted', (string)json_encode($dead, JSON_UNESCAPED_UNICODE));
+        $db->prepare('DELETE FROM doc_pay_methods WHERE id = ?')->execute([(int)$row['id']]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
+    }
+    return '';
+}
+
+/** Borra una tarifa pasando a $to (número de otra) los clientes y documentos NO emitidos que la usan. Las facturas emitidas conservan su número y sus precios (están en sus líneas). */
+function tariff_delete(array $row, ?int $to): string
+{
+    $db = db();
+    $num = (int)$row['num'];
+    if (count(tariffs_all()) <= 1) {
+        return 'Siempre tiene que quedar al menos una tarifa.';
+    }
+    $isDefault = docp_int('tariff') === $num;
+    $in = tariff_customers($num) + tariff_docs_count($num);
+    if (($isDefault || $in > 0) && $to === null) {
+        return 'Elige a qué tarifa pasar lo que usa la tarifa ' . $num . '.';
+    }
+    if ($to !== null && !array_filter(tariffs_all(), fn($t) => (int)$t['num'] === $to && $to !== $num && (int)$t['is_active'] === 1)) {
+        return 'La tarifa a la que pasarlo tiene que existir y estar activa.';
+    }
+    $db->beginTransaction();
+    try {
+        if ($to !== null) {
+            $db->prepare('UPDATE erp_customers SET tariff = ? WHERE tariff = ?')->execute([$to, $num]);
+            $db->prepare("UPDATE doc_headers SET tariff = ?, rev = rev + 1 WHERE tariff = ? AND status <> 'emitida'")->execute([$to, $num]);
+            if ($isDefault) {
+                save_setting('docp_tariff', (string)$to);
+            }
+        }
+        $dead = tariff_deleted();
+        $dead[(string)$num] = (string)$row['name'];
+        save_setting('tariff_deleted', (string)json_encode($dead, JSON_UNESCAPED_UNICODE));
+        $db->prepare('DELETE FROM doc_tariffs WHERE id = ?')->execute([(int)$row['id']]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
+    }
+    return '';
+}
+
+/** Pantalla de confirmación con el desplegable de a cuál pasar lo que usa lo que se borra. */
+function admin_delete_move(string $what, string $label, string $usage, bool $isDefault, array $targets, string $back, int $id, string $cfg): void
+{
+    admin_render('delete_move', ['what' => $what, 'label' => $label, 'usage' => $usage, 'isDefault' => $isDefault, 'targets' => $targets, 'back' => $back, 'id' => $id,
+        'cfg' => $cfg, 'title' => 'Eliminar ' . $what]);
 }
 
 /* ---------- Tarifas ---------- */
@@ -436,6 +567,38 @@ function admin_tariffs(): void
     $old = null;
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
+        $act = (string)($_POST['action'] ?? 'save');
+        if ($act === 'delete' || $act === 'delete_move') {
+            $st = $db->prepare('SELECT * FROM doc_tariffs WHERE id = ?');
+            $st->execute([(int)($_POST['id'] ?? 0)]);
+            $row = $st->fetch();
+            if (!$row) {
+                flash('Esa tarifa ya no existe.', 'err');
+                redirect('/admin/configuracion/tarifas');
+            }
+            $num = (int)$row['num'];
+            $nUse = ['clientes' => tariff_customers($num), 'docs' => tariff_docs_count($num)];
+            $isDef = docp_int('tariff') === $num;
+            $needs = $isDef || $nUse['clientes'] + $nUse['docs'] > 0;
+            $to = $act === 'delete_move' ? (int)($_POST['to'] ?? 0) : null;
+            if ($needs && $to === null) {
+                $targets = [];
+                foreach (tariffs_all() as $t) {
+                    if ((int)$t['num'] !== $num && (int)$t['is_active'] === 1) {
+                        $targets[(string)(int)$t['num']] = (int)$t['num'] . ' · ' . $t['name'];
+                    }
+                }
+                if (count(tariffs_all()) <= 1 || !$targets) {
+                    flash(count(tariffs_all()) <= 1 ? 'Siempre tiene que quedar al menos una tarifa.' : 'No hay otra tarifa activa a la que pasarlo: crea o activa una antes.', 'err');
+                    redirect('/admin/configuracion/tarifas');
+                }
+                admin_delete_move('tarifa', $num . ' · ' . $row['name'], pay_usage_text($nUse), $isDef, $targets, '/admin/configuracion/tarifas', (int)$row['id'], 'tarifas');
+                return;
+            }
+            $err = tariff_delete($row, $needs ? $to : null);
+            flash($err === '' ? 'Tarifa ' . $num . ' eliminada.' . ($needs ? ' Sus clientes y documentos sin emitir pasan a la tarifa ' . $to . '; las facturas emitidas conservan sus precios.' : '') : $err, $err === '' ? 'ok' : 'err');
+            redirect('/admin/configuracion/tarifas');
+        }
         $old = $_POST;
         $rows = tariffs_all();
         $plan = [];
@@ -464,11 +627,12 @@ function admin_tariffs(): void
         $new = (array)($_POST['new'] ?? []);
         $newRow = null;
         if (trim((string)($new['name'] ?? '')) !== '') {
-            $max = (int)$db->query('SELECT COALESCE(MAX(num), 0) FROM doc_tariffs')->fetchColumn();
-            if ($max >= 9) {
-                $errors[] = 'Como mucho 9 tarifas.';
+            $taken = array_merge(array_map('intval', array_column($rows, 'num')), array_map('intval', array_keys(tariff_deleted()))); // el número de una tarifa eliminada no se reutiliza: las facturas antiguas lo conservan
+            $free = array_values(array_diff(range(1, 9), $taken));
+            if (!$free) {
+                $errors[] = 'Como mucho 9 tarifas (los números de las eliminadas no se reutilizan).';
             } else {
-                $newRow = ['num' => $max + 1, 'name' => mb_substr(trim(strip_tags((string)$new['name'])), 0, 40), 'ext' => mb_substr(trim(strip_tags((string)($new['ext'] ?? ''))), 0, 40)];
+                $newRow = ['num' => $free[0], 'name' => mb_substr(trim(strip_tags((string)$new['name'])), 0, 40), 'ext' => mb_substr(trim(strip_tags((string)($new['ext'] ?? ''))), 0, 40)];
             }
         }
         if (!$errors) {
@@ -548,7 +712,7 @@ function admin_doc_params(): void
                 $post2['s'][$sid] = [];
             }
         }
-        unset($post2['default'], $post2['new'], $post2['yr_year'], $post2['yr_series'], $post2['yr_start']);
+        unset($post2['default'], $post2['yr_year'], $post2['yr_series'], $post2['yr_start']);
         $plan = series_plan($post2, series_ncs_letters(), $year, $errors);
         // Campos de las líneas
         $lfOld = docs_line_fields();

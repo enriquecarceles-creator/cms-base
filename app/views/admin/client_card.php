@@ -54,7 +54,7 @@ $self_ = url($self);
     <?php if ($c['trade_name'] !== '' && $c['trade_name'] !== $c['name']): ?><p class="cc-trade"><?= e($c['trade_name']) ?></p><?php endif; ?>
     <p class="cc-meta"><?php if ($c['nif'] !== ''): ?>NIF <strong><?= e($c['nif']) ?></strong> · <?php endif; ?>
       <?php if ($ended): ?><span class="tag tag-off">De baja</span><?php elseif ($blocked): ?><span class="tag tag-off">Bloqueado</span><?php else: ?><span class="tag tag-ok">Activo</span><?php endif; ?>
-      <?php if (!$own): ?><span class="tag">Origen: CMS</span><?php else: ?><span class="tag">Origen: NCS</span><?php endif; ?>
+      <?php if (!$ncs): ?><span class="tag">Origen: CMS</span><?php else: ?><span class="tag">Origen: NCS</span><?php endif; ?>
       <?php if ($isRetail): ?><span class="tag">Contado</span><?php endif; ?></p>
   </div>
   <div class="cc-actions">
@@ -75,7 +75,7 @@ $self_ = url($self);
       <?php if ($nb['next']): ?><a class="btn small ghost" href="<?= e(url('/admin/clientes/' . rawurlencode($nb['next']['cust_code']))) ?>" rel="next" title="<?= e($nb['next']['name']) ?>">Siguiente ›</a><?php endif; ?>
       <?php if (!$own): ?>
         <button class="btn small ghost" type="submit" form="cform-block"><?= $blocked ? 'Desbloquear' : 'Bloquear' ?></button>
-        <?php if ($nDocs === 0): ?>
+        <?php if ($nDocs === 0 && !$ncs): ?>
         <details class="cc-menu"><summary class="btn small ghost danger">Borrar</summary>
           <div class="cc-pop"><label class="check"><input type="checkbox" name="confirm" value="1" form="cform-del"> <span>Confirmo que quiero borrar este cliente</span></label>
             <button class="btn small danger" type="submit" form="cform-del">Borrar cliente</button></div></details>
@@ -95,7 +95,7 @@ $self_ = url($self);
 <nav class="cc-nav" aria-label="Secciones de la ficha"><a href="#general">General</a><a href="#contacto">Contacto</a><a href="#comercial">Comercial</a><a href="#documentos">Documentos</a><a href="#notas">Notas internas<?= $notes ? ' (' . count($notes) . ')' : '' ?></a>
   <span class="grow"></span><a href="<?= e(url($self . '?pestana=resumen')) ?>">Análisis de compras ›</a></nav>
 
-<?php if ($edit && $own): ?><p class="alert warn keep"><?= admin_icon('info') ?><span>Este cliente viene de NCS: sus datos se cambian en NCS y llegan al sincronizar. Aquí solo se editan el día de pago, la serie por defecto y las notas para documentos.</span></p><?php endif; ?>
+<?php if ($edit && $ncs): ?><p class="alert warn keep"><?= admin_icon('info') ?><span>Cliente traspasado de NCS. Si cambias sus datos aquí, la sincronización con NCS no los pisará sin avisar.</span></p><?php endif; ?>
 <?php if (!$edit && $nifWarn !== ''): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><?= e($nifWarn) ?></span></p><?php endif; ?>
 <?php if (!$edit && $nifDups): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span>Ese NIF también lo tienen: <?= e(implode(', ', $nifDups)) ?>.</span></p><?php endif; ?>
 
@@ -111,7 +111,8 @@ $self_ = url($self);
     <?= $fld('province', 'Provincia', 3, ['max' => 255]) ?>
     <?= $fld('country', 'País', 3, ['max' => 255]) ?>
   </div>
-  <?php if ($edit && !$own && !$canCode): ?><p class="cc-note"><small>El código no se puede cambiar: el cliente ya tiene documentos.</small></p><?php endif; ?>
+  <?php if ($edit && !$own && !$canCode): ?><p class="cc-note"><small>El código no se puede cambiar: el cliente ya tiene documentos (es la referencia para casarlo con NCS).</small></p><?php endif; ?>
+  <?php if ($ncs && (int)$c['imported_at'] > 0): ?><p class="cc-note muted"><small>Traspasado de NCS el <?= e(date('d/m/Y', (int)$c['imported_at'])) ?><?= (int)$c['cms_edited_at'] > 0 ? ' · modificado en el CMS el ' . e(date('d/m/Y', (int)$c['cms_edited_at'])) . ' (la sincronización no lo pisa)' : '' ?><?= (string)$c['ext_ref'] !== '' ? ' · código en NCS: ' . e((string)$c['ext_ref']) : '' ?></small></p><?php endif; ?>
 </section>
 
 <section class="cc-card" id="contacto"><h2>Contacto</h2>
@@ -151,7 +152,7 @@ $self_ = url($self);
 </form>
 <?php if (!$edit && !$own): ?>
   <form method="post" action="<?= e($self_) ?>" id="cform-block"><?= csrf_field() ?><input type="hidden" name="action" value="<?= $blocked ? 'unblock' : 'block' ?>"></form>
-  <?php if ($nDocs === 0): ?><form method="post" action="<?= e($self_) ?>" id="cform-del"><?= csrf_field() ?><input type="hidden" name="action" value="delete"></form><?php endif; ?>
+  <?php if ($nDocs === 0 && !$ncs): ?><form method="post" action="<?= e($self_) ?>" id="cform-del"><?= csrf_field() ?><input type="hidden" name="action" value="delete"></form><?php endif; ?>
 <?php endif; ?>
 
 <section class="cc-card" id="documentos"><h2>Documentos <small class="muted">(<?= e(number_format($nDocs, 0, ',', '.')) ?>)</small></h2>

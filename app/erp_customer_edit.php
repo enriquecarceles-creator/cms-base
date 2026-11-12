@@ -182,6 +182,13 @@ function erp_customer_save(array $c, array $v, string $newCode, int $stamp, bool
     $u = current_user();
     $by = mb_substr((string)($u['username'] ?? ''), 0, 100);
     $cols = $ownOnly ? ERP_CUST_OWN : [...array_keys(ERP_CUST_FIELDS), 'tariff', 'pay_code', 'disc_bp', 'blocked', 'ended_day', ...ERP_CUST_OWN];
+    $ncs = (string)($c['origin'] ?? 'ncs') === 'ncs';
+    $touched = false; // ¿se cambió algo que viene de NCS (no solo los campos propios del CMS)?
+    foreach (array_diff($cols, ERP_CUST_OWN) as $k) {
+        if ((string)$v[$k] !== (string)$c[$k]) {
+            $touched = true;
+        }
+    }
     $db->beginTransaction();
     try {
         $st = $db->prepare('UPDATE erp_customers SET ' . implode(' = ?, ', $cols) . ' = ?, rev = rev + 1, updated_by = ?, updated_at = ? WHERE id = ? AND rev = ?');
@@ -190,7 +197,13 @@ function erp_customer_save(array $c, array $v, string $newCode, int $stamp, bool
             $db->rollBack();
             return 'Otro usuario ha modificado este cliente mientras lo editabas. Recarga la página para ver sus cambios (no se ha guardado nada tuyo).';
         }
+        if ($ncs && $touched) { // traspasado de NCS y modificado aquí: la sincronización no lo pisará sin avisar
+            $db->prepare('UPDATE erp_customers SET cms_edited_at = ? WHERE id = ?')->execute([time(), (int)$c['id']]);
+        }
         if (!$ownOnly && $newCode !== (string)$c['cust_code']) { // el código solo cambia si no tiene documentos (se comprueba antes)
+            if ($ncs && (string)$c['ext_ref'] === '') { // se recuerda el código de NCS para seguir casándolo al sincronizar
+                $db->prepare('UPDATE erp_customers SET ext_ref = ? WHERE id = ?')->execute([(string)$c['cust_code'], (int)$c['id']]);
+            }
             $db->prepare('UPDATE erp_customers SET cust_code = ? WHERE id = ?')->execute([$newCode, (int)$c['id']]);
             $db->prepare('UPDATE erp_notes SET cust_code = ? WHERE cust_code = ?')->execute([$newCode, (string)$c['cust_code']]);
         }

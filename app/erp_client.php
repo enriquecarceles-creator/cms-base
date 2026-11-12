@@ -151,7 +151,7 @@ function admin_client(string $code): void
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $act = (string)($_POST['action'] ?? '');
-        $ownOnly = !erp_customer_is_cms($c);
+        $ownOnly = false; // los traspasados de NCS se modifican igual que los del CMS (la sincronización respeta lo modificado)
         if ($act === 'save') { // guardar la ficha (todo en un cliente del CMS; solo día de pago, serie y notas para documentos en uno de NCS)
             $tariffs = array_values(array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$c['tariff']));
             $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$c['pay_code']));
@@ -183,18 +183,14 @@ function admin_client(string $code): void
                 redirect('/admin/clientes/' . rawurlencode($newCode));
             }
         } elseif ($act === 'block' || $act === 'unblock') {
-            if ($ownOnly) {
-                flash('Este cliente viene de NCS: se bloquea o desbloquea allí y llega al sincronizar.', 'err');
-            } else {
-                $u = current_user();
-                $db->prepare('UPDATE erp_customers SET blocked = ?, rev = rev + 1, updated_by = ?, updated_at = ? WHERE id = ?')
-                    ->execute([$act === 'block' ? 1 : 0, mb_substr((string)($u['username'] ?? ''), 0, 100), time(), (int)$c['id']]);
-                flash($act === 'block' ? 'Cliente bloqueado: no se podrá elegir en documentos nuevos.' : 'Cliente desbloqueado.');
-            }
+            $u = current_user();
+            $db->prepare('UPDATE erp_customers SET blocked = ?, rev = rev + 1, updated_by = ?, updated_at = ?' . (erp_customer_is_cms($c) ? '' : ', cms_edited_at = ?') . ' WHERE id = ?')
+                ->execute(array_merge([$act === 'block' ? 1 : 0, mb_substr((string)($u['username'] ?? ''), 0, 100), time()], erp_customer_is_cms($c) ? [] : [time()], [(int)$c['id']]));
+            flash($act === 'block' ? 'Cliente bloqueado: no se podrá elegir en documentos nuevos.' : 'Cliente desbloqueado.');
             redirect($self);
         } elseif ($act === 'delete') {
-            if ($ownOnly) {
-                flash('Este cliente viene de NCS: volvería al sincronizar. Bloquéalo allí si ya no se usa.', 'err');
+            if (!erp_customer_is_cms($c)) {
+                flash('Este cliente viene de NCS: volvería al sincronizar. Si ya no se usa, bloquéalo.', 'err');
                 redirect($self);
             } elseif (empty($_POST['confirm'])) {
                 flash('Marca la casilla para confirmar el borrado.', 'err');
@@ -456,7 +452,8 @@ function admin_client_card(array $c, string $self, bool $edit, ?array $form, arr
 {
     $db = db();
     $code = (string)$c['cust_code'];
-    $own = !erp_customer_is_cms($c);
+    $own = false; // los traspasados de NCS se editan igual (ver erp_customer_save: se anota que se modificó en el CMS)
+    $ncs = !erp_customer_is_cms($c);
     $tariffs = array_values(array_filter(tariffs_all(), fn($t) => (int)$t['is_active'] === 1 || (int)$t['num'] === (int)$c['tariff']));
     $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (string)$m['code'] === (string)$c['pay_code']));
     $series = array_filter(series_all(), fn($s) => (int)$s['is_active'] === 1 || (int)$s['id'] === (int)$c['def_series']);
@@ -469,7 +466,7 @@ function admin_client_card(array $c, string $self, bool $edit, ?array $form, arr
     $nDocs = erp_customer_docs_count($code);
     $nifDups = erp_customer_nif_dups((string)$c['nif'], (int)$c['id']);
     admin_render('client_card', [
-        'c' => $c, 'f' => $f, 'edit' => $edit, 'own' => $own, 'errors' => $errors, 'self' => $self, 'tariffs' => $tariffs, 'methods' => $methods, 'series' => $series,
+        'c' => $c, 'f' => $f, 'edit' => $edit, 'own' => $own, 'ncs' => $ncs, 'errors' => $errors, 'self' => $self, 'tariffs' => $tariffs, 'methods' => $methods, 'series' => $series,
         'quick' => erp_client_quick($c), 'docs' => erp_client_documents($code, $type), 'docType' => $type, 'notes' => $st->fetchAll(), 'nDocs' => $nDocs,
         'nb' => erp_client_neighbours($c), 'isRetail' => erp_retail_code() === $code, 'nifWarn' => erp_nif_warning((string)$c['nif']), 'nifDups' => $nifDups,
         'crumb' => $c['trade_name'] !== '' ? $c['trade_name'] : ($c['name'] !== '' ? $c['name'] : $code), 'title' => 'Cliente',
