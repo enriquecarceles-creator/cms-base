@@ -76,11 +76,11 @@ $logo = $co['logo'] ? (preg_match('#^https?://#', (string)$co['logo']) ? $co['lo
       <?php foreach ($cols as $c): ?><th align="<?= in_array($c, $right, true) ? 'right' : 'left' ?>" style="background:#f3f2ee;border-top:2px solid <?= e($color) ?>;border-bottom:2px solid <?= e($color) ?>;padding:5px 6px;font-size:11px;text-transform:uppercase;white-space:nowrap"><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
     </tr>
     <?php if (!$lines): ?><tr><td colspan="<?= count($cols) ?>" style="padding:8px 6px;color:#6b665d">Esta factura no tiene líneas.</td></tr><?php endif; ?>
-    <?php foreach ($shown as $l): ?>
+    <?php foreach ($shown as $l): $isTxt = (int)($l['kind'] ?? 0) === 1; ?>
       <tr>
-        <?php foreach ($cols as $c): $al = in_array($c, $right, true) ? 'right' : 'left'; $st = 'padding:5px 6px;border-bottom:1px solid #ecebe6;vertical-align:top;' . ($al === 'right' ? 'white-space:nowrap;' : ''); ?>
+        <?php if ($isTxt): ?><td colspan="<?= count($cols) ?>" align="left" style="padding:5px 6px;border-bottom:1px solid #ecebe6;vertical-align:top"><?= doc_line_html($l) ?></td><?php else: foreach ($cols as $c): $al = in_array($c, $right, true) ? 'right' : 'left'; $st = 'padding:5px 6px;border-bottom:1px solid #ecebe6;vertical-align:top;' . ($al === 'right' ? 'white-space:nowrap;' : ''); ?>
           <?php if ($c === 'code'): ?><td align="left" style="<?= $st ?>"><?= e($l['article_code']) ?></td>
-          <?php elseif ($c === 'desc'): ?><td align="left" style="<?= $st ?>"><?= e($l['title']) ?></td>
+          <?php elseif ($c === 'desc'): ?><td align="left" style="<?= $st ?>"><?= doc_line_html($l) ?></td>
           <?php elseif ($c === 'size'): ?><td align="left" style="<?= $st ?>"><?= e($sizeTxt($l)) ?></td>
           <?php elseif ($c === 'color'): ?><td align="left" style="<?= $st ?>"><?= e($colorTxt($l)) ?></td>
           <?php elseif ($c === 'qty'): ?><td align="right" style="<?= $st ?>"><?= e(erp_qty((int)$l['qty_milli'])) ?></td>
@@ -89,7 +89,7 @@ $logo = $co['logo'] ? (preg_match('#^https?://#', (string)$co['logo']) ? $co['lo
           <?php elseif ($c === 'amount'): ?><td align="right" style="<?= $st ?>"><?= e(erp_money((int)$l['amount_cents'])) ?></td>
           <?php elseif ($c === 'iva'): ?><td align="right" style="<?= $st ?>"><?= $lineRate !== null ? e($fmtPct($lineRate)) : '—' ?></td>
           <?php endif; ?>
-        <?php endforeach; ?>
+        <?php endforeach; endif; ?>
       </tr>
     <?php endforeach; ?>
   </table>

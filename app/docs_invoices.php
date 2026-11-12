@@ -257,12 +257,12 @@ function docs_mirror(array $doc): void
     $db->prepare('INSERT INTO erp_invoices (' . implode(',', $cols) . ') VALUES (' . implode(',', array_fill(0, count($cols), '?')) . ')')->execute(array_values($row));
     $st->execute([(string)$doc['doc_code']]);
     $iid = (int)$st->fetchColumn();
-    $ins = $db->prepare('INSERT INTO erp_invoice_lines (invoice_id, src_key, line_no, article_code, title, qty_milli, price_cents, disc_bp, amount_cents, vat_code, size_no, color_no, size_txt, color_txt)
-        VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?)');
+    $ins = $db->prepare('INSERT INTO erp_invoice_lines (invoice_id, src_key, line_no, article_code, title, qty_milli, price_cents, disc_bp, amount_cents, vat_code, size_no, color_no, size_txt, color_txt, kind, detail)
+        VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)');
     foreach ($lines as $i => $l) {
         $ins->execute([$iid, 'cms:' . (int)$l['id'], $i + 1, mb_substr((string)$l['ref'], 0, 191), (string)$l['title'], (int)round((int)$l['qty_u'] / 10),
             (int)round((int)$l['price_u'] / (DOCS_PRICE / 100)), (int)$l['disc_bp'], (int)round((int)$l['amount_u'] / (DOCS_AMOUNT / 100)),
-            vat_format_pct((int)$l['vat_bp']), (string)$l['size_txt'], (string)$l['color_txt']]);
+            vat_format_pct((int)$l['vat_bp']), (string)$l['size_txt'], (string)$l['color_txt'], (int)$l['kind'], (string)$l['detail']]);
     }
 }
 
@@ -301,7 +301,7 @@ function docs_mirror_sync(): void
 }
 
 /** Emite el borrador: número de la serie sin huecos, registro, copia en Ventas y albaranes facturados. Devuelve el número. */
-function docs_issue(int $id): string
+function docs_issue(int $id, int $rev = -1): string
 {
     $db = db();
     if ($db->query("SELECT COUNT(*) FROM settings WHERE key = 'doc_register_lock'")->fetchColumn() == 0) {
@@ -314,6 +314,9 @@ function docs_issue(int $id): string
         $doc = docs_get($id);
         if (!$doc || !docs_is_invoice((string)$doc['doc_type'])) {
             throw new DomainException('No es una factura.');
+        }
+        if ($rev >= 0 && (int)$doc['rev'] !== $rev) {
+            throw new DomainException(DOCS_CONFLICT_MSG);
         }
         $problems = docs_issue_problems($doc, docs_lines($id));
         if ($problems) {
@@ -336,7 +339,7 @@ function docs_issue(int $id): string
         $now = time();
         $user = (string)(current_user()['username'] ?? '');
         $sii = docs_sii_type($doc);
-        $up = $db->prepare("UPDATE doc_headers SET yr = ?, doc_no = ?, doc_code = ?, status = 'emitida', issued_at = ?, issued_by = ?, sii_type = ?, updated_at = ?, updated_by = ?, is_test = ?
+        $up = $db->prepare("UPDATE doc_headers SET yr = ?, doc_no = ?, doc_code = ?, status = 'emitida', issued_at = ?, issued_by = ?, sii_type = ?, updated_at = ?, updated_by = ?, is_test = ?, rev = rev + 1
             WHERE id = ? AND status = 'borrador'");
         $up->execute([!$test && (int)$s['with_year'] === 1 ? $year : 0, $num['number'], $num['formatted'], $now, $user, $sii, $now, $user, $test ? 1 : 0, $id]);
         if ($up->rowCount() !== 1) {
@@ -511,11 +514,11 @@ function docs_bill(array $albIds): int
     }
 }
 
-/** Borra un borrador de factura (nunca una emitida) y deja libres sus albaranes. */
+/** Borra un borrador (de factura, pedido o albarán; nunca un documento con número) y deja libres sus albaranes. */
 function docs_delete_draft(array $doc): void
 {
-    if (!docs_is_invoice((string)$doc['doc_type']) || $doc['status'] !== 'borrador') {
-        throw new DomainException('Solo se pueden borrar borradores: una factura emitida no se borra nunca.');
+    if ($doc['status'] !== 'borrador') {
+        throw new DomainException('Solo se pueden borrar borradores: un documento con número no se borra nunca' . (docs_is_invoice((string)$doc['doc_type']) ? '' : ' (se anula)') . '.');
     }
     $db = db();
     $db->beginTransaction();
@@ -524,7 +527,7 @@ function docs_delete_draft(array $doc): void
         $del = $db->prepare("DELETE FROM doc_headers WHERE id = ? AND status = 'borrador'");
         $del->execute([$id]);
         if ($del->rowCount() !== 1) {
-            throw new DomainException('Esta factura ya se ha emitido: no se puede borrar.');
+            throw new DomainException('Este documento ya no es un borrador: no se puede borrar.');
         }
         foreach ($db->query("SELECT id FROM doc_headers WHERE doc_type = 'albaran' AND billed_by = " . $id)->fetchAll(PDO::FETCH_COLUMN) as $aid) {
             $db->prepare('UPDATE doc_headers SET billed_by = 0 WHERE id = ?')->execute([(int)$aid]);

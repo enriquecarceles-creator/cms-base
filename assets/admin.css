@@ -520,17 +520,38 @@ html:has(.savebar){scroll-padding-bottom:96px}
 .df-annul{color:var(--err)!important}
 .df-g small{text-transform:none;letter-spacing:0}
 .df-note{margin:6px 0 0}
-.df-grid td{padding:4px 5px;vertical-align:middle}
-.df-grid input,.df-grid select{font:inherit;font-size:.88rem;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;width:100%;min-width:0}
+/* Rejilla de líneas compacta (como la configuración compacta): filas bajas, letra y campos pequeños */
+.df-grid{font-size:.8rem}
+.df-grid thead th{padding:5px 5px;font-size:.68rem}
+.df-grid td{padding:2px 3px;vertical-align:top}
+.df-grid input,.df-grid select,.df-grid textarea{font:inherit;font-size:.8rem;line-height:1.25;padding:2px 5px;border:1px solid var(--line);border-radius:5px;background:#fff;width:100%;min-width:0;box-sizing:border-box}
+.df-grid textarea{display:block;resize:none;overflow:hidden;min-height:1.9em}
 .df-grid input[readonly]{background:#f5f4f0;color:var(--steel)}
-.df-grid input:focus,.df-grid select:focus,.df-g input:focus,.df-g select:focus{outline:2px solid var(--ink);outline-offset:0}
-.df-grid .df-ref{min-width:6.5em}
-.df-grid .df-title{min-width:9em}
-.df-grid .df-s{width:4.2em}
-.df-grid .df-c{width:6.5em}
-.df-grid .df-n{width:5.2em;text-align:right}
-.df-grid .df-d{width:3.8em;text-align:right}
-.df-grid select{width:auto}
+.df-grid input:focus,.df-grid select:focus,.df-grid textarea:focus,.df-g input:focus,.df-g select:focus{outline:2px solid var(--ink);outline-offset:0}
+.df-grid .df-ref{min-width:0}
+.df-grid .df-title{min-width:14em}
+.df-grid .df-s{width:3.4em}
+.df-grid .df-c{width:5em}
+.df-grid .df-n{width:4.2em;text-align:right}
+.df-grid .df-d{width:3em;text-align:right}
+.df-grid select{width:auto;max-width:5.6em;padding:2px 2px}
+.df-grid th:nth-child(2),.df-grid td:nth-child(2){width:6.2em}
+.df-grid tr.df-text td{background:#faf8f2}
+.df-grid tr.df-text textarea{font-style:italic}
+.df-grid tr.df-text td:nth-child(2){width:auto}
+.df-grid td.c{width:2.2em;padding-top:5px}
+.df-grid td.r{vertical-align:top}
+.df-grid .df-amt{padding-top:5px}
+/* Buscador de cliente de la cabecera */
+.df-find{margin:0 0 10px;position:relative}
+.df-find label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--steel)}
+.df-find input{font:inherit;font-size:.92rem;padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:100%;box-sizing:border-box}
+.df-res{list-style:none;margin:4px 0 0;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;max-height:15em;overflow:auto}
+.df-res li{margin:0}
+.df-res li.muted{padding:6px 10px}
+.df-res button{display:block;width:100%;text-align:left;font:inherit;font-size:.86rem;padding:6px 10px;border:0;border-bottom:1px solid #efede8;background:none;cursor:pointer}
+.df-res button:hover:not(:disabled),.df-res button:focus-visible{background:#f3f1ec}
+.df-res button:disabled{color:#9a948a;cursor:not-allowed}
 .df-grid .df-amt{min-width:5.5em}
 .df-grid tr.df-blank td{background:#fcfbf8}
 .df-plink{margin-left:4px;text-decoration:none;font-size:.85rem}

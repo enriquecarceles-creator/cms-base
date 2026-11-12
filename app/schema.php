@@ -163,7 +163,9 @@ const SCHEMA_ERP_DDL = "
         size_no {I} NOT NULL DEFAULT 0,
         color_no {I} NOT NULL DEFAULT 0,
         size_txt {S} NOT NULL DEFAULT '',
-        color_txt {S} NOT NULL DEFAULT ''
+        color_txt {S} NOT NULL DEFAULT '',
+        kind {I} NOT NULL DEFAULT 0,
+        detail {T} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_erp_line_inv ON erp_invoice_lines(invoice_id);
     CREATE INDEX idx_erp_line_art ON erp_invoice_lines(article_code);
@@ -453,7 +455,8 @@ const SCHEMA_DOCS_DDL = "
         cash_crit {I} NOT NULL DEFAULT 0,
         billed_by {I} NOT NULL DEFAULT 0,
         reg_hash {S} NOT NULL DEFAULT '',
-        is_test {I} NOT NULL DEFAULT 0
+        is_test {I} NOT NULL DEFAULT 0,
+        rev {I} NOT NULL DEFAULT 0
     );
     CREATE INDEX idx_doch_type_day ON doc_headers(doc_type, doc_day);
     CREATE INDEX idx_doch_cust ON doc_headers(cust_code);
@@ -474,7 +477,9 @@ const SCHEMA_DOCS_DDL = "
         rec_bp {I} NOT NULL DEFAULT 0,
         amount_u {BIG} NOT NULL DEFAULT 0,
         src_line_id {I} NOT NULL DEFAULT 0,
-        done_u {BIG} NOT NULL DEFAULT 0
+        done_u {BIG} NOT NULL DEFAULT 0,
+        kind {I} NOT NULL DEFAULT 0,
+        detail {T} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_docl_doc ON doc_lines(doc_id, line_no);
     CREATE INDEX idx_docl_src ON doc_lines(src_line_id);
@@ -853,6 +858,21 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    // v33: versión de cada documento (aviso de cambios simultáneos), líneas de texto libre y descripción de varias líneas
+    if ($ver < 33) {
+        foreach ([['doc_headers', ['rev' => '{I} NOT NULL DEFAULT 0']],
+                  ['doc_lines', ['kind' => '{I} NOT NULL DEFAULT 0', 'detail' => "{T} NOT NULL DEFAULT ''"]],
+                  ['erp_invoice_lines', ['kind' => '{I} NOT NULL DEFAULT 0', 'detail' => "{T} NOT NULL DEFAULT ''"]]] as [$t, $cols]) {
+            if (in_array($t, db_tables($pdo), true)) {
+                $have = db_columns($pdo, $t);
+                foreach ($cols as $col => $def) {
+                    if (!in_array($col, $have, true)) {
+                        db_add_column($pdo, $t, $col, $def);
+                    }
+                }
+            }
         }
     }
     // v32: columna is_test (facturas de prueba) y serie W de facturas

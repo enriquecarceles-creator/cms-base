@@ -551,6 +551,9 @@ $check('pedidos: la referencia escrita en minúsculas se enlaza al artículo', (
 $tot = docs_totals($st['lines'], true, false);
 $check('pedidos: con IVA incluido, base + cuota = suma de las líneas', $tot['total'] === (int)round(array_sum(array_column($st['lines'], 'amount_u')) / 100));
 $oid = docs_save($st['doc'], $st['lines']);
+$draftO = docs_get($oid);
+$check('pedidos: se guarda como borrador SIN número', $draftO['status'] === 'borrador' && str_starts_with((string)$draftO['doc_code'], '~') && (int)$draftO['doc_no'] === 0 && $one("SELECT COALESCE(SUM(last_no), 0) FROM doc_series_counters WHERE series_id = " . (int)$draftO['series_id']) === 0);
+docs_confirm($oid);
 $order = docs_get($oid);
 $check('pedidos: se guarda con su número de la serie P', (bool)preg_match('#^P\d{5}/\d{2}$#', (string)$order['doc_code']) && $order['status'] === 'pendiente', (string)$order['doc_code']);
 $aid = docs_serve($order);

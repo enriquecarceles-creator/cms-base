@@ -95,7 +95,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <div class="box">
       <h2><?= e($k['print']) ?></h2>
       <dl>
-        <dt>Número</dt><dd><?= $draft ? '(al emitir)' : e($doc['doc_code']) ?></dd>
+        <dt>Número</dt><dd><?= $draft ? (docs_is_invoice((string)$doc['doc_type']) ? '(al emitir)' : '(al confirmar)') : e($doc['doc_code']) ?></dd>
         <dt>Fecha</dt><dd><?= e(erp_day((int)$doc['doc_day'])) ?></dd>
         <?php if ($payLabel !== ''): ?><dt>Forma de pago</dt><dd><?= e($payLabel) ?></dd><?php endif; ?>
         <?php if ($doc['ref_text'] !== ''): ?><dt>Referencia</dt><dd><?= e($doc['ref_text']) ?></dd><?php endif; ?>
@@ -115,11 +115,11 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
       <?php foreach ($cols as $c): ?><th<?= in_array($c, ['qty', 'price', 'disc', 'amount', 'iva'], true) ? ' class="num"' : '' ?>><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
     </tr></thead>
     <tbody>
-    <?php foreach ($lines as $l): ?>
-      <tr>
-        <?php foreach ($cols as $c): ?>
+    <?php foreach ($lines as $l): $isTxt = (int)($l['kind'] ?? 0) === 1; ?>
+      <tr<?= $isTxt ? ' class="txt"' : '' ?>>
+        <?php if ($isTxt): ?><td colspan="<?= count($cols) ?>" class="desc"><?= doc_line_html($l) ?></td><?php else: foreach ($cols as $c): ?>
           <?php if ($c === 'code'): ?><td><?= e($l['ref']) ?></td>
-          <?php elseif ($c === 'desc'): ?><td><?= e($l['title']) ?></td>
+          <?php elseif ($c === 'desc'): ?><td class="desc"><?= doc_line_html($l) ?></td>
           <?php elseif ($c === 'size'): ?><td><?= e($l['size_txt']) ?></td>
           <?php elseif ($c === 'color'): ?><td><?= e($l['color_txt']) ?></td>
           <?php elseif ($c === 'qty'): ?><td class="num"><?= e(docs_qty_txt((int)$l['qty_u'])) ?></td>
@@ -128,7 +128,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
           <?php elseif ($c === 'amount'): ?><td class="num"><?= e(docs_amount_txt((int)$l['amount_u'])) ?></td>
           <?php elseif ($c === 'iva'): ?><td class="num"><?= e($fmtPct($l['vat_bp'] / 100)) ?></td>
           <?php endif; ?>
-        <?php endforeach; ?>
+        <?php endforeach; endif; ?>
       </tr>
     <?php endforeach; ?>
     </tbody>

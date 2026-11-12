@@ -150,11 +150,11 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     </tr></thead>
     <tbody>
     <?php if (!$lines): ?><tr><td colspan="<?= count($cols) ?>" class="muted">Esta factura no tiene líneas.</td></tr><?php endif; ?>
-    <?php foreach ($lines as $l): $code = (string)$l['article_code']; $inf = $map[mb_strtolower($code)] ?? null; ?>
+    <?php foreach ($lines as $l): $code = (string)$l['article_code']; $inf = $map[mb_strtolower($code)] ?? null; $isTxt = (int)($l['kind'] ?? 0) === 1; ?>
       <tr<?= (int)$l['qty_milli'] < 0 ? ' class="off"' : '' ?>>
-        <?php foreach ($cols as $c): ?>
+        <?php if ($isTxt): ?><td colspan="<?= count($cols) ?>" class="desc"><?= doc_line_html($l) ?></td><?php else: foreach ($cols as $c): ?>
           <?php if ($c === 'code'): ?><td><?php if ($inf && !$public): ?><a href="<?= e(url('/admin/articulo/' . (int)$inf['id'])) ?>" style="color:inherit"><?= e($code) ?></a><?php else: ?><?= e($code) ?><?php endif; ?></td>
-          <?php elseif ($c === 'desc'): ?><td><?= e($l['title']) ?></td>
+          <?php elseif ($c === 'desc'): ?><td class="desc"><?= doc_line_html($l) ?></td>
           <?php elseif ($c === 'size'): ?><td><?= e($sizeTxt($l)) ?></td>
           <?php elseif ($c === 'color'): ?><td><?= e($colorTxt($l)) ?></td>
           <?php elseif ($c === 'qty'): ?><td class="num"><?= e(erp_qty((int)$l['qty_milli'])) ?></td>
@@ -163,7 +163,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
           <?php elseif ($c === 'amount'): ?><td class="num"><?= e(erp_money((int)$l['amount_cents'])) ?></td>
           <?php elseif ($c === 'iva'): ?><td class="num"><?= $lineRate !== null ? e($fmtPct($lineRate)) : '—' ?></td>
           <?php endif; ?>
-        <?php endforeach; ?>
+        <?php endforeach; endif; ?>
       </tr>
     <?php endforeach; ?>
     </tbody>

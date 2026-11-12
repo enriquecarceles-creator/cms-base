@@ -44,9 +44,11 @@ $td = 'padding:5px 6px;border-bottom:1px solid #e6e3dc;font-size:12px;font-famil
 <tr><td style="padding:12px 24px 0">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
     <tr style="background:<?= e($color) ?>;color:#ffffff"><th align="left" style="<?= $td ?>;color:#fff">Artículo</th><th align="right" style="<?= $td ?>;color:#fff">Uds.</th><th align="right" style="<?= $td ?>;color:#fff">Precio</th><th align="right" style="<?= $td ?>;color:#fff">Dto.</th><th align="right" style="<?= $td ?>;color:#fff">Importe</th></tr>
-    <?php foreach ($shown as $l): $det = trim($l['size_txt'] . ($l['size_txt'] !== '' && $l['color_txt'] !== '' ? ' · ' : '') . $l['color_txt']); ?>
+    <?php foreach ($shown as $l): if ((int)($l['kind'] ?? 0) === 1): ?>
+      <tr><td colspan="5" style="<?= $td ?>"><?= doc_line_html($l) ?></td></tr>
+    <?php continue; endif; $det = trim($l['size_txt'] . ($l['size_txt'] !== '' && $l['color_txt'] !== '' ? ' · ' : '') . $l['color_txt']); ?>
       <tr>
-        <td style="<?= $td ?>"><?= e($l['ref']) ?> <?= e($l['title']) ?><?= $det !== '' ? '<br><span style="color:#6b665d">' . e($det) . '</span>' : '' ?></td>
+        <td style="<?= $td ?>"><?= e($l['ref']) ?> <?= doc_line_html($l) ?><?= $det !== '' ? '<br><span style="color:#6b665d">' . e($det) . '</span>' : '' ?></td>
         <td align="right" style="<?= $td ?>"><?= e(docs_qty_txt((int)$l['qty_u'])) ?></td>
         <td align="right" style="<?= $td ?>"><?= e(docs_price_txt((int)$l['price_u'])) ?></td>
         <td align="right" style="<?= $td ?>"><?= (int)$l['disc_bp'] > 0 ? e(rtrim(rtrim(number_format($l['disc_bp'] / 100, 2, ',', ''), '0'), ',')) . ' %' : '' ?></td>

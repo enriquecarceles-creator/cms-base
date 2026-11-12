@@ -166,3 +166,10 @@ function admin_invoice_view(string $num): void
     }
     render('documents/invoice_' . $vars['d']['template'], $vars, null);
 }
+
+/** Descripción de una línea (de doc_lines o de erp_invoice_lines) en HTML: el título y, debajo, el detalle con sus saltos de línea. Todo escapado. */
+function doc_line_html(array $l): string
+{
+    $detail = (string)($l['detail'] ?? '');
+    return e((string)$l['title']) . ($detail !== '' ? '<br>' . nl2br(e($detail), false) : '');
+}

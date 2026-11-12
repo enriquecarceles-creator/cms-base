@@ -95,7 +95,8 @@ function docs_email_text(array $doc, string $message): string
 {
     $out = trim($message) . "\n\n--- " . DOCS_KINDS[$doc['doc_type']]['print'] . ' ' . $doc['doc_code'] . " ---\nFecha: " . erp_day((int)$doc['doc_day']) . "\n";
     foreach (array_slice(docs_lines((int)$doc['id']), 0, DOCS_EMAIL_MAX_LINES) as $l) {
-        $out .= '- ' . trim($l['ref'] . ' ' . $l['title'] . ' ' . $l['size_txt'] . ' ' . $l['color_txt']) . ' × ' . docs_qty_txt((int)$l['qty_u']) . "\n";
+        $out .= (int)$l['kind'] === 1 ? (string)$l['title'] . ((string)$l['detail'] !== '' ? "\n" . $l['detail'] : '') . "\n"
+            : '- ' . trim($l['ref'] . ' ' . $l['title'] . ' ' . $l['size_txt'] . ' ' . $l['color_txt']) . ' × ' . docs_qty_txt((int)$l['qty_u']) . "\n";
     }
     return $out . 'Total: ' . erp_money((int)$doc['total_cents']) . "\n";
 }
@@ -117,6 +118,10 @@ function docs_send(array $doc): void
     if (!in_array($doc['doc_type'], ['pedido', 'albaran'], true)) {
         not_found();
         return;
+    }
+    if ($doc['status'] === 'borrador') {
+        flash('Confirma antes el documento: un borrador no tiene número y no se envía.', 'err');
+        redirect($self);
     }
     if ($doc['status'] === 'anulado') {
         flash('Este documento está anulado: no se envía.', 'err');

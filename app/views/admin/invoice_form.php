@@ -81,7 +81,7 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
       <tr<?= (int)$l['qty_milli'] < 0 ? ' class="neg"' : '' ?>>
         <td class="c muted"><?= (int)($l['line_no'] > 0 ? $l['line_no'] : $i + 1) ?></td>
         <td><?php if ($inf): ?><a href="<?= e(url('/admin/articulo/' . (int)$inf['id'])) ?>"><?= e($code) ?></a><?php else: ?><?= e($code) ?><?php endif; ?></td>
-        <td><?= e($l['title']) ?></td>
+        <td><?= doc_line_html($l) ?></td>
         <td><?= e($sizeTxt($l)) ?></td>
         <td><?= e($colorTxt($l)) ?></td>
         <td class="r"><?= e(erp_qty((int)$l['qty_milli'])) ?></td>
