@@ -399,7 +399,7 @@ const SCHEMA_DOCPARAMS_DDL = "
 
 /**
  * Documentos propios del CMS (app/docs_engine.php): pedidos y albaranes (y, más adelante, facturas y rectificativas).
- * En ERP_TABLES (llevan datos de clientes): solo van en las copias con «Incluir clientes y ventas».
+ * En DB_TABLES: van SIEMPRE en las copias (no se recuperan sincronizando), aunque lleven datos de clientes.
  *   doc_headers  doc_code = número con formato de la serie (único: las letras de serie son únicas entre todos los tipos).
  *                status: pendiente | parcial | servido | facturado | anulado. Datos del cliente copiados al guardar.
  *   doc_lines    qty_u y done_u × 10.000; price_u × 1.000.000; amount_u × 10.000; disc_bp, vat_bp, rec_bp × 100.

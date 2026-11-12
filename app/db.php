@@ -23,13 +23,15 @@ const DB_ENGINES = [
 
 /** Tablas de la aplicación en orden de dependencias (padres antes que hijas). */
 const DB_TABLES = ['users', 'login_attempts', 'password_resets', 'login_devices', 'user_recovery_codes', 'settings', 'categories', 'products',
-    'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages', 'data_history', 'doc_series', 'doc_series_counters', 'doc_vat_rates', 'doc_pay_methods', 'doc_tariffs'];
+    'product_images', 'slides', 'reps', 'custom_fields', 'product_fields', 'import_profiles', 'pages', 'data_history', 'doc_series', 'doc_series_counters', 'doc_vat_rates', 'doc_pay_methods', 'doc_tariffs',
+    'doc_headers', 'doc_lines', 'doc_events'];
 
+/* doc_headers, doc_lines y doc_events (pedidos y albaranes) van SIEMPRE en las copias aunque lleven datos de clientes (decidido el 12/11/2026): no se recuperan sincronizando. */
 /* mail_log (últimos 50 correos, con direcciones) y backup_log (descargas de copias) quedan fuera de DB_TABLES a propósito: no viajan en las copias. */
 
 /** Tablas del ERP (clientes y ventas de NCS): datos personales, FUERA de DB_TABLES; solo se copian si se pide (ver db_copy_all). */
 const ERP_TABLES = ['erp_customers', 'erp_invoices', 'erp_invoice_lines', 'erp_notes',
-    'erp_invoice_state', 'erp_invoice_notes', 'erp_invoice_events', 'erp_invoice_links', 'erp_invoice_sends', 'doc_headers', 'doc_lines', 'doc_events'];
+    'erp_invoice_state', 'erp_invoice_notes', 'erp_invoice_events', 'erp_invoice_links', 'erp_invoice_sends'];
 
 /** PDO que traduce el SQL al motor de destino. */
 final class CmsPdo extends PDO

@@ -8,7 +8,7 @@ declare(strict_types=1);
  * recargo de equivalencia), rejilla de líneas y totales con desglose de IVA. Funciona sin JavaScript (botón «Recalcular»: el
  * servidor completa artículos, precios y totales); con JavaScript, sugerencias de artículos y clientes y totales al momento.
  *
- * Tablas (SCHEMA_VERSION 29, en ERP_TABLES: llevan datos de clientes, solo van en las copias con «Incluir clientes y ventas»):
+ * Tablas (SCHEMA_VERSION 29, en DB_TABLES: van siempre en las copias de seguridad, aunque lleven datos de clientes):
  *   doc_headers  un documento. Copia los datos del cliente tal como estaban (el documento no cambia si cambia la ficha).
  *   doc_lines    sus líneas. src_line_id = línea de origen (albarán ← pedido); done_u = unidades ya servidas de esa línea.
  *   doc_events   historial de cada documento.

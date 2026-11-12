@@ -552,7 +552,19 @@ $aid = docs_serve($order);
 $check('pedidos: «Servir» crea el albarán y el pedido queda servido', docs_get($oid)['status'] === 'servido' && docs_get($aid)['doc_type'] === 'albaran' && (int)docs_get($aid)['total_cents'] === (int)$order['total_cents']);
 docs_annul(docs_get($aid));
 $check('pedidos: anular el albarán devuelve el pedido a pendiente', docs_get($oid)['status'] === 'pendiente' && docs_get($aid)['status'] === 'anulado');
-$check('pedidos: van con clientes y ventas (fuera de las copias salvo con la casilla)', !array_intersect(['doc_headers', 'doc_lines', 'doc_events'], DB_TABLES) && !array_diff(['doc_headers', 'doc_lines', 'doc_events'], ERP_TABLES));
+$check('pedidos: van siempre en las copias (DB_TABLES), no en ERP_TABLES', !array_diff(['doc_headers', 'doc_lines', 'doc_events'], DB_TABLES) && !array_intersect(['doc_headers', 'doc_lines', 'doc_events'], ERP_TABLES));
+$bkDocs = $tmp . '/data/backup-docs.sqlite';
+$db->exec("VACUUM INTO '" . str_replace("'", "''", $bkDocs) . "'");
+auth_scrub_backup($bkDocs, false);
+$bkPdo = new PDO('sqlite:' . $bkDocs);
+$inBackup = (int)$bkPdo->query('SELECT COUNT(*) FROM doc_headers')->fetchColumn();
+$bkPdo = null;
+@unlink($bkDocs);
+$check('pedidos: la copia por defecto (sin la casilla) los lleva', $inBackup === $one('SELECT COUNT(*) FROM doc_headers') && $inBackup > 0, "$inBackup documentos");
+// Se quitan los de esta prueba: llevan el nombre de un cliente real y la prueba siguiente comprueba que la copia no lleva clientes de NCS
+$db->exec('DELETE FROM doc_events');
+$db->exec('DELETE FROM doc_lines');
+$db->exec('DELETE FROM doc_headers');
 $sumNcs = $one('SELECT COUNT(*) FROM erp_invoices');
 $check('pedidos: no tocan las facturas de NCS', $sumNcs === $one('SELECT COUNT(*) FROM erp_invoices') && $one("SELECT COUNT(*) FROM erp_invoices WHERE origin <> 'ncs'") === 0);
 
