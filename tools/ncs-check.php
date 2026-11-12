@@ -452,7 +452,7 @@ require_once $tmp . '/app/doc_series.php';
 $ncsLetters = array_keys(series_ncs_letters());
 $check('series: las letras de las facturas importadas se leen de erp_invoices', $ncsLetters !== [] && count(array_filter($ncsLetters, fn($l) => preg_match('/^[A-Z]+$/', $l))) === count($ncsLetters), implode(',', $ncsLetters));
 $seed = array_column($db->query('SELECT letter FROM doc_series ORDER BY id')->fetchAll(), 'letter');
-$check('series: F, R, A, P y T (tiques) sembradas', $seed === ['F', 'R', 'A', 'P', 'T']);
+$check('series: W (facturas del CMS), R, A, P y T (tiques) sembradas', $seed === ['W', 'R', 'A', 'P', 'T']);
 $errs = [];
 $postS = ['s' => [], 'default' => [], 'new' => ['type' => 'albaran', 'letter' => $ncsLetters[0] ?? 'V', 'digits' => 5, 'with_year' => '']];
 foreach (series_all() as $sid => $sr) {
@@ -468,7 +468,7 @@ $postS['new']['type'] = 'factura';
 $errs = [];
 series_plan($postS, series_ncs_letters(), (int)date('Y'), $errs);
 $check('series: una serie de FACTURAS no puede usar la letra de NCS ni con año (conviven sin mezclarse)', count($errs) === 1 && str_contains($errs[0], 'necesita otra letra'));
-$fid = (int)$db->query("SELECT id FROM doc_series WHERE letter = 'F'")->fetchColumn();
+$fid = (int)$db->query("SELECT id FROM doc_series WHERE letter = 'W'")->fetchColumn();
 $db->beginTransaction();
 $n1 = series_next_number($fid, 2026)['number'];
 $db->rollBack();
@@ -567,6 +567,8 @@ $bkPdo = null;
 @unlink($bkDocs);
 $check('pedidos: la copia por defecto (sin la casilla) los lleva', $inBackup === $one('SELECT COUNT(*) FROM doc_headers') && $inBackup > 0, "$inBackup documentos");
 // Facturas del CMS con un cliente real (con NIF y dirección): emitir, convivir con la sincronización de NCS y rectificar
+save_setting('docp_test_mode', '0'); // por defecto está activado (facturas de prueba): aquí se prueban las reales; más abajo, las de prueba
+setting('docp_test_mode', '0', true);
 if (trim(setting('tax_id', '', true)) === '' || trim(setting('company_name')) === '') {
     save_setting('company_name', 'Empresa inventada para la prueba');
     save_setting('tax_id', 'B00000000'); // inventado
@@ -585,7 +587,7 @@ try {
 } catch (Throwable $e) {
     $codeF = 'ERROR: ' . $e->getMessage();
 }
-$check('facturas: borrador con un cliente real y emisión con el número de la serie F', (bool)preg_match('#^F\d{5}/\d{2}$#', $codeF), $codeF . implode(' ', $stF['errors']));
+$check('facturas: borrador con un cliente real y emisión con el número de la serie W', (bool)preg_match('#^W\d{5}/\d{2}$#', $codeF), $codeF . implode(' ', $stF['errors']));
 $check('facturas: la emitida queda en Ventas con origen CMS y en el registro encadenado', $one("SELECT COUNT(*) FROM erp_invoices WHERE origin = 'cms'") === 1 && docs_register_verify() === ['n' => 1, 'problems' => []]);
 $resF = erp_stage_build($pru . '/FCUENTAS.MDB', $pru . '/FHISTORI.MDB', $pru . '/FALMACEN.MDB');
 erp_job_clear();
@@ -610,6 +612,33 @@ $check('facturas: rectificativa por diferencias (R1) con total negativo', (bool)
 $book = [];
 docs_sii_book_write(function (array $row) use (&$book) { $book[] = $row; }, (int)date('Y0101'), (int)date('Ymd'));
 $check('facturas: libro de facturas expedidas con F1 y R1', count($book) === 3 && $book[1][3] === 'F1' && $book[2][3] === 'R1' && $book[2][4] === 'I' && $book[2][5] === $codeF, json_encode(array_map(fn($r) => array_slice($r, 0, 6), $book)));
+// Modo de prueba (activado por defecto): numeración aparte, fuera de la serie, del registro, de Ventas y del libro del SII
+save_setting('docp_test_mode', '1');
+setting('docp_test_mode', '1', true);
+$wid = (int)$db->query("SELECT id FROM doc_series WHERE letter = 'W'")->fetchColumn();
+$lastNo = fn() => (int)$db->query('SELECT COALESCE(SUM(last_no), 0) FROM doc_series_counters WHERE series_id = ' . $wid)->fetchColumn();
+$before = [$one('SELECT COUNT(*) FROM doc_register'), $one("SELECT COUNT(*) FROM erp_invoices WHERE origin = 'cms'"), $lastNo()];
+$blankT = docs_blank('factura');
+$stT = docs_from_post($blankT, [], ['h' => ['series_id' => $blankT['series_id'], 'day' => date('Y-m-d'), 'cust_code' => $custF['cust_code'] ?? '', 'cust_prev' => '', 'vat_incl' => '1', 'tariff' => '1'],
+    'l' => [['id' => 0, 'oref' => '', 'ref' => (string)($art['ref'] ?? ''), 'qty' => '1', 'vat' => (string)docs_vat_default()]]]);
+$fidT = $stT['errors'] === [] ? docs_save($stT['doc'], $stT['lines']) : 0;
+$codeT = '';
+try {
+    $codeT = $fidT > 0 ? docs_issue($fidT) : '';
+} catch (Throwable $e) {
+    $codeT = 'ERROR: ' . $e->getMessage();
+}
+$check('prueba: con el modo de prueba la factura sale como PRUEBA-00001 y se marca como de prueba', $codeT === 'PRUEBA-00001' && docs_is_test(docs_get($fidT)), $codeT);
+$bookT = [];
+docs_sii_book_write(function (array $row) use (&$bookT) { $bookT[] = $row; }, (int)date('Y0101'), (int)date('Ymd'));
+$check('prueba: no entra en el registro, ni en Ventas, ni en el libro del SII, ni gasta números de la serie',
+    $before === [$one('SELECT COUNT(*) FROM doc_register'), $one("SELECT COUNT(*) FROM erp_invoices WHERE origin = 'cms'"), $lastNo()] && count($bookT) === count($book) && docs_register_verify()['problems'] === []);
+$rT = docs_get($fidF) ? docs_rectify(docs_get($fidF), 'diferencias', 'R1', 'Prueba') : 0;
+$check('prueba: con el modo activado no se emite una rectificativa de una factura real', $rT > 0 && count(docs_issue_problems(docs_get($rT), docs_lines($rT))) > 0);
+$purged = docs_test_purge();
+$check('prueba: borrar las de prueba quita solo las de prueba (las reales y los borradores de rectificativa de las reales se quedan)', $purged === 1 && docs_test_count() === 0 && docs_get($fidF) !== null && docs_get($rT) !== null, (string)$purged);
+save_setting('docp_test_mode', '0');
+setting('docp_test_mode', '0', true);
 // Se quitan los de esta prueba: llevan el nombre de un cliente real y la prueba siguiente comprueba que la copia no lleva clientes de NCS
 $db->exec('DELETE FROM doc_register');
 $db->exec("DELETE FROM erp_invoice_lines WHERE src_key LIKE 'cms:%'");

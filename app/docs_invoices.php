@@ -19,6 +19,80 @@ declare(strict_types=1);
  * cualquier alteración y el libro de facturas expedidas se exporta para el SII (export.php).
  */
 
+/** Texto de la marca de documento de prueba. */
+function docs_test_text(): string
+{
+    $t = trim(docp('test_text'));
+    return $t !== '' ? mb_substr($t, 0, 120) : DOCP_DEFAULTS['test_text'];
+}
+
+/** ¿Es una factura de prueba? */
+function docs_is_test(array $doc): bool
+{
+    return (int)($doc['is_test'] ?? 0) === 1;
+}
+
+/** Cuántas facturas de prueba hay (emitidas). */
+function docs_test_count(): int
+{
+    return (int)db()->query("SELECT COUNT(*) FROM doc_headers WHERE is_test = 1")->fetchColumn();
+}
+
+/**
+ * Borra TODAS las facturas de prueba (y los borradores de rectificativa que cuelgan de ellas). Los albaranes que facturaban vuelven a estar
+ * pendientes de facturar y sus pedidos se recalculan. Devuelve cuántas facturas se han borrado.
+ */
+function docs_test_purge(): int
+{
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $ids = array_map('intval', $db->query('SELECT id FROM doc_headers WHERE is_test = 1')->fetchAll(PDO::FETCH_COLUMN));
+        foreach ($ids as $id) {
+            foreach ($db->query("SELECT id FROM doc_headers WHERE doc_type = 'albaran' AND billed_by = " . $id)->fetchAll(PDO::FETCH_COLUMN) as $aid) {
+                $db->prepare("UPDATE doc_headers SET status = 'pendiente', billed_by = 0 WHERE id = ?")->execute([(int)$aid]);
+                docs_event((int)$aid, 'liberado', 'Factura de prueba borrada');
+                docs_refresh_orders(docs_source_orders((int)$aid));
+            }
+            $drafts = $db->query("SELECT id FROM doc_headers WHERE status = 'borrador' AND rect_of = " . $id)->fetchAll(PDO::FETCH_COLUMN);
+            foreach ([...$drafts, $id] as $did) {
+                $did = (int)$did;
+                foreach (['doc_lines', 'doc_events'] as $t) {
+                    $db->exec("DELETE FROM $t WHERE doc_id = $did");
+                }
+                $db->exec("DELETE FROM doc_headers WHERE id = $did");
+            }
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    return count($ids);
+}
+
+/** /admin/facturas/pruebas: confirmación para borrar las facturas de prueba (solo administradores). */
+function admin_docs_test_purge(): void
+{
+    if (!is_admin()) {
+        flash('Solo un administrador puede borrar las facturas de prueba.', 'err');
+        redirect('/admin/facturas');
+    }
+    $n = docs_test_count();
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_check();
+        if ($n === 0) {
+            redirect('/admin/facturas');
+        }
+        $del = docs_test_purge();
+        history_add('configuracion', 'pruebas', 'manual', 'ok', $del . ' facturas de prueba borradas');
+        flash($del . ' factura' . ($del === 1 ? '' : 's') . ' de prueba borrada' . ($del === 1 ? '' : 's') . '. Los albaranes que facturaban vuelven a estar pendientes.');
+        redirect('/admin/facturas');
+    }
+    $codes = db()->query("SELECT doc_code FROM doc_headers WHERE is_test = 1 ORDER BY id LIMIT 30")->fetchAll(PDO::FETCH_COLUMN);
+    admin_render('docs_purge', ['n' => $n, 'codes' => $codes, 'on' => docp_bool('test_mode'), 'title' => 'Facturas de prueba', 'crumb' => 'Facturas de prueba']);
+}
+
 /** Errores que impiden emitir el borrador (vacío = se puede emitir). */
 function docs_issue_problems(array $doc, array $lines): array
 {
@@ -61,6 +135,10 @@ function docs_issue_problems(array $doc, array $lines): array
         $orig = docs_get((int)$doc['rect_of']);
         if (!$orig || !docs_is_invoice((string)$orig['doc_type']) || $orig['status'] !== 'emitida') {
             $e[] = 'No se encuentra la factura que se rectifica (tiene que estar emitida).';
+        } elseif (docs_is_test($orig) !== docp_bool('test_mode')) {
+            $e[] = docp_bool('test_mode')
+                ? 'La factura que rectificas es real y el modo de prueba está activado: desactívalo (Configuración → Parámetros) para emitir esta rectificativa.'
+                : 'La factura que rectificas es de prueba: borra las facturas de prueba en lugar de rectificarla.';
         } elseif ((int)$orig['doc_day'] > $day) {
             $e[] = 'La rectificativa no puede tener fecha anterior a la factura que rectifica (' . erp_day((int)$orig['doc_day']) . ').';
         }
@@ -72,7 +150,7 @@ function docs_issue_problems(array $doc, array $lines): array
     if (!$s || $s['doc_type'] !== $kind || (int)$s['is_active'] !== 1) {
         $e[] = 'La serie del borrador no está activa o no es de este tipo (Configuración → Series).';
     } else {
-        $st = db()->prepare("SELECT MAX(doc_day) FROM doc_headers WHERE series_id = ? AND status = 'emitida'" . ((int)$s['with_year'] === 1 ? ' AND yr = ?' : ''));
+        $st = db()->prepare("SELECT MAX(doc_day) FROM doc_headers WHERE series_id = ? AND status = 'emitida' AND is_test = 0" . ((int)$s['with_year'] === 1 ? ' AND yr = ?' : ''));
         $st->execute((int)$s['with_year'] === 1 ? [(int)$s['id'], intdiv($day, 10000)] : [(int)$s['id']]);
         $last = (int)$st->fetchColumn();
         if ($last > $day) { // numeración correlativa: un número mayor no puede llevar fecha anterior
@@ -140,7 +218,7 @@ function docs_register_verify(): array
         }
         $prev = (string)$r['hash'];
     }
-    $missing = (int)$db->query("SELECT COUNT(*) FROM doc_headers h WHERE h.status = 'emitida' AND h.doc_type IN ('factura','simplificada','rectificativa')
+    $missing = (int)$db->query("SELECT COUNT(*) FROM doc_headers h WHERE h.is_test = 0 AND h.status = 'emitida' AND h.doc_type IN ('factura','simplificada','rectificativa')
         AND NOT EXISTS (SELECT 1 FROM doc_register r WHERE r.doc_id = h.id)")->fetchColumn();
     if ($missing > 0) {
         $problems[] = $missing . ' factura(s) emitida(s) no están en el registro.';
@@ -203,7 +281,7 @@ function docs_mirror_sync(): void
 {
     try {
         $db = db();
-        $ids = $db->query("SELECT h.id FROM doc_headers h WHERE h.status = 'emitida' AND h.doc_type IN ('factura','simplificada','rectificativa')
+        $ids = $db->query("SELECT h.id FROM doc_headers h WHERE h.is_test = 0 AND h.status = 'emitida' AND h.doc_type IN ('factura','simplificada','rectificativa')
             AND NOT EXISTS (SELECT 1 FROM erp_invoices e WHERE e.inv_number = h.doc_code)")->fetchAll(PDO::FETCH_COLUMN);
         if (!$ids) {
             return;
@@ -243,7 +321,13 @@ function docs_issue(int $id): string
         }
         $s = series_get((int)$doc['series_id']);
         $year = intdiv((int)$doc['doc_day'], 10000);
-        $num = series_next_number((int)$s['id'], $year);
+        $test = docp_bool('test_mode'); // modo de prueba: numeración aparte, sin tocar la serie ni el registro
+        if ($test) {
+            $no = (int)$db->query('SELECT COALESCE(MAX(doc_no), 0) FROM doc_headers WHERE is_test = 1')->fetchColumn() + 1;
+            $num = ['number' => $no, 'formatted' => 'PRUEBA-' . str_pad((string)$no, 5, '0', STR_PAD_LEFT)];
+        } else {
+            $num = series_next_number((int)$s['id'], $year);
+        }
         $st = $db->prepare('SELECT COUNT(*) FROM doc_headers WHERE doc_code = ?');
         $st->execute([$num['formatted']]);
         if ((int)$st->fetchColumn() > 0) { // en facturas NO se saltan números
@@ -252,16 +336,18 @@ function docs_issue(int $id): string
         $now = time();
         $user = (string)(current_user()['username'] ?? '');
         $sii = docs_sii_type($doc);
-        $up = $db->prepare("UPDATE doc_headers SET yr = ?, doc_no = ?, doc_code = ?, status = 'emitida', issued_at = ?, issued_by = ?, sii_type = ?, updated_at = ?, updated_by = ?
+        $up = $db->prepare("UPDATE doc_headers SET yr = ?, doc_no = ?, doc_code = ?, status = 'emitida', issued_at = ?, issued_by = ?, sii_type = ?, updated_at = ?, updated_by = ?, is_test = ?
             WHERE id = ? AND status = 'borrador'");
-        $up->execute([(int)$s['with_year'] === 1 ? $year : 0, $num['number'], $num['formatted'], $now, $user, $sii, $now, $user, $id]);
+        $up->execute([!$test && (int)$s['with_year'] === 1 ? $year : 0, $num['number'], $num['formatted'], $now, $user, $sii, $now, $user, $test ? 1 : 0, $id]);
         if ($up->rowCount() !== 1) {
             throw new DomainException('Esta factura ya se ha emitido.');
         }
         $doc = docs_get($id);
-        docs_register_append($doc);
-        $doc = docs_get($id);
-        docs_mirror($doc);
+        if (!$test) { // las de prueba no entran en el registro encadenado ni en Ventas
+            docs_register_append($doc);
+            $doc = docs_get($id);
+            docs_mirror($doc);
+        }
         foreach ($db->query("SELECT id, doc_code FROM doc_headers WHERE doc_type = 'albaran' AND billed_by = " . $id)->fetchAll() as $a) {
             $db->prepare("UPDATE doc_headers SET status = 'facturado' WHERE id = ?")->execute([(int)$a['id']]);
             docs_event((int)$a['id'], 'facturado', 'Factura ' . $num['formatted']);
@@ -269,7 +355,9 @@ function docs_issue(int $id): string
         }
         if ($doc['doc_type'] === 'rectificativa') {
             docs_event((int)$doc['rect_of'], 'rectificada', 'Rectificativa ' . $num['formatted'] . ' (' . mb_strtolower(DOCS_RECT_MODES[$doc['rect_mode']] ?? '') . ')');
-            docs_mirror_mark_substituted();
+            if (!$test) {
+                docs_mirror_mark_substituted();
+            }
         }
         docs_event($id, 'emitida', $num['formatted']);
         $db->commit();
@@ -459,7 +547,7 @@ function docs_sii_book_write(callable $put, int $from, int $to): int
     $put(['Serie y número', 'Fecha de expedición', 'Fecha de operación', 'Tipo de factura (SII)', 'Tipo de rectificativa', 'Factura rectificada',
         'Fecha factura rectificada', 'NIF destinatario', 'Nombre destinatario', 'Base imponible', 'Tipo IVA %', 'Cuota IVA', 'Tipo recargo %', 'Cuota recargo',
         'Total factura', 'Criterio de caja', 'Mención', 'Huella del registro']);
-    $st = db()->prepare("SELECT * FROM doc_headers WHERE status = 'emitida' AND doc_type IN ('factura','simplificada','rectificativa') AND doc_day BETWEEN ? AND ? ORDER BY doc_day, id");
+    $st = db()->prepare("SELECT * FROM doc_headers WHERE is_test = 0 AND status = 'emitida' AND doc_type IN ('factura','simplificada','rectificativa') AND doc_day BETWEEN ? AND ? ORDER BY doc_day, id");
     $st->execute([$from, $to]);
     $n = 0;
     $money = fn(int $c) => number_format($c / 100, 2, ',', '');

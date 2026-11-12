@@ -346,9 +346,9 @@ const SCHEMA_SERIES_DDL = "
     );
 ";
 
-/** Series iniciales (solo si no hay ninguna): F facturas, R rectificativas, A albaranes y P pedidos. */
+/** Series iniciales (solo si no hay ninguna): W facturas (propia del CMS, no choca con las letras de NCS), R rectificativas, A albaranes y P pedidos. */
 const SCHEMA_SERIES_SEED = [
-    ['factura', 'F', 'Facturas'], ['rectificativa', 'R', 'Facturas rectificativas'], ['albaran', 'A', 'Albaranes'], ['pedido', 'P', 'Pedidos'],
+    ['factura', 'W', 'Facturas'], ['rectificativa', 'R', 'Facturas rectificativas'], ['albaran', 'A', 'Albaranes'], ['pedido', 'P', 'Pedidos'],
     ['simplificada', 'T', 'Facturas simplificadas (tiques)'],
 ];
 
@@ -452,7 +452,8 @@ const SCHEMA_DOCS_DDL = "
         vat_note {S} NOT NULL DEFAULT '',
         cash_crit {I} NOT NULL DEFAULT 0,
         billed_by {I} NOT NULL DEFAULT 0,
-        reg_hash {S} NOT NULL DEFAULT ''
+        reg_hash {S} NOT NULL DEFAULT '',
+        is_test {I} NOT NULL DEFAULT 0
     );
     CREATE INDEX idx_doch_type_day ON doc_headers(doc_type, doc_day);
     CREATE INDEX idx_doch_cust ON doc_headers(cust_code);
@@ -513,6 +514,33 @@ const SCHEMA_INVOICES_DDL = "
         hash {S} NOT NULL DEFAULT ''
     );
 ";
+
+/**
+ * v32: serie W de facturas del CMS (por defecto) para webs que ya tenían series. Si alguna factura importada de NCS ya usa la W, no se crea.
+ * La F antigua se desactiva si nunca se ha usado; si se usó, queda activa pero sin ser la de por defecto.
+ */
+function schema_seed_w(CmsPdo $pdo): void
+{
+    $st = $pdo->prepare('SELECT COUNT(*) FROM doc_series WHERE UPPER(letter) = ?');
+    $st->execute(['W']);
+    if ((int)$st->fetchColumn() > 0) {
+        return;
+    }
+    if (in_array('erp_invoices', db_tables($pdo), true) && (int)$pdo->query("SELECT COUNT(*) FROM erp_invoices WHERE origin = 'ncs' AND UPPER(inv_number) LIKE 'W%'")->fetchColumn() > 0) {
+        return; // la W es de NCS: se queda la serie de antes
+    }
+    $pdo->exec("UPDATE doc_series SET is_default = 0 WHERE doc_type = 'factura'");
+    $pdo->prepare('INSERT INTO doc_series (doc_type, letter, descr, digits, with_year, is_default, is_active, created_at) VALUES (?, ?, ?, 5, 1, 1, 1, ?)')
+        ->execute(['factura', 'W', 'Facturas', time()]);
+    $f = $pdo->query("SELECT id FROM doc_series WHERE doc_type = 'factura' AND UPPER(letter) = 'F'")->fetchColumn();
+    if ($f !== false) {
+        $used = (int)$pdo->query('SELECT COUNT(*) FROM doc_headers WHERE series_id = ' . (int)$f)->fetchColumn()
+            + (int)$pdo->query('SELECT COUNT(*) FROM doc_series_counters WHERE series_id = ' . (int)$f . ' AND last_no > 0')->fetchColumn();
+        if ($used === 0) {
+            $pdo->exec('UPDATE doc_series SET is_active = 0 WHERE id = ' . (int)$f);
+        }
+    }
+}
 
 /** Serie de tiques (facturas simplificadas) para webs que ya tenían series: T, o TQ / TK si la T está ocupada; nada si ya hay una. */
 function schema_seed_simplified(CmsPdo $pdo): void
@@ -825,6 +853,15 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    // v32: columna is_test (facturas de prueba) y serie W de facturas
+    if ($ver < 32) {
+        if (in_array('doc_headers', db_tables($pdo), true) && !in_array('is_test', db_columns($pdo, 'doc_headers'), true)) {
+            db_add_column($pdo, 'doc_headers', 'is_test', '{I} NOT NULL DEFAULT 0');
+        }
+        if (in_array('doc_series', db_tables($pdo), true)) {
+            schema_seed_w($pdo);
         }
     }
     // v31: clientes dados de alta a mano en el CMS (origin = 'cms'); los de NCS quedan con 'ncs'

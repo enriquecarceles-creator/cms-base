@@ -25,6 +25,7 @@ $statusCls = $doc['status'] === 'anulado' ? ' tag-off' : (in_array($doc['status'
 $custLink = $doc['cust_code'] !== '' && !$isRetail ? url('/admin/clientes/' . rawurlencode((string)$doc['cust_code'])) : '';
 $issueProblems = $issueProblems ?? [];
 $orig = $orig ?? null;
+$isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')));
 ?>
 <?php if (!erp_2fa_required()): ?><p class="alert warn"><?= admin_icon('alert') ?><span>La doble verificación para Clientes y Ventas está desactivada</span></p><?php endif; ?>
 
@@ -45,7 +46,7 @@ $orig = $orig ?? null;
       <?php endif; ?>
       <a class="btn small ghost" href="<?= e(url($self . '/ver')) ?>" target="_blank" rel="noopener"><?= $isDraft ? 'Vista previa' : 'Imprimir' ?></a>
       <?php if ($issued): ?>
-        <a class="btn small ghost" href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$saved['doc_code']))) ?>" title="Cobro, envío por email, notas e historial">Cobro y envío</a>
+        <?php if (!docs_is_test($saved)): ?><a class="btn small ghost" href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$saved['doc_code']))) ?>" title="Cobro, envío por email, notas e historial">Cobro y envío</a><?php endif; ?>
         <a class="btn small ghost" href="#rectificar">Rectificar</a>
       <?php endif; ?>
       <?php if ($kind === 'pedido' && in_array($doc['status'], ['pendiente', 'parcial'], true) && !$ro): ?>
@@ -82,6 +83,7 @@ $orig = $orig ?? null;
   <?php endif; ?>
 </div>
 
+<?php if ($isTest): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><strong><?= e(docs_test_text()) ?>.</strong> <?= $issued ? 'Esta factura es de prueba: no ha gastado números de la serie ni está en el registro, el SII ni Ventas.' : 'Mientras el modo de prueba esté activado, «Emitir» crea una factura de prueba (numeración PRUEBA-…, sin validez fiscal). Se quita en Configuración → Parámetros.' ?></span></p><?php endif; ?>
 <?php if ($locked !== '' && !$issued): ?><p class="flash err"><?= e($locked) ?></p><?php endif; ?>
 <?php if ($issued): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span><strong>Factura emitida el <?= e(date('d/m/Y H:i', (int)$saved['issued_at'])) ?><?= $saved['issued_by'] !== '' ? ' por ' . e($saved['issued_by']) : '' ?>.</strong> No se puede modificar, anular ni borrar: para corregirla, haz una rectificativa. Clave SII: <?= e($saved['sii_type']) ?>.</span></p><?php endif; ?>
 <?php if ($isDraft && !$isNew && $issueProblems): ?><div class="alert warn keep df-warn"><?= admin_icon('alert') ?><div><strong>Para emitir esta factura falta:</strong><ul><?php foreach ($issueProblems as $p): ?><li><?= e($p) ?></li><?php endforeach; ?></ul></div></div><?php endif; ?>

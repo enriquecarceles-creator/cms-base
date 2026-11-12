@@ -1011,6 +1011,10 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
         docs_search_json();
         return;
     }
+    if ($sub === 'pruebas' && $invoices) {
+        admin_docs_test_purge();
+        return;
+    }
     if ($sub === '') {
         if ($kind === 'albaran' && $_SERVER['REQUEST_METHOD'] === 'POST') { // «Facturar los marcados» de la lista de albaranes
             csrf_check();
@@ -1041,7 +1045,7 @@ function admin_docs(string $kind, string $sub, string $sub2 = ''): void
         return;
     }
     if ($sub2 === 'ver') {
-        if (docs_is_invoice((string)$doc['doc_type']) && $doc['status'] === 'emitida') { // una sola versión impresa: la de Ventas
+        if (docs_is_invoice((string)$doc['doc_type']) && $doc['status'] === 'emitida' && !docs_is_test($doc)) { // una sola versión impresa: la de Ventas
             redirect('/admin/ventas/' . erp_inv_seg((string)$doc['doc_code']) . '/ver');
         }
         docs_print($doc);
@@ -1110,7 +1114,7 @@ function admin_docs_list(string $kind): void
         $w .= " AND (LOWER(doc_code) LIKE ? ESCAPE '!' OR LOWER(cust_name) LIKE ? ESCAPE '!' OR LOWER(cust_code) LIKE ? ESCAPE '!' OR LOWER(ref_text) LIKE ? ESCAPE '!')";
         array_push($a, $like, $like, $like, $like);
     }
-    $st = $db->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN status NOT IN (\'anulado\', \'borrador\') THEN total_cents ELSE 0 END), 0) AS tot FROM doc_headers' . $w);
+    $st = $db->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN status NOT IN (\'anulado\', \'borrador\') AND is_test = 0 THEN total_cents ELSE 0 END), 0) AS tot FROM doc_headers' . $w);
     $st->execute($a);
     $sum = $st->fetch();
     $pages = max(1, (int)ceil((int)$sum['n'] / DOCS_PER_PAGE));
@@ -1124,7 +1128,7 @@ function admin_docs_list(string $kind): void
     rsort($years);
     admin_render('docs_list', ['kind' => $kind, 'k' => DOCS_KINDS[$kind], 'rows' => $rows, 'f' => $f, 'sum' => $sum, 'page' => $page, 'pages' => $pages,
         'years' => $years, 'retail' => erp_retail_code(), 'statuses' => $statuses, 'invoices' => $invoices,
-        'register' => $invoices ? docs_register_verify() : null, 'title' => $invoices ? 'Facturas del CMS' : DOCS_KINDS[$kind]['plural']]);
+        'register' => $invoices ? docs_register_verify() : null, 'testCount' => $invoices ? docs_test_count() : 0, 'title' => $invoices ? 'Facturas del CMS' : DOCS_KINDS[$kind]['plural']]);
 }
 
 function docs_list_url(string $kind, array $f, array $change = []): string

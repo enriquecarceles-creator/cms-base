@@ -22,6 +22,7 @@ const DOCP_DEFAULTS = [
     'warn_stock_min' => '1', 'warn_blocked' => '1',
     'vat_incl' => '1', 'cash_criterion' => '0', 'retail_trade' => '0',
     'lock_until' => '0',
+    'test_mode' => '1', 'test_text' => 'Documento de prueba – sin validez fiscal',
 ];
 
 function docp(string $k): string
@@ -475,6 +476,8 @@ function admin_doc_params(): void
             $errors[] = 'La forma de pago por defecto debe ser una forma de pago activa.';
         }
         $v['pay_method'] = $pm;
+        $v['test_text'] = mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string)($_POST['test_text'] ?? '')) ?? ''), 0, 120);
+        $testWasOn = docp_bool('test_mode');
         $retail = trim((string)($_POST['retail'] ?? ''));
         if ($retail !== '') {
             $st = $db->prepare('SELECT COUNT(*) FROM erp_customers WHERE cust_code = ?');
@@ -507,7 +510,7 @@ function admin_doc_params(): void
             foreach ($v as $k => $val) {
                 save_setting('docp_' . $k, $val);
             }
-            foreach (['ask_discount', 'ask_price', 'ask_tariff', 'ask_title', 'warn_stock_min', 'warn_blocked', 'retail_trade'] as $k) {
+            foreach (['ask_discount', 'ask_price', 'ask_tariff', 'ask_title', 'warn_stock_min', 'warn_blocked', 'retail_trade', 'test_mode'] as $k) {
                 save_setting('docp_' . $k, !empty($_POST[$k]) ? '1' : '0');
             }
             save_setting('erp_retail_customer', mb_substr($retail, 0, 40)); // una sola fuente: el mismo ajuste que usa la sincronización
@@ -516,6 +519,13 @@ function admin_doc_params(): void
                 $db->prepare('UPDATE doc_series SET is_default = 1 WHERE id = ?')->execute([$id]);
             }
             $db->commit();
+            if ($testWasOn && empty($_POST['test_mode'])) { // se quita la marca de prueba: si hay facturas de prueba, se ofrece borrarlas
+                history_add('configuracion', 'pruebas', 'manual', 'ok', 'Modo de prueba desactivado');
+                if (docs_test_count() > 0) {
+                    flash('Parámetros guardados. Ya no se marcan los documentos como prueba: las próximas facturas serán reales.');
+                    redirect('/admin/facturas/pruebas');
+                }
+            }
             flash('Parámetros guardados.');
             redirect('/admin/configuracion/parametros');
         }

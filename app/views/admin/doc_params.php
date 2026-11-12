@@ -60,6 +60,12 @@ $chk = fn(string $k) => $old !== null ? !empty($old[$k]) : docp_bool($k);
       <label class="check"><input type="checkbox" name="warn_blocked" value="1"<?= $chk('warn_blocked') ? ' checked' : '' ?>> <span>Avisar si el artículo está bloqueado</span></label>
     </fieldset>
     <fieldset>
+      <legend>Documento de prueba</legend>
+      <label class="check"><input type="checkbox" name="test_mode" value="1"<?= $chk('test_mode') ? ' checked' : '' ?>> <span><strong>Las facturas que se emitan son de prueba</strong> (activado hasta que lo quites)</span></label>
+      <label>Texto de la marca <input name="test_text" value="<?= e((string)$o('test_text', docs_test_text())) ?>" maxlength="120"></label>
+      <small>Mientras esté activado, «Emitir» crea una factura <strong>de prueba</strong>: numeración aparte (PRUEBA-00001), con la marca en la hoja, <strong>sin gastar números de la serie</strong>, fuera del registro encadenado, del libro del SII, de Ventas e Informes. Al quitarlo se ofrece borrar las facturas de prueba, y la primera factura real será la 1 de su serie (por ejemplo W00001/26).</small>
+    </fieldset>
+    <fieldset>
       <legend>Facturas simplificadas (tiques)</legend>
       <label class="check"><input type="checkbox" name="retail_trade" value="1"<?= $chk('retail_trade') ? ' checked' : '' ?>> <span>Comercio minorista: tiques de hasta 3.000 € (si no, hasta 400 €), IVA incluido</span></label>
       <small>Por encima del tope hay que hacer factura completa. Si dudas, consúltalo con tu gestor.</small>

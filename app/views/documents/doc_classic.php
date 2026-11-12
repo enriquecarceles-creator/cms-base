@@ -6,6 +6,7 @@
  */
 $annulled = $doc['status'] === 'anulado';
 $draft = $doc['status'] === 'borrador'; // factura aún sin emitir: vista previa sin número
+$test = docs_is_invoice((string)$doc['doc_type']) && (docs_is_test($doc) || ($draft && docp_bool('test_mode'))); // documento de prueba: sin validez fiscal
 $fmtPct = fn($p) => rtrim(rtrim(number_format((float)$p, 2, ',', ''), '0'), ',') . ' %';
 $cols = $d['cols'];
 $sumRec = array_sum(array_column($vat, 'rec'));
@@ -58,6 +59,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 .pay{margin-top:6px;color:var(--muted)}
 .sign{margin-top:12mm;display:grid;grid-template-columns:1fr 1fr;gap:10mm;color:var(--muted);font-size:11px}
 .sign div{border-top:1px solid var(--line);padding-top:4px}
+.testmark{margin:0 0 4mm;padding:5px 10px;border:2px solid #be1e1e;color:#be1e1e;text-align:center;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
 .stamp{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);border:8px solid rgba(190,30,30,.28);color:rgba(190,30,30,.28);font-size:84px;font-weight:800;letter-spacing:.12em;padding:0 26px;pointer-events:none;white-space:nowrap}
 @page{size:A4;margin:<?= (int)$d['margin_mm'] ?>mm}
 @media print{
@@ -79,7 +81,8 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
 <div class="page"><article class="sheet">
-  <?php if ($annulled || $draft): ?><div class="stamp" aria-hidden="true"><?= $draft ? 'BORRADOR' : 'ANULADO' ?></div><?php endif; ?>
+  <?php if ($annulled || $draft || $test): ?><div class="stamp" aria-hidden="true"><?= $draft ? 'BORRADOR' : ($annulled ? 'ANULADO' : 'PRUEBA') ?></div><?php endif; ?>
+  <?php if ($test): ?><p class="testmark"><?= e(docs_test_text()) ?></p><?php endif; ?>
   <header class="head">
     <div class="co">
       <?php if ($co['logo']): ?><img src="<?= e($co['logo']) ?>" alt="<?= e($co['legal'] !== '' ? $co['legal'] : site_name()) ?>"><?php endif; ?>

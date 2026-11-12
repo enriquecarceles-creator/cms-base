@@ -27,6 +27,7 @@ $filtered = $f['q'] !== '' || $f['estado'] !== '' || $f['anio'] !== '' || ($f['t
   </nav>
   <p class="hint">Las facturas se crean como <strong>borrador</strong> (se pueden cambiar y borrar) y al pulsar <strong>Emitir</strong> toman el número de su serie: desde ese momento no se modifican ni se borran, se corrigen con una rectificativa. Para facturar albaranes, márcalos en <a href="<?= e(url('/admin/albaranes?estado=pendiente')) ?>">Albaranes</a>.
     Las emitidas aparecen también en «Todas las facturas», Informes y la ficha del cliente.</p>
+  <?php if ($testCount > 0): ?><p class="alert warn keep"><?= admin_icon('alert') ?><span>Hay <strong><?= (int)$testCount ?></strong> factura<?= $testCount === 1 ? '' : 's' ?> de prueba (PRUEBA-…). No cuentan en Ventas, el registro ni el SII. <?php if (is_admin()): ?><a href="<?= e(url('/admin/facturas/pruebas')) ?>">Borrarlas…</a><?php endif; ?></span></p><?php endif; ?>
   <?php if ($register): ?>
     <?php if ($register['problems']): ?>
       <div class="alert warn keep df-warn"><?= admin_icon('alert') ?><div><strong>El registro de facturas no cuadra:</strong><ul><?php foreach ($register['problems'] as $p): ?><li><?= e($p) ?></li><?php endforeach; ?></ul>Alguien ha cambiado facturas emitidas fuera del panel (o se ha restaurado una copia incompleta). Avisa a tu asesoría.</div></div>
@@ -66,7 +67,7 @@ $filtered = $f['q'] !== '' || $f['estado'] !== '' || $f['anio'] !== '' || ($f['t
   <?php foreach ($rows as $r): $off = $r['status'] === 'anulado'; $path = DOCS_KINDS[$r['doc_type']]['path'] ?? $k['path']; ?>
     <tr<?= $off ? ' class="off"' : '' ?>>
       <?php if ($canBill): ?><td><?php if ($r['status'] === 'pendiente' && (int)$r['billed_by'] === 0): ?><input type="checkbox" name="ids[]" value="<?= (int)$r['id'] ?>" aria-label="Marcar <?= e($r['doc_code']) ?>"><?php endif; ?></td><?php endif; ?>
-      <td><a href="<?= e(url($path . '/' . (int)$r['id'])) ?>"><?= e($code($r)) ?></a><?= $kind === 'albaran' && (int)$r['billed_by'] > 0 && $r['status'] === 'pendiente' ? ' <small class="muted">en borrador de factura</small>' : '' ?></td>
+      <td><a href="<?= e(url($path . '/' . (int)$r['id'])) ?>"><?= e($code($r)) ?></a><?= (int)($r['is_test'] ?? 0) === 1 ? ' <span class="tag tag-off">Prueba</span>' : '' ?><?= $kind === 'albaran' && (int)$r['billed_by'] > 0 && $r['status'] === 'pendiente' ? ' <small class="muted">en borrador de factura</small>' : '' ?></td>
       <?php if ($invoices): ?><td><?= e(DOCS_KINDS[$r['doc_type']]['label'] ?? $r['doc_type']) ?></td><?php endif; ?>
       <td class="t-date"><?= e(erp_day((int)$r['doc_day'])) ?></td>
       <td><?= $retail !== '' && $r['cust_code'] === $retail ? '<span class="muted">Cliente de contado</span>' : e($r['cust_name'] !== '' ? $r['cust_name'] : ($r['cust_code'] !== '' ? $r['cust_code'] : '—')) ?><?= $r['cust_code'] === '' && $r['cust_name'] !== '' ? ' <small class="muted">(sin ficha)</small>' : '' ?></td>
