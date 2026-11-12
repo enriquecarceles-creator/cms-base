@@ -74,6 +74,7 @@ $custAddr = $cust ? array_filter([$cust['address'], trim($cust['postcode'] . ' '
 
 <div class="if-grid-wrap">
   <table class="if-grid">
+    <colgroup><col class="k-n"><col class="k-ref"><col><col class="k-s"><col class="k-c"><col class="k-q"><col class="k-p"><col class="k-d"><col class="k-a"><col class="k-v"></colgroup>
     <thead><tr><th class="c">Nº</th><th>Código</th><th>Descripción</th><th>Talla</th><th>Color</th><th class="r">Uds.</th><th class="r">Precio</th><th class="r">Dto.</th><th class="r">Importe</th><th class="r">IVA</th></tr></thead>
     <tbody>
     <?php if (!$lines): ?><tr><td colspan="10" class="muted">Esta factura no tiene líneas.</td></tr><?php endif; ?>

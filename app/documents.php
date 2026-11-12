@@ -167,9 +167,25 @@ function admin_invoice_view(string $num): void
     render('documents/invoice_' . $vars['d']['template'], $vars, null);
 }
 
-/** Descripción de una línea (de doc_lines o de erp_invoice_lines) en HTML: el título y, debajo, el detalle con sus saltos de línea. Todo escapado. */
+/**
+ * Descripción de una línea (de doc_lines o de erp_invoice_lines) en HTML: el título y, debajo, el detalle. Todo escapado. Los saltos de
+ * línea salen como <br> (sin dejar el salto real, porque la tabla usa white-space:pre-wrap y se vería doble).
+ */
 function doc_line_html(array $l): string
 {
-    $detail = (string)($l['detail'] ?? '');
-    return e((string)$l['title']) . ($detail !== '' ? '<br>' . nl2br(e($detail), false) : '');
+    $detail = str_replace(["\r\n", "\r"], "\n", (string)($l['detail'] ?? ''));
+    return e((string)$l['title']) . ($detail !== '' ? '<br>' . str_replace("\n", '<br>', e($detail)) : '');
+}
+
+/** Ancho fijo de cada columna de la tabla de líneas impresa (la descripción, sin ancho, se queda con el resto). */
+const DOC_COL_WIDTHS = ['code' => 12, 'size' => 6, 'color' => 9, 'qty' => 7, 'price' => 10, 'disc' => 6, 'amount' => 11, 'iva' => 6];
+
+/** <colgroup> de la tabla de líneas: con table-layout:fixed las columnas de números siempre caben y la descripción parte las palabras largas. */
+function doc_colgroup(array $cols): string
+{
+    $out = '<colgroup>';
+    foreach ($cols as $c) {
+        $out .= isset(DOC_COL_WIDTHS[$c]) ? '<col style="width:' . DOC_COL_WIDTHS[$c] . '%">' : '<col>';
+    }
+    return $out . '</colgroup>';
 }

@@ -41,9 +41,13 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 .cust h3{margin:0 0 2px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cust strong{font-size:14px}
 .cust p{margin:1px 0}
-.lines{width:100%;border-collapse:collapse;font-size:12px}
+.lines{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px}
+.lines th,.lines td{overflow-wrap:anywhere;word-break:break-word}
+.lines td.desc{white-space:pre-wrap}
+.sheet{overflow-wrap:anywhere}
 .lines th{background:#f3f2ee;border-top:1.5px solid var(--doc-color);border-bottom:1.5px solid var(--doc-color);padding:5px 6px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 .lines td{padding:5px 6px;border-bottom:1px solid #ecebe6;vertical-align:top}
+.lines th{padding:5px 4px}
 .lines .num{text-align:right;white-space:nowrap}
 .note-incl{margin:4px 0 0;color:var(--muted);font-size:11px}
 .obs{margin-top:6mm;border:1px solid var(--line);border-radius:4px;padding:8px 12px;white-space:pre-line}
@@ -111,6 +115,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   </section>
 
   <table class="lines">
+    <?= doc_colgroup($cols) ?>
     <thead><tr>
       <?php foreach ($cols as $c): ?><th<?= in_array($c, ['qty', 'price', 'disc', 'amount', 'iva'], true) ? ' class="num"' : '' ?>><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
     </tr></thead>

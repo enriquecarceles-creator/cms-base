@@ -42,8 +42,8 @@ $td = 'padding:5px 6px;border-bottom:1px solid #e6e3dc;font-size:12px;font-famil
   </div>
 </td></tr>
 <tr><td style="padding:12px 24px 0">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
-    <tr style="background:<?= e($color) ?>;color:#ffffff"><th align="left" style="<?= $td ?>;color:#fff">Artículo</th><th align="right" style="<?= $td ?>;color:#fff">Uds.</th><th align="right" style="<?= $td ?>;color:#fff">Precio</th><th align="right" style="<?= $td ?>;color:#fff">Dto.</th><th align="right" style="<?= $td ?>;color:#fff">Importe</th></tr>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-word">
+    <tr style="background:<?= e($color) ?>;color:#ffffff"><th align="left" style="<?= $td ?>;color:#fff">Artículo</th><th align="right" width="11%" style="<?= $td ?>;color:#fff">Uds.</th><th align="right" width="15%" style="<?= $td ?>;color:#fff">Precio</th><th align="right" width="9%" style="<?= $td ?>;color:#fff">Dto.</th><th align="right" width="17%" style="<?= $td ?>;color:#fff">Importe</th></tr>
     <?php foreach ($shown as $l): if ((int)($l['kind'] ?? 0) === 1): ?>
       <tr><td colspan="5" style="<?= $td ?>"><?= doc_line_html($l) ?></td></tr>
     <?php continue; endif; $det = trim($l['size_txt'] . ($l['size_txt'] !== '' && $l['color_txt'] !== '' ? ' · ' : '') . $l['color_txt']); ?>

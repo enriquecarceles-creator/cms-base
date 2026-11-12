@@ -623,7 +623,8 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
         $del = !empty($in['del']);
         $ref = mb_substr(trim((string)($in['ref'] ?? '')), 0, 100);
         // Descripción de varias líneas: la primera línea es el título (máx. 255) y el resto va en «detail»
-        $full = trim(preg_replace('/[\x00-\x09\x0B-\x1F\x7F]/u', '', str_replace(["\r\n", "\r"], "\n", (string)($in['title'] ?? ''))) ?? '');
+        $raw = mb_convert_encoding(str_replace(["\r\n", "\r"], "\n", (string)($in['title'] ?? '')), 'UTF-8', 'UTF-8'); // quita bytes que no sean UTF-8 válido (si no, el texto se perdería)
+        $full = trim(preg_replace('/[\x00-\x09\x0B-\x1F\x7F]/u', '', $raw) ?? '');
         $full = mb_substr($full, 0, 2000);
         $parts = explode("\n", $full, 2);
         $title = mb_substr(trim($parts[0]), 0, 255);

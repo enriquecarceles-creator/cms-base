@@ -187,6 +187,7 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
   <?php if (!$isNew): ?>
   <div class="if-grid-wrap">
     <table class="if-grid df-grid">
+      <colgroup><col class="k-n"><col class="k-ref"><col><col class="k-s"><col class="k-c"><col class="k-q"><?php if ($kind === 'pedido' && $hasDone): ?><col class="k-q"><?php endif; ?><col class="k-p"><col class="k-d"><col class="k-v"><col class="k-a"><col class="k-x"></colgroup>
       <thead><tr>
         <th class="c">Nº</th><th>Ref.</th><th>Descripción</th><th>Talla</th><th>Color</th><th class="r">Uds.</th>
         <?php if ($kind === 'pedido' && $hasDone): ?><th class="r" title="Unidades ya servidas en albaranes">Serv.</th><?php endif; ?>

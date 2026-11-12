@@ -485,7 +485,11 @@ html:has(.savebar){scroll-padding-bottom:96px}
 .if-kv dd{margin:1px 0 0;font-weight:600;overflow-wrap:anywhere}
 .if-retail{margin:0;font-weight:600}
 .if-grid-wrap{max-height:58vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
-.if-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:.9rem}
+.if-grid{width:100%;min-width:58em;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:.9rem}
+.if-grid td,.if-grid th{overflow-wrap:anywhere;word-break:break-word}
+.if-grid td textarea{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+.if-grid col.k-n{width:2.6em}.if-grid col.k-ref{width:7.5em}.if-grid col.k-s{width:4.4em}.if-grid col.k-c{width:6.6em}
+.if-grid col.k-q{width:5.2em}.if-grid col.k-p{width:6.2em}.if-grid col.k-d{width:4em}.if-grid col.k-v{width:5.6em}.if-grid col.k-a{width:7em}.if-grid col.k-x{width:3.4em}
 .if-grid thead th{position:sticky;top:0;z-index:1;background:#f3f1ec;text-align:left;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;color:var(--steel);padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 .if-grid td{padding:7px 10px;border-bottom:1px solid #efede8;vertical-align:top}
 .if-grid tbody tr:nth-child(even){background:#faf9f6}
@@ -529,13 +533,12 @@ html:has(.savebar){scroll-padding-bottom:96px}
 .df-grid input[readonly]{background:#f5f4f0;color:var(--steel)}
 .df-grid input:focus,.df-grid select:focus,.df-grid textarea:focus,.df-g input:focus,.df-g select:focus{outline:2px solid var(--ink);outline-offset:0}
 .df-grid .df-ref{min-width:0}
-.df-grid .df-title{min-width:14em}
+.df-grid .df-title{min-width:0}
 .df-grid .df-s{width:3.4em}
 .df-grid .df-c{width:5em}
 .df-grid .df-n{width:4.2em;text-align:right}
 .df-grid .df-d{width:3em;text-align:right}
 .df-grid select{width:auto;max-width:5.6em;padding:2px 2px}
-.df-grid th:nth-child(2),.df-grid td:nth-child(2){width:6.2em}
 .df-grid tr.df-text td{background:#faf8f2}
 .df-grid tr.df-text textarea{font-style:italic}
 .df-grid tr.df-text td:nth-child(2){width:auto}
@@ -555,7 +558,6 @@ html:has(.savebar){scroll-padding-bottom:96px}
 .df-grid .df-amt{min-width:5.5em}
 .df-grid tr.df-blank td{background:#fcfbf8}
 .df-plink{margin-left:4px;text-decoration:none;font-size:.85rem}
-.df-grid td:nth-child(2){white-space:nowrap}
 .df-grid td:nth-child(2) input{width:calc(100% - 1.4em)}
 .df-notes{display:flex;flex-direction:column;gap:4px;margin:0 0 14px;font-size:.85rem;color:var(--steel)}
 .df-notes textarea{font:inherit;color:var(--ink);padding:8px;border:1px solid var(--line);border-radius:8px}

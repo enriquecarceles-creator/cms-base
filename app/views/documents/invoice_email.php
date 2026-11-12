@@ -71,9 +71,9 @@ $logo = $co['logo'] ? (preg_match('#^https?://#', (string)$co['logo']) ? $co['lo
   </td></tr></table>
 </td></tr>
 <tr><td style="padding:14px 24px 0">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;font-family:<?= $ff ?>">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-word;font-size:12px;font-family:<?= $ff ?>">
     <tr>
-      <?php foreach ($cols as $c): ?><th align="<?= in_array($c, $right, true) ? 'right' : 'left' ?>" style="background:#f3f2ee;border-top:2px solid <?= e($color) ?>;border-bottom:2px solid <?= e($color) ?>;padding:5px 6px;font-size:11px;text-transform:uppercase;white-space:nowrap"><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
+      <?php foreach ($cols as $c): ?><th<?= isset(DOC_COL_WIDTHS[$c]) ? ' width="' . DOC_COL_WIDTHS[$c] . '%"' : '' ?> align="<?= in_array($c, $right, true) ? 'right' : 'left' ?>" style="background:#f3f2ee;border-top:2px solid <?= e($color) ?>;border-bottom:2px solid <?= e($color) ?>;padding:5px 6px;font-size:11px;text-transform:uppercase;white-space:nowrap"><?= e(DOC_COLUMNS[$c]) ?></th><?php endforeach; ?>
     </tr>
     <?php if (!$lines): ?><tr><td colspan="<?= count($cols) ?>" style="padding:8px 6px;color:#6b665d">Esta factura no tiene líneas.</td></tr><?php endif; ?>
     <?php foreach ($shown as $l): $isTxt = (int)($l['kind'] ?? 0) === 1; ?>
