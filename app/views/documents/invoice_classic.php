@@ -92,6 +92,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 @media (max-width:640px){.head,.foot,.cust{grid-template-columns:1fr}}
+<?= doc_sheet_css(($docx ? $d['title'] : 'Factura') . ' ' . (string)$inv['inv_number']) ?>
 </style>
 </head>
 <body>
@@ -101,14 +102,15 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <div class="grp"><button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button></div>
   <?php else: ?>
   <div class="grp">
-    <a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$inv['inv_number']))) ?>">← Formulario</a>
-    <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['prev']) . '/ver')) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
-    <?php if ($nb['next'] !== null): ?><a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['next']) . '/ver')) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="dis"><a>Siguiente ›</a></span><?php endif; ?>
+    <a id="close" href="<?= e(url('/admin/ventas')) ?>">Cerrar</a>
+    <?php if ($docx && ($docx['status'] ?? '') === 'borrador'): ?><a href="<?= e(url('/admin/facturas/' . (int)$docx['id'])) ?>">Modificar</a><?php endif; ?>
+    <button class="js-only" type="button" onclick="window.print()" hidden>Imprimir</button>
+    <a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$inv['inv_number']) . '/enviar')) ?>">Enviar por correo</a>
   </div>
   <div class="grp">
+    <?php if ($nb['prev'] !== null): ?><a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['prev']) . '/ver')) ?>" rel="prev">‹ Anterior</a><?php else: ?><span class="dis"><a>‹ Anterior</a></span><?php endif; ?>
+    <?php if ($nb['next'] !== null): ?><a href="<?= e(url('/admin/ventas/' . erp_inv_seg((string)$nb['next']) . '/ver')) ?>" rel="next">Siguiente ›</a><?php else: ?><span class="dis"><a>Siguiente ›</a></span><?php endif; ?>
     <?php if ($cust && $cust['cust_code'] !== ''): ?><a href="<?= e(url('/admin/clientes/' . rawurlencode($cust['cust_code']))) ?>">Ver cliente</a><?php endif; ?>
-    <a href="<?= e(url('/admin/ventas')) ?>">Ventas</a>
-    <button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button>
   </div>
   <?php endif; ?>
 </div>
@@ -198,6 +200,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
     <div class="note-incl" style="margin-top:8px"><?php foreach ($mentions as $mt): ?><p style="margin:2px 0"><?= e($mt) ?></p><?php endforeach; ?></div>
   <?php endif; endif; ?>
 
+  <div class="bottom">
   <section class="foot">
     <div>
       <?php if ($vat): ?>
@@ -229,6 +232,8 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   </section>
 
   <?php if ($d['footer'] !== ''): ?><p class="legal"><?= e($d['footer']) ?></p><?php endif; ?>
+  </div>
 </article></div>
+<script><?= doc_sheet_js() ?></script>
 </body>
 </html>

@@ -357,3 +357,42 @@ function admin_doc_design(): void
     admin_render('doc_design', ['errors' => $errors, 'old' => $errors ? $_POST : null, 'links' => doc_model_preview_links(),
         'cfg' => 'diseno', 'title' => 'Diseño de documentos']);
 }
+
+/**
+ * CSS de la hoja A4 completa (pantalla e impresión), común a todas las plantillas de documentos y a los tres modelos:
+ * cabecera arriba, líneas en medio y totales, desglose, vencimientos y pie (`.bottom`) abajo del todo. Al imprimir, la cabecera de
+ * la tabla se repite en cada página y el margen de la hoja lleva el número del documento y «Página X de Y» (márgenes de página de CSS).
+ * `$label` = «Factura W00001/26»: se limpia para ir dentro de una cadena CSS.
+ * Una página: el pie baja con `margin-top:auto` (flex). Varias páginas: Chrome fragmenta mal los flex, así que `doc_sheet_js()` pone la
+ * clase `multi` (bloque normal) y un hueco (`.fill`) calculado para que el pie quede abajo de la última página.
+ */
+function doc_sheet_css(string $label): string
+{
+    $label = preg_replace('/[^\p{L}\p{N} \/.\-~()]/u', '', $label) ?? '';
+    return '.sheet{display:flex;flex-direction:column}.sheet>*{flex:none}.sheet>.bottom{margin-top:auto;padding-top:6mm}.fill{display:none}'
+        . '@page{@top-left{content:"' . $label . '";font:9px sans-serif;color:#6b665d}@bottom-right{content:"Página " counter(page) " de " counter(pages);font:9px sans-serif;color:#6b665d}}'
+        . '@media print{.sheet{min-height:calc(297mm - 2 * var(--doc-margin) - 1.5mm);width:auto}.bottom{break-inside:avoid}.toolbar{display:none!important}'
+        . '.sheet.multi{display:block;min-height:0}.sheet.multi .fill{display:block}.sheet.multi>.bottom{margin-top:0}}';
+}
+
+/**
+ * JavaScript opcional de impresión: antes de imprimir calcula cuántas páginas ocupa el documento (contando la cabecera de la tabla que
+ * se repite y el hueco que dejan las filas que no se parten) y, si son varias, rellena con un hueco para que el pie quede abajo del
+ * todo de la última página. Sin JavaScript todo sigue saliendo, pero con varias páginas el pie no queda pegado abajo. También «Cerrar».
+ */
+function doc_sheet_js(): string
+{
+    return "(function(){var s=document.querySelector('.sheet'),b=s&&s.querySelector('.bottom');if(!s||!b){return;}"
+        . "var fill=document.createElement('div');fill.className='fill';s.insertBefore(fill,b);"
+        . "function mm(n){var p=document.createElement('div');p.style.cssText='position:absolute;visibility:hidden;height:100mm';document.body.appendChild(p);var v=p.offsetHeight/100*n;document.body.removeChild(p);return v;}"
+        . "function reset(){s.classList.remove('multi');fill.style.height='0';s.style.minHeight='';}"
+        . "window.addEventListener('beforeprint',function(){reset();var m=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--doc-margin'))||0;"
+        . "s.style.minHeight='0';var cs=getComputedStyle(s),pad=parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);var T=s.getBoundingClientRect().height-pad;s.style.minHeight='';"
+        . "var pg=mm(297-2*m-1.5),th=s.querySelector('.lines thead'),hh=th?th.offsetHeight:0,rr=0;"
+        . "s.querySelectorAll('.lines tbody tr').forEach(function(r){rr=Math.max(rr,r.offsetHeight);});"
+        . "var p=Math.max(1,Math.ceil(T/pg)),need=T;for(var i=0;i<6;i++){need=T+(p-1)*(hh+rr);var q=Math.max(1,Math.ceil(need/pg));if(q===p){break;}p=q;}"
+        . "if(p>1){s.classList.add('multi');fill.style.height=Math.max(0,p*pg-need-mm(2))+'px';}});"
+        . "window.addEventListener('afterprint',reset);})();"
+        . "(function(){var c=document.getElementById('close');if(!c){return;}c.addEventListener('click',function(e){"
+        . "try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){e.preventDefault();history.back();}}catch(x){}});})();";
+}

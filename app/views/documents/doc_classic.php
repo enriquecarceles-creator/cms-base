@@ -83,12 +83,17 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 @media (max-width:640px){.head,.foot{grid-template-columns:1fr}}
+<?= doc_sheet_css($k['label'] . ' ' . ($draft ? '(borrador)' : (string)$doc['doc_code'])) ?>
 </style>
 </head>
 <body>
 <div class="toolbar">
-  <div class="grp"><a href="<?= e(url($k['path'] . '/' . (int)$doc['id'])) ?>">← Formulario</a><a href="<?= e(url($k['path'])) ?>"><?= e($k['plural']) ?></a></div>
-  <div class="grp"><button class="js-only" type="button" onclick="window.print()" hidden>Imprimir / Guardar PDF</button></div>
+  <div class="grp">
+    <a id="close" href="<?= e(url($k['path'] . '/' . (int)$doc['id'])) ?>">Cerrar</a>
+    <?php if ($draft): ?><a href="<?= e(url($k['path'] . '/' . (int)$doc['id'])) ?>">Modificar</a><?php endif; ?>
+    <button class="js-only" type="button" onclick="window.print()" hidden>Imprimir</button>
+    <?php if (!$draft && !$annulled && !docs_is_invoice((string)$doc['doc_type'])): ?><a href="<?= e(url($k['path'] . '/' . (int)$doc['id'] . '/enviar')) ?>">Enviar por correo</a><?php endif; ?>
+  </div>
 </div>
 <script>document.querySelectorAll('.js-only').forEach(function (b) { b.hidden = false; });</script>
 <div class="page"><article class="sheet m-<?= e($model) ?>">
@@ -150,6 +155,7 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 
   <?php if (trim((string)$doc['notes']) !== ''): ?><section class="obs"><h3>Observaciones</h3><?= e((string)$doc['notes']) ?></section><?php endif; ?>
 
+  <div class="bottom">
   <section class="foot">
     <div>
       <?php if ($vat): ?>
@@ -180,6 +186,8 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
   <?php if ($doc['doc_type'] === 'albaran'): ?>
     <div class="sign"><div>Entregado por</div><div>Recibí conforme (firma, nombre y fecha)</div></div>
   <?php endif; ?>
+  </div>
 </article></div>
+<script><?= doc_sheet_js() ?></script>
 </body>
 </html>
