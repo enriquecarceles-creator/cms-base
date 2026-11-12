@@ -234,10 +234,17 @@ $ended = (int)$c['ended_day'] > 0;
       <dl class="kv kv-1">
         <div><dt>Tarifa</dt><dd><?= (int)$c['tariff'] > 0 ? (int)$c['tariff'] : '—' ?></dd></div>
         <div><dt>Forma de pago</dt><dd><?= e($c['pay_code'] !== '' ? erp_pay_label($c['pay_code']) : '—') ?></dd></div>
+        <div><dt>Día de pago</dt><dd><?= e((string)($c['pay_days'] ?? '') !== '' ? str_replace(',', ' y ', (string)$c['pay_days']) : '—') ?></dd></div>
         <div><dt>Descuento</dt><dd><?= (int)$c['disc_bp'] > 0 ? e(rtrim(rtrim(number_format($c['disc_bp'] / 100, 2, ',', ''), '0'), ',')) . ' %' : '—' ?></dd></div>
         <div><dt>Alta en NCS</dt><dd><?= e(erp_day((int)$c['created_day'])) ?></dd></div>
         <?php if ($ended): ?><div><dt>Baja</dt><dd><?= e(erp_day((int)$c['ended_day'])) ?></dd></div><?php endif; ?>
       </dl>
+      <form method="post" action="<?= e(url('/admin/clientes/' . rawurlencode((string)$c['cust_code']))) ?>" class="cf-paydays">
+        <?= csrf_field() ?><input type="hidden" name="action" value="pay_days">
+        <label><small class="muted">Día de pago (5, o 5,25)</small>
+          <input name="pay_days" value="<?= e((string)($c['pay_days'] ?? '')) ?>" maxlength="20" placeholder="sin día fijo" style="width:9em"></label>
+        <button class="btn small ghost" type="submit">Guardar</button>
+      </form>
     </section>
   </aside>
 </div>

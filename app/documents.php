@@ -11,6 +11,8 @@ declare(strict_types=1);
  */
 
 /** Valores por defecto de los ajustes de diseño (se guardan como doc_<clave> en settings). */
+require_once __DIR__ . '/docs_dues.php';
+
 const DOC_DEFAULTS = [
     'template' => 'classic',          // archivo app/views/documents/invoice_<plantilla>.php
     'color' => '',                    // '' = color de la marca (Web → Empresa)
@@ -147,7 +149,9 @@ function erp_invoice_doc_vars(string $num): ?array
     $vat = erp_invoice_vat($inv);
     $withBase = array_values(array_filter($vat, fn($r) => (int)$r['base'] !== 0));
     $d = doc_settings();
+    $docx = erp_invoice_cms_doc($inv);
     return [
+        'dues' => $docx && dues_applies($docx) ? docs_dues((int)$docx['id']) : [], // vencimientos de las facturas del CMS (las de NCS no los traen)
         'inv' => $inv, 'lines' => $lines, 'cust' => $cust, 'isRetail' => (string)$inv['origin'] === 'cms' ? $cust === null : erp_retail_code() === (string)$inv['cust_code'], 'docx' => erp_invoice_cms_doc($inv),
         'vat' => $vat, 'lineRate' => count($withBase) === 1 && $withBase[0]['pct'] !== null ? (int)$withBase[0]['pct'] : null,
         'serie' => erp_serie((string)$inv['inv_number']), 'payLabel' => erp_pay_label((string)$inv['pay_code']),

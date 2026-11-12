@@ -244,6 +244,34 @@ $isTest = $inv && (docs_is_test($saved) || ($isDraft && docp_bool('test_mode')))
       <label class="df-notes">Observaciones (salen en el documento impreso)
         <textarea name="h[notes]" rows="3" maxlength="2000"><?= e((string)$doc['notes']) ?></textarea></label>
 
+<?php if ($kind === 'factura' && !$isNew):
+      $duesRows = isset($doc['dues']) ? $doc['dues'] : docs_dues((int)$doc['id']);
+      $duesPreview = false;
+      if (!$duesRows && (int)$doc['total_cents'] > 0 && !$ro) { $duesRows = dues_compute($doc)['rows']; $duesPreview = (bool)$duesRows; }
+      $duesSum = dues_sum($duesRows);
+      $duesFill = $ro ? [] : array_merge($duesRows, [['day' => 0, 'cents' => 0]]); // una fila vacía para añadir otro vencimiento
+?>
+      <h2 class="df-h" id="vencimientos">Vencimientos</h2>
+      <?php if (!$duesRows && $ro): ?><p class="muted" style="margin:0">Esta factura no tiene vencimientos.</p>
+      <?php elseif (!$duesRows && !$ro): ?><p class="muted" style="margin:0 0 6px"><small>Sin forma de pago o sin total no hay vencimientos. Elige la forma de pago (Configuración → Formas de pago) y guarda.</small></p>
+      <?php else: ?>
+      <div class="tbl-wrap"><table class="tbl df-dues">
+        <thead><tr><th scope="col">Nº</th><th scope="col">Fecha</th><th scope="col" style="text-align:right">Importe</th><th scope="col">Cobrado</th></tr></thead>
+        <tbody>
+        <?php if ($ro): foreach ($duesRows as $i => $du): ?>
+          <tr><td><?= $i + 1 ?></td><td><?= e(erp_day((int)$du['day'])) ?></td><td style="text-align:right"><?= e(erp_money((int)$du['cents'])) ?></td><td><?= (int)($du['paid'] ?? 0) === 1 ? 'Sí' : 'No' ?></td></tr>
+        <?php endforeach; else: foreach ($duesFill as $i => $du): ?>
+          <tr><td><?= $i + 1 ?></td>
+            <td><input type="date" name="due_day[]" value="<?= e(erp_day_to_input((int)$du['day'])) ?>" aria-label="Fecha del vencimiento <?= $i + 1 ?>"></td>
+            <td><input name="due_amt[]" value="<?= (int)$du['day'] > 0 ? e(number_format((int)$du['cents'] / 100, 2, ',', '')) : '' ?>" inputmode="decimal" style="text-align:right" aria-label="Importe del vencimiento <?= $i + 1 ?>"></td>
+            <td><small class="muted">No</small></td></tr>
+        <?php endforeach; endif; ?>
+        </tbody>
+        <tfoot><tr><td colspan="2"><strong>Suma</strong></td><td style="text-align:right"><strong><?= e(erp_money($duesSum)) ?></strong></td><td><?= $duesSum === (int)$doc['total_cents'] ? '' : '<span class="review-flag">no cuadra con el total</span>' ?></td></tr></tfoot>
+      </table></div>
+      <?php if (!$ro): ?><p class="muted" style="margin:4px 0 8px"><small>Se calculan desde la fecha de la factura con la forma de pago (cuotas iguales; la última lleva los céntimos que sobren) y el día de pago del cliente, si lo tiene.<?= $duesPreview ? ' <strong>Todavía no están guardados:</strong> se guardan al pulsar Guardar.' : '' ?> Si cambias la fecha, la forma de pago o el total se recalculan solos al guardar; si los retocas aquí y no cambia nada de eso, se respetan. Para quitar uno, borra su fecha e importe. Deben sumar el total para poder emitir; al emitir quedan fijos.</small></p><?php endif; ?>
+      <?php endif; ?>
+<?php endif; ?>
       <h2 class="df-h">Desglose de IVA</h2>
       <?php if (!$tot['vat']): ?><p class="empty">Sin líneas.</p><?php else: ?>
       <div class="tbl-wrap"><table class="tbl">

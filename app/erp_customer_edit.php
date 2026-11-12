@@ -98,7 +98,7 @@ function admin_client_edit(?array $c): void
     $methods = array_values(array_filter(pay_methods_all(), fn($m) => (int)$m['is_active'] === 1 || (!$isNew && (string)$m['code'] === (string)$c['pay_code'])));
     $v = $c ?? ['cust_code' => erp_customer_next_code(), 'name' => '', 'trade_name' => '', 'nif' => '', 'contact' => '', 'phone' => '', 'phone2' => '', 'email' => '',
         'address' => '', 'postcode' => '', 'city' => '', 'province' => '', 'country' => '',
-        'tariff' => docp_int('tariff'), 'pay_code' => docp('pay_method'), 'disc_bp' => 0, 'blocked' => 0, 'ended_day' => 0];
+        'tariff' => docp_int('tariff'), 'pay_code' => docp('pay_method'), 'pay_days' => '', 'disc_bp' => 0, 'blocked' => 0, 'ended_day' => 0];
     $v['disc_txt'] = rtrim(rtrim(number_format((int)$v['disc_bp'] / 100, 2, ',', ''), '0'), ',');
     $errors = [];
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -119,6 +119,12 @@ function admin_client_edit(?array $c): void
             $pc = '';
         }
         $v['pay_code'] = $pc;
+        $pd = dues_parse_days((string)($in['pay_days'] ?? ''));
+        if ($pd === null) {
+            $errors[] = 'El día de pago tiene que ser un día del mes (1 a 31); si son varios, sepáralos con comas (por ejemplo 5,25). Como mucho ' . DUES_MAX_PAYDAYS . '.';
+            $pd = [];
+        }
+        $v['pay_days'] = implode(',', $pd);
         $v['disc_txt'] = trim((string)($in['disc'] ?? ''));
         $dn = str_replace(',', '.', $v['disc_txt']);
         $d = $v['disc_txt'] === '' ? 0.0 : (is_numeric($dn) ? (float)$dn : -1.0);
@@ -140,7 +146,7 @@ function admin_client_edit(?array $c): void
             }
         }
         if (!$errors) {
-            $cols = [...array_keys(ERP_CUST_FIELDS), 'tariff', 'pay_code', 'disc_bp', 'blocked', 'ended_day'];
+            $cols = [...array_keys(ERP_CUST_FIELDS), 'tariff', 'pay_code', 'pay_days', 'disc_bp', 'blocked', 'ended_day'];
             try {
                 if ($isNew) {
                     $v['origin'] = 'cms';

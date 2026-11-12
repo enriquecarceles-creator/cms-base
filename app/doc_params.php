@@ -8,8 +8,9 @@ declare(strict_types=1);
  *  - Valores sueltos en `settings` con prefijo docp_ (ver DOCP_DEFAULTS y docp()). El cliente de contado sigue siendo el ajuste
  *    erp_retail_customer (una sola fuente), y la serie por defecto de cada tipo es doc_series.is_default (también una sola fuente).
  *  - IVA: doc_vat_rates (pct_bp = % × 100; surcharge_bp = recargo de equivalencia × 100). Siempre un tipo por defecto entre los activos.
- *  - Formas de pago: doc_pay_methods (código único; el nombre se usa en facturas y fichas vía erp_pay_names()). Un código que ya
- *    aparece en clientes o facturas no se borra ni cambia de código: solo se desactiva.
+ *  - Formas de pago: doc_pay_methods (código único; el nombre se usa en facturas y fichas vía erp_pay_names(); `terms` = plazos de los
+ *    vencimientos, ver app/docs_dues.php). Una que ya usan clientes o documentos no se borra: se ofrece desactivarla (deja de salir
+ *    al elegir, pero los documentos antiguos la conservan).
  *  - Tarifas: doc_tariffs (num = el número que usan los clientes; ext_ref = referencia externa para enlazar después con otro programa).
  *  - Bloqueo de periodos: docp_lock_until (aaaammdd). Ningún documento con fecha igual o anterior se podrá crear ni modificar
  *    (period_is_locked()). Subirlo es libre; bajarlo o quitarlo pide la contraseña y queda en el Historial.
@@ -288,10 +289,38 @@ function pay_methods_import_missing(): int
     foreach (array_keys(pay_codes_in_use()) as $code) {
         $code = (string)$code; // las claves numéricas de un array llegan como enteros
         if (!in_array($code, $have, true) && preg_match('/^[A-Za-z0-9._-]{1,20}$/', $code)) {
-            $db->prepare('INSERT INTO doc_pay_methods (code, name, days, is_active, sort) VALUES (?, ?, 0, 1, ?)')->execute([$code, mb_substr($names[$code] ?? '', 0, 40), $max + 10 * (++$n)]);
+            $db->prepare("INSERT INTO doc_pay_methods (code, name, days, terms, is_active, sort) VALUES (?, ?, 0, '0', 1, ?)")->execute([$code, mb_substr($names[$code] ?? '', 0, 40), $max + 10 * (++$n)]);
         }
     }
     return $n;
+}
+
+/** Cuántos clientes, facturas de NCS y documentos del CMS usan cada forma de pago: [código => ['clientes' => n, 'ncs' => n, 'docs' => n]]. */
+function pay_methods_usage(): array
+{
+    $out = [];
+    foreach (['clientes' => 'erp_customers', 'ncs' => 'erp_invoices', 'docs' => 'doc_headers'] as $k => $t) {
+        foreach (db()->query("SELECT pay_code, COUNT(*) AS n FROM $t WHERE pay_code <> '' GROUP BY pay_code")->fetchAll() as $r) {
+            $out[(string)$r['pay_code']][$k] = (int)$r['n'];
+        }
+    }
+    return $out;
+}
+
+/** Frase con lo que usa una forma de pago («3 clientes y 2 documentos»); '' si nada. */
+function pay_usage_text(array $u): string
+{
+    $parts = [];
+    if (($u['clientes'] ?? 0) > 0) {
+        $parts[] = $u['clientes'] . ' cliente' . ($u['clientes'] === 1 ? '' : 's');
+    }
+    if (($u['ncs'] ?? 0) > 0) {
+        $parts[] = $u['ncs'] . ' factura' . ($u['ncs'] === 1 ? '' : 's') . ' importada' . ($u['ncs'] === 1 ? '' : 's');
+    }
+    if (($u['docs'] ?? 0) > 0) {
+        $parts[] = $u['docs'] . ' documento' . ($u['docs'] === 1 ? '' : 's');
+    }
+    return count($parts) > 1 ? implode(', ', array_slice($parts, 0, -1)) . ' y ' . end($parts) : ($parts[0] ?? '');
 }
 
 function admin_pay_methods(): void
@@ -308,18 +337,29 @@ function admin_pay_methods(): void
             flash($n > 0 ? $n . ' forma' . ($n === 1 ? '' : 's') . ' de pago traída' . ($n === 1 ? '' : 's') . ' de los datos importados.' : 'No había formas de pago nuevas que traer.');
             redirect('/admin/configuracion/pagos');
         }
-        if ($act === 'delete') {
+        if ($act === 'delete' || $act === 'deactivate') {
             $id = (int)($_POST['id'] ?? 0);
-            $st = $db->prepare('SELECT code FROM doc_pay_methods WHERE id = ?');
+            $st = $db->prepare('SELECT code, is_active FROM doc_pay_methods WHERE id = ?');
             $st->execute([$id]);
-            $code = $st->fetchColumn();
-            if ($code === false) {
+            $row = $st->fetch();
+            $code = $row ? (string)$row['code'] : null;
+            $usage = $code !== null ? pay_usage_text(pay_methods_usage()[$code] ?? []) : '';
+            if ($code === null) {
                 flash('Esa forma de pago ya no existe.', 'err');
-            } elseif (isset($inUse[(string)$code]) || docp('pay_method') === (string)$code) {
-                flash('La forma de pago «' . $code . '» está en uso (clientes, facturas o valor por defecto): no se puede borrar, solo desactivar.', 'err');
+            } elseif ($act === 'deactivate') {
+                if (docp('pay_method') === $code) {
+                    flash('La forma de pago «' . $code . '» es la de por defecto (Parámetros): elige otra antes de desactivarla.', 'err');
+                } else {
+                    $db->prepare('UPDATE doc_pay_methods SET is_active = 0 WHERE id = ?')->execute([$id]);
+                    flash('Forma de pago «' . $code . '» desactivada: ya no sale al elegir, pero los clientes y documentos que la tenían la conservan.');
+                }
+            } elseif ($usage !== '') {
+                flash('La forma de pago «' . $code . '» la usan ' . $usage . ': no se puede borrar. Puedes desactivarla (deja de salir al elegir, pero los documentos antiguos la conservan).', 'err');
+            } elseif (docp('pay_method') === $code) {
+                flash('La forma de pago «' . $code . '» es la de por defecto (Parámetros): elige otra antes de borrarla.', 'err');
             } else {
                 $db->prepare('DELETE FROM doc_pay_methods WHERE id = ?')->execute([$id]);
-                flash('Forma de pago borrada.');
+                flash('Forma de pago «' . $code . '» borrada.');
             }
             redirect('/admin/configuracion/pagos');
         }
@@ -329,39 +369,40 @@ function admin_pay_methods(): void
         foreach ($rows as $r) {
             $id = (int)$r['id'];
             $in = (array)(($_POST['p'] ?? [])[$id] ?? []);
-            $days = trim((string)($in['days'] ?? '0'));
-            if (!ctype_digit($days) || (int)$days > 365) {
-                $errors[] = 'Los días de vencimiento de «' . $r['code'] . '» deben estar entre 0 y 365.';
+            $terms = dues_parse_terms((string)($in['terms'] ?? ''));
+            if ($terms === null) {
+                $errors[] = 'Vencimientos de «' . $r['code'] . '»: escribe los días separados por comas (0 para contado, 30, o 30,60,90), de 0 a ' . DUES_MAX_DAYS . ', en orden creciente y como mucho ' . DUES_MAX . '.';
+                $terms = [0];
             }
             $active = !empty($in['active']) ? 1 : 0;
             if ($active === 0 && docp('pay_method') === (string)$r['code']) {
                 $errors[] = 'La forma de pago «' . $r['code'] . '» es la de por defecto (Parámetros): elige otra antes de desactivarla.';
             }
-            $plan[$id] = ['name' => mb_substr(trim(strip_tags((string)($in['name'] ?? $r['name']))), 0, 40), 'days' => (int)$days, 'active' => $active];
+            $plan[$id] = ['name' => mb_substr(trim(strip_tags((string)($in['name'] ?? $r['name']))), 0, 40), 'terms' => dues_terms_text($terms), 'days' => (int)$terms[0], 'active' => $active];
         }
         $new = (array)($_POST['new'] ?? []);
         $newRow = null;
         if (trim((string)($new['code'] ?? '')) !== '' || trim((string)($new['name'] ?? '')) !== '') {
             $code = trim((string)($new['code'] ?? ''));
-            $nd = trim((string)($new['days'] ?? '0'));
+            $nt = trim((string)($new['terms'] ?? '')) === '' ? [0] : dues_parse_terms((string)$new['terms']);
             if (!preg_match('/^[A-Za-z0-9._-]{1,20}$/', $code)) {
                 $errors[] = 'Nueva forma de pago: el código puede tener hasta 20 letras, números, punto, guion o guion bajo.';
             } elseif (array_filter($rows, fn($r) => mb_strtolower((string)$r['code']) === mb_strtolower($code))) {
                 $errors[] = 'Nueva forma de pago: el código «' . $code . '» ya existe.';
-            } elseif (!ctype_digit($nd) || (int)$nd > 365) {
-                $errors[] = 'Nueva forma de pago: los días de vencimiento deben estar entre 0 y 365.';
+            } elseif ($nt === null) {
+                $errors[] = 'Nueva forma de pago: los vencimientos son días separados por comas (0, 30, o 30,60,90), de 0 a ' . DUES_MAX_DAYS . ', en orden creciente.';
             } else {
-                $newRow = ['code' => $code, 'name' => mb_substr(trim(strip_tags((string)($new['name'] ?? ''))), 0, 40), 'days' => (int)$nd];
+                $newRow = ['code' => $code, 'name' => mb_substr(trim(strip_tags((string)($new['name'] ?? ''))), 0, 40), 'terms' => dues_terms_text($nt), 'days' => (int)$nt[0]];
             }
         }
         if (!$errors) {
             $db->beginTransaction();
             foreach ($plan as $id => $p) {
-                $db->prepare('UPDATE doc_pay_methods SET name = ?, days = ?, is_active = ? WHERE id = ?')->execute([$p['name'], $p['days'], $p['active'], $id]);
+                $db->prepare('UPDATE doc_pay_methods SET name = ?, terms = ?, days = ?, is_active = ? WHERE id = ?')->execute([$p['name'], $p['terms'], $p['days'], $p['active'], $id]);
             }
             if ($newRow) {
                 $max = (int)$db->query('SELECT COALESCE(MAX(sort), 0) FROM doc_pay_methods')->fetchColumn();
-                $db->prepare('INSERT INTO doc_pay_methods (code, name, days, is_active, sort) VALUES (?, ?, ?, 1, ?)')->execute([$newRow['code'], $newRow['name'], $newRow['days'], $max + 10]);
+                $db->prepare('INSERT INTO doc_pay_methods (code, name, days, terms, is_active, sort) VALUES (?, ?, ?, ?, 1, ?)')->execute([$newRow['code'], $newRow['name'], $newRow['days'], $newRow['terms'], $max + 10]);
             }
             $db->commit();
             flash('Formas de pago guardadas.');
@@ -369,7 +410,7 @@ function admin_pay_methods(): void
         }
     }
     $missing = array_values(array_diff(array_map('strval', array_keys($inUse)), array_map('strval', array_column(pay_methods_all(), 'code'))));
-    admin_render('pay_methods', ['rows' => pay_methods_all(), 'inUse' => $inUse, 'missing' => $missing, 'errors' => $errors, 'old' => $old,
+    admin_render('pay_methods', ['rows' => pay_methods_all(), 'inUse' => $inUse, 'usage' => pay_methods_usage(), 'missing' => $missing, 'errors' => $errors, 'old' => $old,
         'defaultCode' => docp('pay_method'), 'cfg' => 'pagos', 'title' => 'Formas de pago']);
 }
 

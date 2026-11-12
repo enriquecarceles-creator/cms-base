@@ -132,7 +132,8 @@ function erp_invoice_email_text(array $vars, string $message, string $url, int $
         . '(El enlace es personal y caduca el ' . date('d/m/Y', $expires) . ".)\n\n"
         . '--- ' . $vars['d']['title'] . ' ' . $inv['inv_number'] . ($annulled ? ' · ' . $vars['d']['stamp'] : '') . " ---\n"
         . 'Fecha: ' . erp_day((int)$inv['inv_day']) . "\n"
-        . 'Total: ' . erp_money((int)$inv['total_cents']) . "\n";
+        . 'Total: ' . erp_money((int)$inv['total_cents']) . "\n"
+        . (!empty($vars['dues']) ? "Vencimientos:\n" . implode('', array_map(fn($du) => '  ' . erp_day((int)$du['day']) . ': ' . erp_money((int)$du['cents']) . "\n", $vars['dues'])) : '');
 }
 
 /**

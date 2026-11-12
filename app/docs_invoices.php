@@ -57,7 +57,7 @@ function docs_test_purge(): int
             $drafts = $db->query("SELECT id FROM doc_headers WHERE status = 'borrador' AND rect_of = " . $id)->fetchAll(PDO::FETCH_COLUMN);
             foreach ([...$drafts, $id] as $did) {
                 $did = (int)$did;
-                foreach (['doc_lines', 'doc_events'] as $t) {
+                foreach (['doc_lines', 'doc_events', 'doc_dues'] as $t) {
                     $db->exec("DELETE FROM $t WHERE doc_id = $did");
                 }
                 $db->exec("DELETE FROM doc_headers WHERE id = $did");
@@ -157,7 +157,7 @@ function docs_issue_problems(array $doc, array $lines): array
             $e[] = 'La última factura emitida de la serie ' . $s['letter'] . ' es del ' . erp_day($last) . ': esta no puede llevar una fecha anterior.';
         }
     }
-    return $e;
+    return array_merge($e, dues_issue_problems($doc));
 }
 
 /** Clave del SII del tipo de factura: F1 completa, F2 simplificada, R1-R5 rectificativas. */
@@ -322,6 +322,7 @@ function docs_issue(int $id, int $rev = -1): string
         if ($problems) {
             throw new DomainException(implode(' ', $problems));
         }
+        dues_finalize($doc); // los vencimientos quedan calculados y fijos con la factura
         $s = series_get((int)$doc['series_id']);
         $year = intdiv((int)$doc['doc_day'], 10000);
         $test = docp_bool('test_mode'); // modo de prueba: numeración aparte, sin tocar la serie ni el registro
@@ -535,6 +536,7 @@ function docs_delete_draft(array $doc): void
         }
         $db->prepare('DELETE FROM doc_lines WHERE doc_id = ?')->execute([$id]);
         $db->prepare('DELETE FROM doc_events WHERE doc_id = ?')->execute([$id]);
+        $db->prepare('DELETE FROM doc_dues WHERE doc_id = ?')->execute([$id]);
         $db->commit();
     } catch (Throwable $e) {
         if ($db->inTransaction()) {

@@ -22,6 +22,8 @@ declare(strict_types=1);
  * borran: se anulan (conservan su número). Bloqueo de periodos: no se crea, modifica ni anula nada con fecha bloqueada.
  */
 
+require_once __DIR__ . '/docs_dues.php';
+
 const DOCS_QTY = 10000;        // unidades × 10.000
 const DOCS_PRICE = 1000000;    // precio × 1.000.000
 const DOCS_AMOUNT = 10000;     // importe de línea × 10.000
@@ -279,7 +281,7 @@ function docs_blank(string $kind): array
         'base_cents' => 0, 'vat_cents' => 0, 'rec_cents' => 0, 'total_cents' => 0, 'vat_json' => '[]', 'origin_id' => 0,
         'created_at' => 0, 'created_by' => '', 'updated_at' => 0, 'updated_by' => '',
         'issued_at' => 0, 'issued_by' => '', 'op_day' => 0, 'rect_of' => 0, 'rect_mode' => '', 'rect_reason' => '', 'rect_text' => '',
-        'sii_type' => '', 'vat_note' => '', 'cash_crit' => docp_bool('cash_criterion') ? 1 : 0, 'billed_by' => 0, 'reg_hash' => '', 'rev' => 0,
+        'sii_type' => '', 'vat_note' => '', 'cash_crit' => docp_bool('cash_criterion') ? 1 : 0, 'billed_by' => 0, 'reg_hash' => '', 'rev' => 0, 'dues_key' => '',
     ];
 }
 
@@ -797,6 +799,9 @@ function docs_from_post(array $saved, array $savedLines, array $post, bool $repr
     $doc['rec_cents'] = $tot['rec'];
     $doc['total_cents'] = $tot['total'];
     $doc['vat_json'] = (string)json_encode($tot['vat']);
+    if (dues_applies($doc)) { // vencimientos: se recalculan si cambia la fecha, la forma de pago o el total; si no, se respetan los retoques
+        docs_dues_apply($doc, $saved, $post, $isNew, $errors, $warn);
+    }
     if (!$lines && !$isNew && $saved['status'] !== 'borrador') { // un borrador puede estar sin líneas (se exigen al confirmar o emitir)
         $errors[] = 'El documento no tiene líneas.';
     }
@@ -904,6 +909,7 @@ function docs_save(array $doc, array $lines, int $stamp = -1, string $eventKind 
                 $db->prepare('DELETE FROM doc_lines WHERE id = ? AND doc_id = ? AND done_u = 0')->execute([$lid, $id]);
             }
         }
+        docs_dues_save($doc, $id); // vencimientos de la factura (la misma transacción)
         if ($doc['doc_type'] === 'albaran') {
             docs_refresh_orders([...$ordersBefore, ...docs_source_orders($id)]);
         } elseif ($doc['doc_type'] === 'pedido') {
@@ -1460,6 +1466,7 @@ function docs_print(array $doc): void
     $vat = json_decode((string)$doc['vat_json'], true);
     render('documents/doc_classic', [
         'doc' => $doc, 'lines' => $lines, 'vat' => is_array($vat) ? $vat : [], 'k' => DOCS_KINDS[$doc['doc_type']], 'd' => doc_settings(), 'co' => doc_company(),
+        'dues' => dues_applies($doc) ? docs_dues((int)$doc['id']) : [],
         'payLabel' => erp_pay_label((string)$doc['pay_code']), 'isRetail' => $doc['cust_code'] !== '' && $doc['cust_code'] === erp_retail_code(),
         'title' => DOCS_KINDS[$doc['doc_type']]['label'] . ' ' . ($doc['status'] === 'borrador' ? '(borrador)' : $doc['doc_code']) . ' · ' . site_name(),
     ], null);

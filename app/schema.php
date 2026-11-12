@@ -113,6 +113,7 @@ const SCHEMA_ERP_DDL = "
         email {S} NOT NULL DEFAULT '',
         contact {S} NOT NULL DEFAULT '',
         pay_code {S} NOT NULL DEFAULT '',
+        pay_days {S} NOT NULL DEFAULT '',
         tariff {I} NOT NULL DEFAULT 0,
         disc_bp {I} NOT NULL DEFAULT 0,
         blocked {I} NOT NULL DEFAULT 0,
@@ -388,6 +389,7 @@ const SCHEMA_DOCPARAMS_DDL = "
         code {K} NOT NULL UNIQUE,
         name {S} NOT NULL DEFAULT '',
         days {I} NOT NULL DEFAULT 0,
+        terms {S} NOT NULL DEFAULT '0',
         is_active {I} NOT NULL DEFAULT 1,
         sort {I} NOT NULL DEFAULT 0
     );
@@ -456,7 +458,8 @@ const SCHEMA_DOCS_DDL = "
         billed_by {I} NOT NULL DEFAULT 0,
         reg_hash {S} NOT NULL DEFAULT '',
         is_test {I} NOT NULL DEFAULT 0,
-        rev {I} NOT NULL DEFAULT 0
+        rev {I} NOT NULL DEFAULT 0,
+        dues_key {S} NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_doch_type_day ON doc_headers(doc_type, doc_day);
     CREATE INDEX idx_doch_cust ON doc_headers(cust_code);
@@ -518,6 +521,25 @@ const SCHEMA_INVOICES_DDL = "
         prev_hash {S} NOT NULL DEFAULT '',
         hash {S} NOT NULL DEFAULT ''
     );
+";
+
+/**
+ * Vencimientos de las facturas (doc_dues, v34): una fila por cuota de una factura (no de rectificativas ni simplificadas).
+ * due_day = aaaammdd; amount_cents en céntimos (la suma de las cuotas es SIEMPRE el total de la factura); paid y paid_day quedan
+ * preparados para marcar los cobros más adelante. En borrador se recalculan solos al cambiar la fecha, la forma de pago o el total
+ * (doc_headers.dues_key guarda la base del cálculo) y se pueden retocar a mano; al emitir la factura quedan fijos. En DB_TABLES.
+ */
+const SCHEMA_DUES_DDL = "
+    CREATE TABLE doc_dues (
+        id {ID},
+        doc_id {I} NOT NULL,
+        due_no {I} NOT NULL DEFAULT 1,
+        due_day {I} NOT NULL DEFAULT 0,
+        amount_cents {BIG} NOT NULL DEFAULT 0,
+        paid {I} NOT NULL DEFAULT 0,
+        paid_day {I} NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_dues_doc ON doc_dues(doc_id, due_no);
 ";
 
 /**
@@ -667,7 +689,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL . SCHEMA_INVOICES_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL . SCHEMA_DOCS_DDL . SCHEMA_INVOICES_DDL . SCHEMA_DUES_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -858,6 +880,31 @@ function migrate_schema(CmsPdo $pdo): void
     if ($ver < 23 && !in_array('mail_log', db_tables($pdo), true)) {
         foreach (db_ddl(SCHEMA_MAIL_DDL, $pdo->drv) as $st) {
             $pdo->rawExec($st);
+        }
+    }
+    // v34: plazos de las formas de pago (terms), día(s) de pago del cliente, base de los vencimientos y tabla doc_dues
+    if ($ver < 34) {
+        foreach ([['doc_pay_methods', ['terms' => "{S} NOT NULL DEFAULT '0'"]], ['erp_customers', ['pay_days' => "{S} NOT NULL DEFAULT ''"]],
+                  ['doc_headers', ['dues_key' => "{S} NOT NULL DEFAULT ''"]]] as [$t, $cols]) {
+            if (in_array($t, db_tables($pdo), true)) {
+                $have = db_columns($pdo, $t);
+                foreach ($cols as $col => $def) {
+                    if (!in_array($col, $have, true)) {
+                        db_add_column($pdo, $t, $col, $def);
+                    }
+                }
+            }
+        }
+        // Las formas de pago que tenían «días» pasan a tener ese plazo (una sola cuota); 0 = contado
+        if (in_array('doc_pay_methods', db_tables($pdo), true)) {
+            foreach ($pdo->query('SELECT id, days FROM doc_pay_methods WHERE days > 0')->fetchAll() as $r) { // en PHP: CAST a texto no es igual en los tres motores
+                $pdo->prepare('UPDATE doc_pay_methods SET terms = ? WHERE id = ?')->execute([(string)(int)$r['days'], (int)$r['id']]);
+            }
+        }
+        if (!in_array('doc_dues', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_DUES_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
         }
     }
     // v33: versión de cada documento (aviso de cambios simultáneos), líneas de texto libre y descripción de varias líneas

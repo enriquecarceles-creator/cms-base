@@ -33,6 +33,7 @@ $f = fn(string $k, string $label, int $max, string $extra = '') => '<label>' . e
     <div class="g4">
       <label>Tarifa <select name="tariff"><option value="0">—</option><?php foreach ($tariffs as $t): ?><option value="<?= (int)$t['num'] ?>"<?= (int)$v['tariff'] === (int)$t['num'] ? ' selected' : '' ?>><?= (int)$t['num'] ?> · <?= e($t['name']) ?></option><?php endforeach; ?></select></label>
       <label>Forma de pago <select name="pay_code"><option value="">—</option><?php foreach ($methods as $m): ?><option value="<?= e($m['code']) ?>"<?= (string)$v['pay_code'] === (string)$m['code'] ? ' selected' : '' ?>><?= e($m['code']) ?> · <?= e($m['name'] !== '' ? $m['name'] : 'sin nombre') ?></option><?php endforeach; ?></select></label>
+      <label>Día de pago <input name="pay_days" value="<?= e((string)($v['pay_days'] ?? '')) ?>" maxlength="20" placeholder="Ej.: 5 o 5,25"><small>Opcional. Los vencimientos se pasan al siguiente de esos días.</small></label>
       <label>Descuento habitual (%) <input name="disc" value="<?= e((string)$v['disc_txt']) ?>" maxlength="6" inputmode="decimal"></label>
       <div>
         <label class="check"><input type="checkbox" name="blocked" value="1"<?= (int)$v['blocked'] === 1 ? ' checked' : '' ?>> <span>Bloqueado</span></label>

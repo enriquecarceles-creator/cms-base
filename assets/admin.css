@@ -610,3 +610,6 @@ form.cfgf .checks-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)
 .cfg-warn{margin:0 0 8px;padding:7px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:.84rem}
 .cfg-main .tbl button.link{display:inline;padding:0;border:0;background:none;white-space:nowrap;font:inherit;font-size:.85rem;cursor:pointer;line-height:1.2}
 .cfg-main .tbl td{height:auto}
+.df-dues td{padding:4px 10px;vertical-align:middle}
+.df-dues th{padding:8px 10px}
+.df-dues input{padding:4px 8px;margin:0;width:100%;height:30px}

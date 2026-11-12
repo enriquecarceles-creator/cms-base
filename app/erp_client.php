@@ -152,6 +152,16 @@ function admin_client(string $code): void
         if ($act === 'export') {
             erp_client_export($c, !empty($_POST['lineas']));
         }
+        if ($act === 'pay_days') { // dato propio del CMS: vale también para clientes de NCS (la sincronización no lo toca)
+            $pd = dues_parse_days((string)($_POST['pay_days'] ?? ''));
+            if ($pd === null) {
+                flash('El día de pago tiene que ser un día del mes (1 a 31); si son varios, sepáralos con comas (por ejemplo 5,25). Como mucho ' . DUES_MAX_PAYDAYS . '.', 'err');
+            } else {
+                $db->prepare('UPDATE erp_customers SET pay_days = ? WHERE id = ?')->execute([implode(',', $pd), (int)$c['id']]);
+                flash($pd ? 'Día de pago guardado: los vencimientos de sus facturas nuevas se pasarán al siguiente día ' . implode(' o ', $pd) . '.' : 'Día de pago quitado.');
+            }
+            redirect($self);
+        }
         if ($act === 'note_add') {
             $note = mb_substr(trim(str_replace("\r\n", "\n", (string)($_POST['note'] ?? ''))), 0, ERP_NOTE_MAX);
             if ($note === '') {

@@ -78,7 +78,8 @@ function docs_send_vars(array $doc): array
 {
     $vat = json_decode((string)$doc['vat_json'], true);
     return ['doc' => $doc, 'lines' => docs_lines((int)$doc['id']), 'vat' => is_array($vat) ? $vat : [], 'k' => DOCS_KINDS[$doc['doc_type']], 'd' => doc_settings(),
-        'co' => doc_company(), 'payLabel' => erp_pay_label((string)$doc['pay_code']), 'maxLines' => DOCS_EMAIL_MAX_LINES];
+        'co' => doc_company(), 'payLabel' => erp_pay_label((string)$doc['pay_code']), 'maxLines' => DOCS_EMAIL_MAX_LINES,
+        'dues' => dues_applies($doc) ? docs_dues((int)$doc['id']) : []];
 }
 
 function docs_email_html(array $doc, string $message): string
@@ -98,7 +99,15 @@ function docs_email_text(array $doc, string $message): string
         $out .= (int)$l['kind'] === 1 ? (string)$l['title'] . ((string)$l['detail'] !== '' ? "\n" . $l['detail'] : '') . "\n"
             : '- ' . trim($l['ref'] . ' ' . $l['title'] . ' ' . $l['size_txt'] . ' ' . $l['color_txt']) . ' × ' . docs_qty_txt((int)$l['qty_u']) . "\n";
     }
-    return $out . 'Total: ' . erp_money((int)$doc['total_cents']) . "\n";
+    $out .= 'Total: ' . erp_money((int)$doc['total_cents']) . "\n";
+    $dues = dues_applies($doc) ? docs_dues((int)$doc['id']) : [];
+    if ($dues) {
+        $out .= "\nVencimientos:\n";
+        foreach ($dues as $du) {
+            $out .= '  ' . erp_day((int)$du['day']) . ': ' . erp_money((int)$du['cents']) . "\n";
+        }
+    }
+    return $out;
 }
 
 /** Lo primero que se propone en el formulario de envío. */

@@ -68,6 +68,15 @@ $td = 'padding:5px 6px;border-bottom:1px solid #e6e3dc;font-size:12px;font-famil
   </table>
   </td></tr></table>
 </td></tr>
+<?php if (!empty($dues)): ?>
+<tr><td style="padding:12px 24px 0">
+  <table role="presentation" width="260" cellpadding="0" cellspacing="0" style="border:1px solid #d9d6cf;border-radius:4px;font-size:13px;font-family:<?= $ff ?>">
+    <tr><td colspan="2" style="padding:6px 12px 2px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b665d">Vencimientos</td></tr>
+    <?php foreach ($dues as $i => $du): ?><tr><td style="padding:2px 12px"><?= count($dues) > 1 ? ($i + 1) . '. ' : '' ?><?= e(erp_day((int)$du['day'])) ?></td><td align="right" style="padding:2px 12px;font-weight:bold"><?= e(erp_money((int)$du['cents'])) ?></td></tr><?php endforeach; ?>
+    <tr><td colspan="2" style="padding:0 0 4px"></td></tr>
+  </table>
+</td></tr>
+<?php endif; ?>
 <?php if (trim((string)$doc['notes']) !== ''): ?><tr><td style="padding:12px 24px 0;font-size:12px;color:#444;font-family:<?= $ff ?>"><strong>Observaciones:</strong> <?= nl2br(e($doc['notes'])) ?></td></tr><?php endif; ?>
 <tr><td style="padding:14px"></td></tr>
 </table>

@@ -61,6 +61,11 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 .total .row{display:flex;justify-content:space-between;gap:10px;padding:1px 0}
 .total .big{margin-top:6px;padding-top:6px;border-top:1.5px solid var(--doc-color);font-size:18px;font-weight:700}
 .pay{margin-top:6px;color:var(--muted)}
+.dues{margin-top:8px;border:1px solid var(--line);border-radius:4px;padding:5px 10px 6px;break-inside:avoid}
+.dues h3{margin:0 0 3px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.dues table{width:100%;border-collapse:collapse;font-size:12px}
+.dues td{padding:2px 0}
+.dues td:last-child{text-align:right;font-weight:600;white-space:nowrap}
 .sign{margin-top:12mm;display:grid;grid-template-columns:1fr 1fr;gap:10mm;color:var(--muted);font-size:11px}
 .sign div{border-top:1px solid var(--line);padding-top:4px}
 .testmark{margin:0 0 4mm;padding:5px 10px;border:2px solid #be1e1e;color:#be1e1e;text-align:center;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
@@ -155,6 +160,11 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
       </table>
       <?php endif; ?>
       <?php if ($payLabel !== ''): ?><p class="pay">Forma de pago: <?= e($payLabel) ?></p><?php endif; ?>
+      <?php if (!empty($dues)): ?>
+        <section class="dues" aria-label="Vencimientos"><h3>Vencimientos</h3><table>
+          <?php foreach ($dues as $i => $du): ?><tr><td><?= count($dues) > 1 ? ($i + 1) . '. ' : '' ?><?= e(erp_day((int)$du['day'])) ?></td><td><?= e(erp_money((int)$du['cents'])) ?></td></tr><?php endforeach; ?>
+        </table></section>
+      <?php endif; ?>
     </div>
     <div class="total">
       <div class="row"><span>Base imponible</span><span><?= e(erp_money((int)$doc['base_cents'])) ?></span></div>

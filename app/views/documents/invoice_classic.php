@@ -71,6 +71,11 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
 .total .row{display:flex;justify-content:space-between;gap:10px;padding:1px 0}
 .total .big{margin-top:6px;padding-top:6px;border-top:1.5px solid var(--doc-color);font-size:18px;font-weight:700}
 .pay{margin-top:6px;color:var(--muted)}
+.dues{margin-top:8px;border:1px solid var(--line);border-radius:4px;padding:5px 10px 6px;break-inside:avoid}
+.dues h3{margin:0 0 3px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.dues table{width:100%;border-collapse:collapse;font-size:12px}
+.dues td{padding:2px 0}
+.dues td:last-child{text-align:right;font-weight:600;white-space:nowrap}
 .legal{margin-top:9mm;padding-top:4mm;border-top:1px solid var(--line);color:var(--muted);font-size:11px;text-align:center}
 .stamp{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);border:8px solid rgba(190,30,30,.28);color:rgba(190,30,30,.28);font-size:84px;font-weight:800;letter-spacing:.12em;padding:0 26px;pointer-events:none;white-space:nowrap}
 @page{size:A4;margin:<?= (int)$d['margin_mm'] ?>mm}
@@ -205,6 +210,11 @@ body{margin:0;background:#d9d9d6;color:var(--ink);font:13px/1.45 var(--doc-font)
       </table>
       <?php endif; ?>
       <?php if ($payLabel !== ''): ?><p class="pay">Forma de pago: <?= e($payLabel) ?></p><?php endif; ?>
+      <?php if (!empty($dues)): ?>
+        <section class="dues" aria-label="Vencimientos"><h3>Vencimientos</h3><table>
+          <?php foreach ($dues as $i => $du): ?><tr><td><?= count($dues) > 1 ? ($i + 1) . '. ' : '' ?><?= e(erp_day((int)$du['day'])) ?></td><td><?= e(erp_money((int)$du['cents'])) ?></td></tr><?php endforeach; ?>
+        </table></section>
+      <?php endif; ?>
     </div>
     <div class="total">
       <div class="row"><span>Base imponible</span><span><?= e(erp_money(array_sum(array_column($vat, 'base')))) ?></span></div>

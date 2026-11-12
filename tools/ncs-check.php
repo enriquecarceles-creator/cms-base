@@ -652,6 +652,34 @@ $db->exec('DELETE FROM doc_headers');
 $sumNcs = $one('SELECT COUNT(*) FROM erp_invoices');
 $check('pedidos: no tocan las facturas de NCS', $sumNcs === $one('SELECT COUNT(*) FROM erp_invoices') && $one("SELECT COUNT(*) FROM erp_invoices WHERE origin <> 'ncs'") === 0);
 
+/* 5g. Vencimientos de las facturas: reparto con los totales reales de NCS */
+$section('Vencimientos de las facturas');
+require_once $tmp . '/app/docs_dues.php';
+$sch = dues_schedule(10000, 20260110, [30, 60, 90]);
+$check('vencimientos: 100,00 € a 30-60-90 → 33,33 + 33,33 + 33,34', array_column($sch, 'cents') === [3333, 3333, 3334]);
+$badSum = 0;
+$badZero = 0;
+$nTot = 0;
+foreach ($db->query('SELECT total_cents FROM erp_invoices WHERE total_cents > 0')->fetchAll(PDO::FETCH_COLUMN) as $tc) {
+    $tc = (int)$tc;
+    $nTot++;
+    foreach ([[0], [30], [30, 60, 90], [0, 30, 60], [30, 60, 90, 120]] as $terms) {
+        foreach ([[], [5], [5, 25]] as $pd) {
+            $rows = dues_schedule($tc, 20220315, $terms, $pd);
+            if (dues_sum($rows) !== $tc) {
+                $badSum++;
+            }
+            if (array_filter($rows, fn($r) => $r['cents'] <= 0)) {
+                $badZero++;
+            }
+        }
+    }
+}
+$check('vencimientos: con los totales reales de NCS (' . $nTot . ' facturas, 15 combinaciones) la suma de cuotas es siempre el total', $nTot > 0 && $badSum === 0, "$badSum fallos");
+$check('vencimientos: y ninguna cuota sale a 0 €', $badZero === 0);
+$realPay = array_map('strval', array_keys(pay_codes_in_use()));
+$check('vencimientos: las formas de pago de NCS traídas nacen como contado (0) y se pueden editar', $realPay === [] || (dues_method_terms($realPay[0]) === [0]));
+
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();
