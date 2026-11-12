@@ -7,6 +7,7 @@ require_once __DIR__ . '/history.php';
 require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/import_wizard.php';
 require_once __DIR__ . '/doc_series.php';
+require_once __DIR__ . '/doc_params.php';
 require_once __DIR__ . '/doc_series.php';
 
 function admin_dispatch(array $segs): void
@@ -195,10 +196,14 @@ function admin_cfg_nav(): array
 {
     return [
         'Empresa' => [['empresa', 'Datos de la empresa', '/admin/configuracion/empresa']],
-        'Documentos' => [['series', 'Series', '/admin/configuracion/series'], ['diseno', 'Diseño de documentos', '/admin/erp#documentos']],
+        'Documentos' => [
+            ['series', 'Series', '/admin/configuracion/series'], ['parametros', 'Parámetros', '/admin/configuracion/parametros'], ['iva', 'IVA', '/admin/configuracion/iva'],
+            ['pagos', 'Formas de pago', '/admin/configuracion/pagos'], ['tarifas', 'Tarifas', '/admin/configuracion/tarifas'], ['diseno', 'Diseño de documentos', '/admin/erp#documentos'],
+        ],
         'Sistema' => [
             ['general', 'General', '/admin/configuracion/general'], ['correo', 'Correo', '/admin/configuracion/correo'],
             ['usuarios', 'Usuarios y seguridad', '/admin/configuracion/usuarios'], ['copia', 'Copias de seguridad', '/admin/configuracion/copia'],
+            ['bloqueo', 'Bloqueo de periodos', '/admin/configuracion/bloqueo'],
         ],
     ];
 }
@@ -226,6 +231,21 @@ function admin_settings(string $sub): void
             break;
         case 'series':
             admin_series();
+            break;
+        case 'parametros':
+            admin_doc_params();
+            break;
+        case 'iva':
+            admin_vat();
+            break;
+        case 'pagos':
+            admin_pay_methods();
+            break;
+        case 'tarifas':
+            admin_tariffs();
+            break;
+        case 'bloqueo':
+            admin_period_lock();
             break;
         case 'general':
             admin_config();

@@ -13,8 +13,8 @@ declare(strict_types=1);
 
 const HISTORY_KEEP = 1000;
 const HISTORY_PER_PAGE = 50;
-const HISTORY_KINDS = ['importacion' => 'Importación', 'fotos' => 'Fotos', 'sincronizacion' => 'Sincronización', 'exportacion' => 'Exportación'];
-const HISTORY_WHATS = ['articulos' => 'Artículos', 'fotos' => 'Fotos', 'precios' => 'Precios y stock', 'clientes' => 'Clientes', 'ventas' => 'Ventas', 'clientes_ventas' => 'Clientes y ventas', 'cobros' => 'Cobros'];
+const HISTORY_KINDS = ['importacion' => 'Importación', 'fotos' => 'Fotos', 'sincronizacion' => 'Sincronización', 'exportacion' => 'Exportación', 'configuracion' => 'Configuración'];
+const HISTORY_WHATS = ['articulos' => 'Artículos', 'fotos' => 'Fotos', 'precios' => 'Precios y stock', 'clientes' => 'Clientes', 'ventas' => 'Ventas', 'clientes_ventas' => 'Clientes y ventas', 'cobros' => 'Cobros', 'bloqueo' => 'Bloqueo de periodos'];
 const HISTORY_RESULTS = ['ok' => 'Correcto', 'error' => 'Error', 'cancelado' => 'Cancelado', 'parcial' => 'Parcial'];
 
 /** Lo que puede ver cada rol: lista de valores de «what» (null = todo). */

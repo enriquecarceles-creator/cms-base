@@ -472,6 +472,40 @@ $n2 = series_next_number($fid, 2026)['number'];
 $check('series: numeración correlativa y sin huecos tras un rollback', $n1 === $n2 && $n2 === 1);
 $check('series: copia de seguridad: las series van dentro y sus contadores también', in_array('doc_series', DB_TABLES, true) && in_array('doc_series_counters', DB_TABLES, true));
 
+/* 5f. Parámetros de documentos con los datos reales: formas de pago, tarifas, IVA y bloqueo de periodos */
+$section('Parámetros de documentos');
+require_once $tmp . '/app/doc_params.php';
+$realCodes = array_map('strval', array_keys(pay_codes_in_use()));
+$check('parámetros: los códigos de forma de pago de NCS se leen de clientes y facturas', $realCodes !== [] && $realCodes === array_map('strval', erp_pay_codes()), implode(',', $realCodes));
+$before = $one('SELECT COUNT(*) FROM doc_pay_methods');
+$added = pay_methods_import_missing();
+$check('parámetros: traer las formas de pago de NCS da de alta cada código una vez', $added === count($realCodes) && $one('SELECT COUNT(*) FROM doc_pay_methods') === $before + $added && pay_methods_import_missing() === 0, "$added códigos");
+$check('parámetros: cada código importado tiene su fila y no se puede borrar mientras se use', count(array_diff($realCodes, array_map('strval', array_column(pay_methods_all(), 'code')))) === 0);
+$names = erp_pay_names();
+$check('parámetros: erp_pay_label sigue dando «F. pago NN» o el nombre', $realCodes === [] || preg_match('/^(.+ \(' . preg_quote($realCodes[0], '/') . '\)|F\. pago ' . preg_quote($realCodes[0], '/') . ')$/', erp_pay_label($realCodes[0])) === 1);
+$tariffsUsed = array_map('intval', $db->query('SELECT DISTINCT tariff FROM erp_customers WHERE tariff > 0 ORDER BY tariff')->fetchAll(PDO::FETCH_COLUMN));
+$tariffNums = array_map('intval', array_column(tariffs_all(), 'num'));
+$check('parámetros: las tarifas de los clientes de NCS existen en la tabla de tarifas (1-3)', array_diff($tariffsUsed, $tariffNums) === [], 'usadas: ' . implode(',', $tariffsUsed));
+$vatCount = [];
+foreach ($db->query('SELECT vat_json FROM erp_invoices WHERE vat_json IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN) as $j) {
+    foreach (json_decode((string)$j, true) ?: [] as $row) {
+        if (($row['pct'] ?? null) !== null && (int)$row['base'] !== 0) {
+            $k = (string)(int)round((float)$row['pct'] * 100);
+            $vatCount[$k] = ($vatCount[$k] ?? 0) + 1;
+        }
+    }
+}
+arsort($vatCount);
+$vatKnown = array_map(fn($r) => (string)(int)$r['pct_bp'], vat_all());
+// Las facturas importadas pueden llevar cualquier porcentaje (se calcula por factura); la tabla es para los documentos NUEVOS: el más usado en NCS debe estar
+$check('parámetros: el tipo de IVA más usado en las facturas de NCS está entre los de la tabla', $vatCount !== [] && in_array((string)array_key_first($vatCount), $vatKnown, true), 'en NCS: ' . json_encode($vatCount));
+save_setting('docp_lock_until', '20221231');
+setting('', '', true);
+$firstDay = (int)$db->query('SELECT MIN(inv_day) FROM erp_invoices')->fetchColumn();
+$check('parámetros: bloqueo de periodos con las fechas de las facturas importadas', period_is_locked(20221231) && period_is_locked(20220101) && !period_is_locked(20230101) && $firstDay > 0);
+save_setting('docp_lock_until', '0');
+setting('', '', true);
+
 /* 6. Copia de seguridad sin datos personales */
 $section('Copia de seguridad sin datos personales');
 $sample = (string)$db->query("SELECT name FROM erp_customers WHERE LENGTH(name) > 12 ORDER BY id LIMIT 1")->fetchColumn();

@@ -79,8 +79,18 @@ function erp_serie(string $number): string
 /** Nombres de las formas de pago por código (lista editable): [código => nombre]. */
 function erp_pay_names(): array
 {
-    $j = json_decode(setting('erp_pay_names'), true);
-    return is_array($j) ? array_map('strval', $j) : [];
+    static $cache = null;
+    if ($cache === null) {
+        $j = json_decode(setting('erp_pay_names'), true); // lista antigua (Sincronizar con NCS): sigue valiendo como respaldo
+        $cache = is_array($j) ? array_map('strval', $j) : [];
+        try { // la tabla de Configuración → Formas de pago manda
+            foreach (db()->query("SELECT code, name FROM doc_pay_methods WHERE name <> ''")->fetchAll() as $r) {
+                $cache[(string)$r['code']] = (string)$r['name'];
+            }
+        } catch (Throwable $e) {
+        }
+    }
+    return $cache;
 }
 
 /** «Transferencia (03)» si hay nombre; «F. pago 03» si solo hay código; '' si no hay nada. */

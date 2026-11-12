@@ -361,6 +361,58 @@ function schema_seed_series(CmsPdo $pdo): void
     }
 }
 
+/**
+ * Parámetros de documentos (Configuración → Documentos): tipos de IVA, formas de pago y tarifas. Genérico: nada fijo de ningún
+ * programa externo. Dentro de las copias (son configuración, sin datos personales).
+ *   doc_vat_rates   pct_bp = porcentaje × 100 (2100 = 21 %); surcharge_bp = recargo de equivalencia × 100 (520 = 5,2 %).
+ *   doc_pay_methods code único (el de NCS, si se importa; si no, el que se elija), name, days de vencimiento.
+ *   doc_tariffs     num (1, 2, 3… el número que usan los clientes), name y ext_ref (referencia externa para enlazar después con
+ *                   las tarifas de otro programa, p. ej. «PVP1»; el conector decide cómo).
+ */
+const SCHEMA_DOCPARAMS_DDL = "
+    CREATE TABLE doc_vat_rates (
+        id {ID},
+        name {S} NOT NULL DEFAULT '',
+        pct_bp {I} NOT NULL DEFAULT 0,
+        surcharge_bp {I} NOT NULL DEFAULT 0,
+        is_default {I} NOT NULL DEFAULT 0,
+        is_active {I} NOT NULL DEFAULT 1,
+        sort {I} NOT NULL DEFAULT 0
+    );
+    CREATE TABLE doc_pay_methods (
+        id {ID},
+        code {K} NOT NULL UNIQUE,
+        name {S} NOT NULL DEFAULT '',
+        days {I} NOT NULL DEFAULT 0,
+        is_active {I} NOT NULL DEFAULT 1,
+        sort {I} NOT NULL DEFAULT 0
+    );
+    CREATE TABLE doc_tariffs (
+        id {ID},
+        num {I} NOT NULL UNIQUE,
+        name {S} NOT NULL DEFAULT '',
+        ext_ref {S} NOT NULL DEFAULT '',
+        is_active {I} NOT NULL DEFAULT 1
+    );
+";
+
+/** Valores iniciales de IVA (21, 10, 4, 0 con sus recargos de equivalencia) y tarifas 1-3; solo si las tablas están vacías. */
+function schema_seed_doc_params(CmsPdo $pdo): void
+{
+    if ((int)$pdo->query('SELECT COUNT(*) FROM doc_vat_rates')->fetchColumn() === 0) {
+        $st = $pdo->prepare('INSERT INTO doc_vat_rates (name, pct_bp, surcharge_bp, is_default, is_active, sort) VALUES (?, ?, ?, ?, 1, ?)');
+        foreach ([['General (21 %)', 2100, 520, 1], ['Reducido (10 %)', 1000, 140, 0], ['Superreducido (4 %)', 400, 50, 0], ['Exento (0 %)', 0, 0, 0]] as $i => [$n, $p, $r, $d]) {
+            $st->execute([$n, $p, $r, $d, ($i + 1) * 10]);
+        }
+    }
+    if ((int)$pdo->query('SELECT COUNT(*) FROM doc_tariffs')->fetchColumn() === 0) {
+        $st = $pdo->prepare('INSERT INTO doc_tariffs (num, name, ext_ref, is_active) VALUES (?, ?, \'\', 1)');
+        foreach ([1, 2, 3] as $n) {
+            $st->execute([$n, 'Tarifa ' . $n]);
+        }
+    }
+}
+
 /** Esquema completo, válido para SQLite, MariaDB/MySQL y SQL Server (ver db_ddl() en app/db.php). */
 const SCHEMA_DDL = "
     CREATE TABLE users (
@@ -446,7 +498,7 @@ const SCHEMA_DDL = "
         address {S} NOT NULL DEFAULT '',
         phone {S} NOT NULL DEFAULT ''
     );
-" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL;
+" . SCHEMA_FIELDS_DDL . SCHEMA_PROFILES_DDL . SCHEMA_PAGES_DDL . SCHEMA_DEVICES_DDL . SCHEMA_RECOVERY_DDL . SCHEMA_ERP_DDL . SCHEMA_ERP_DOCS_DDL . SCHEMA_MAIL_DDL . SCHEMA_BACKUP_DDL . SCHEMA_HISTORY_DDL . SCHEMA_SERIES_DDL . SCHEMA_DOCPARAMS_DDL;
 
 /** Crea las tablas en una base de datos vacía. */
 function install_schema(CmsPdo $pdo): void
@@ -455,6 +507,7 @@ function install_schema(CmsPdo $pdo): void
         $pdo->rawExec($st);
     }
     schema_seed_series($pdo);
+    schema_seed_doc_params($pdo);
     db_set_schema_version($pdo, SCHEMA_VERSION);
 }
 
@@ -542,6 +595,40 @@ function migrate_schema(CmsPdo $pdo): void
         if (!in_array('erp_invoice_state', db_tables($pdo), true)) {
             foreach (db_ddl(SCHEMA_ERP_DOCS_DDL, $pdo->drv) as $st) {
                 $pdo->rawExec($st);
+            }
+        }
+    }
+    if ($ver < 28) {
+        if (!in_array('doc_vat_rates', db_tables($pdo), true)) {
+            foreach (db_ddl(SCHEMA_DOCPARAMS_DDL, $pdo->drv) as $st) {
+                $pdo->rawExec($st);
+            }
+        }
+        schema_seed_doc_params($pdo);
+        // Formas de pago: las que ya tenían nombre (Sincronizar con NCS → Documentos) y los códigos que aparecen en clientes y facturas
+        if ((int)$pdo->query('SELECT COUNT(*) FROM doc_pay_methods')->fetchColumn() === 0) {
+            $names = [];
+            $st = $pdo->prepare('SELECT value FROM settings WHERE key = ?');
+            $st->execute(['erp_pay_names']);
+            $j = json_decode((string)$st->fetchColumn(), true);
+            foreach (is_array($j) ? $j : [] as $code => $nm) {
+                $names[trim((string)$code)] = mb_substr(trim((string)$nm), 0, 40);
+            }
+            foreach (['erp_invoices', 'erp_customers'] as $t) {
+                if (in_array($t, db_tables($pdo), true)) {
+                    foreach ($pdo->query("SELECT DISTINCT pay_code FROM $t WHERE pay_code <> ''")->fetchAll(PDO::FETCH_COLUMN) as $code) {
+                        $names += [trim((string)$code) => ''];
+                    }
+                }
+            }
+            ksort($names, SORT_NATURAL);
+            $ins = $pdo->prepare('INSERT INTO doc_pay_methods (code, name, days, is_active, sort) VALUES (?, ?, 0, 1, ?)');
+            $i = 0;
+            foreach ($names as $code => $nm) {
+                $code = (string)$code; // ojo: un código numérico como «12» llega como entero (clave de array)
+                if ($code !== '' && mb_strlen($code) <= 20) {
+                    $ins->execute([$code, $nm, (++$i) * 10]);
+                }
             }
         }
     }

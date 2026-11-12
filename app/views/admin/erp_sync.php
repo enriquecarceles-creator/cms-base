@@ -88,12 +88,7 @@ $st = $job['status'] ?? '';
       <label class="check"><input type="radio" name="serie_mode" value="ninguna"<?= setting('erp_serie_mode', 'letras') === 'ninguna' ? ' checked' : '' ?>> <span>No mostrar serie</span></label>
       <small class="muted">NCS no guarda la serie como dato aparte: se deduce del número.</small>
     </fieldset>
-    <?php if ($payCodes): ?>
-      <p style="margin:8px 0 4px"><strong>Formas de pago</strong> <span class="muted">(NCS solo guarda el código; pon aquí el nombre que quieras ver en la factura y la ficha)</span></p>
-      <div class="pay-grid">
-        <?php foreach ($payCodes as $code): ?><label><span>Código <strong><?= e($code) ?></strong></span><input name="pay[<?= e($code) ?>]" value="<?= e($payNames[$code] ?? '') ?>" maxlength="40" placeholder="p. ej. Transferencia"></label><?php endforeach; ?>
-      </div>
-    <?php else: ?><p class="muted">Aparecerán aquí los códigos de forma de pago cuando se sincronicen facturas y clientes.</p><?php endif; ?>
+    <p class="muted" style="margin:8px 0 4px"><strong>Formas de pago:</strong> los nombres se editan ahora en <a href="<?= e(url('/admin/configuracion/pagos')) ?>">Configuración → Formas de pago</a> (allí se pueden traer los códigos de NCS).</p>
     <div class="buttons"><button class="btn" type="submit">Guardar</button></div>
   </form>
 

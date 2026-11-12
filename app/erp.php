@@ -627,14 +627,16 @@ function admin_erp_sync(): void
             $mode = (string)($_POST['serie_mode'] ?? 'letras');
             save_setting('erp_serie_mode', in_array($mode, ['letras', 'ninguna', 'n'], true) ? $mode : 'letras');
             save_setting('erp_serie_n', (string)max(1, min(6, (int)($_POST['serie_n'] ?? 1))));
-            $names = [];
-            foreach (erp_pay_codes() as $code) { // solo los códigos que existen
-                $nm = mb_substr(trim(strip_tags((string)(((array)($_POST['pay'] ?? []))[$code] ?? ''))), 0, 40);
-                if ($nm !== '') {
-                    $names[$code] = $nm;
+            if (isset($_POST['pay'])) { // formulario antiguo; los nombres se editan ahora en Configuración → Formas de pago
+                $names = [];
+                foreach (erp_pay_codes() as $code) { // solo los códigos que existen
+                    $nm = mb_substr(trim(strip_tags((string)(((array)($_POST['pay'] ?? []))[$code] ?? ''))), 0, 40);
+                    if ($nm !== '') {
+                        $names[$code] = $nm;
+                    }
                 }
+                save_setting('erp_pay_names', (string)json_encode($names, JSON_UNESCAPED_UNICODE));
             }
-            save_setting('erp_pay_names', (string)json_encode($names, JSON_UNESCAPED_UNICODE));
             flash('Ajustes de documentos guardados.');
             redirect('/admin/erp#documentos');
         }
