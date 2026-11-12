@@ -5,6 +5,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/erp.php';
 require_once __DIR__ . '/history.php';
 require_once __DIR__ . '/export.php';
+require_once __DIR__ . '/reports.php';
 require_once __DIR__ . '/import_wizard.php';
 require_once __DIR__ . '/doc_series.php';
 require_once __DIR__ . '/doc_params.php';
@@ -174,6 +175,9 @@ function admin_dispatch(array $segs): void
         case 'exportar':
             admin_export();
             break;
+        case 'listados':
+            admin_reports((string)($segs[2] ?? ''), (string)($segs[3] ?? ''));
+            break;
         case 'erp':
             admin_erp_sync();
             break;
@@ -328,8 +332,9 @@ function admin_menu(): array
             ['Pedidos', '/admin/pedidos', ['pedidos'], 'erp'],
             ['Albaranes', '/admin/albaranes', ['albaranes'], 'erp'],
             ['Facturas', '/admin/ventas', ['ventas', 'facturas'], 'erp'],
-            ['Informes', '/admin/informes', ['informes'], 'erp'],
+            ['Análisis de ventas', '/admin/informes', ['informes'], 'erp'],
         ]],
+        'reports' => ['Informes', 'sales', reports_menu_pages()],
         'clients' => ['Clientes', 'users', [['Clientes', '/admin/clientes', ['clientes'], 'erp']]],
         'catalog' => ['Catálogo', 'catalog', [
             ['Artículos', '/admin/articulos', ['articulos', 'articulo'], 'catalog'],
@@ -2172,7 +2177,7 @@ const USER_ROLES = ['admin' => 'Administrador (acceso a todo)', 'catalogo' => 'G
 /** Secciones del ERP (clientes y ventas de NCS): solo rol «erp» y administradores. */
 const ERP_PAGES = ['clientes', 'ventas', 'pedidos', 'albaranes', 'facturas', 'informes', 'erp', 'sincronizacion'];
 /** Páginas que usan a la vez el rol erp y la gestión de catálogo (cada una enseña solo lo que le toca a cada rol). */
-const ERP_SHARED_PAGES = ['importar', 'historial', 'exportar'];
+const ERP_SHARED_PAGES = ['importar', 'historial', 'exportar', 'listados'];
 
 function admin_users(): void
 {

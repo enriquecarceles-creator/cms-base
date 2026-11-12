@@ -733,3 +733,26 @@ a.db-card:hover{border-color:var(--db-accent)}
   .df-pop li{grid-template-columns:1fr auto;grid-template-areas:"r p" "n s"}
   .df-pop .a-ref{grid-area:r}.df-pop .a-num{grid-area:p}.df-pop .a-name{grid-area:n;white-space:normal}.df-pop .a-stock{grid-area:s;min-width:0}
 }
+
+/* Informes (/admin/listados) */
+.rep-form{margin:0 0 14px}
+.rep-box{border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px 12px 10px;margin:0 0 10px}
+.rep-box legend{padding:0 6px;font-weight:700;font-size:.85rem;color:var(--steel)}
+.rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 14px}
+.rep-f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rep-f label{display:flex;flex-direction:column;gap:2px;font-size:.8rem;min-width:0}
+.rep-l{font-size:.78rem;font-weight:700;color:var(--steel)}
+.rep-f input,.rep-f select{font-size:.88rem;padding:5px 8px;min-width:0;width:100%}
+.rep-pick{display:flex;gap:4px}.rep-dots{border:1px solid var(--line);background:#fff;border-radius:6px;padding:0 9px;cursor:pointer;font-weight:700}
+.rep-opts{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:6px}
+.rep-btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.rep-reset{font-size:.85rem;margin-left:auto}
+.rep-sel{margin:4px 0}
+.rep-tbl th.r,.rep-tbl td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rep-tbl .rep-gh th{background:#f3f1ec;text-align:left}
+.rep-tbl .rep-sub td{font-weight:700;background:#faf9f6}
+.rep-tbl .rep-total td{font-weight:800;background:#eef3fb;border-top:2px solid var(--steel)}
+.rep-pop{position:absolute;z-index:60;list-style:none;margin:0;padding:0;width:320px;max-height:18em;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:.86rem}
+.rep-pop li{padding:7px 10px;border-bottom:1px solid #efede8;cursor:pointer}.rep-pop li.on{background:#eef3fb}.rep-pop li.muted{cursor:default}
+.rep-index{list-style:none;padding:0;margin:0 0 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.rep-index a{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;text-decoration:none;color:inherit;height:100%}
+.rep-index a:hover{border-color:var(--steel)}.rep-index span{font-size:.84rem;color:var(--steel)}
